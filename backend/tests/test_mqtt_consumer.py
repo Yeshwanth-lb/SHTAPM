@@ -47,7 +47,10 @@ def test_malformed_json_handled_safely():
 def test_contract_invalid_rejected():
     c, store = _consumer()
     # bad enum-free but out-of-contract: missing sample_seq
-    bad = '{"device_id":"pump-01","ts":"t","sensors":{"temperature":1,"vibration":1,"pressure":1,"humidity":1,"gas":1,"current":1}}'
+    bad = (
+        '{"device_id":"pump-01","ts":"t","sensors":'
+        '{"temperature":1,"vibration":1,"pressure":1,"humidity":1,"gas":1,"current":1}}'
+    )
     c.handle(FakeMsg("shtapm/pump-01/telemetry", bad))
     assert store.count == 0
     assert c.error_count == 1
@@ -63,7 +66,10 @@ def test_unexpected_sensor_field_rejected():
 
 def test_prd_shorthand_rejected():
     c, store = _consumer()
-    bad = '{"device_id":"pump-01","ts":"t","sensors":{"temp":1,"vib":1,"pressure":1,"humidity":1,"gas":1,"current":1},"sample_seq":0}'
+    bad = (
+        '{"device_id":"pump-01","ts":"t","sensors":'
+        '{"temp":1,"vib":1,"pressure":1,"humidity":1,"gas":1,"current":1},"sample_seq":0}'
+    )
     c.handle(FakeMsg("shtapm/pump-01/telemetry", bad))
     assert store.count == 0
     assert c.error_count == 1

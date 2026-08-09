@@ -15,7 +15,8 @@ No persistence, no WebSockets, no decision/ledger handling — those are later.
 from __future__ import annotations
 
 import logging
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from app.schemas.contracts import TelemetryMessage
 from app.services.telemetry_store import TelemetryStore
@@ -75,14 +76,16 @@ class TelemetryConsumer:
             return
         try:
             payload = msg.payload
-            if isinstance(payload, (bytes, bytearray)):
+            if isinstance(payload, bytes | bytearray):
                 payload = payload.decode("utf-8")
             message = TelemetryMessage.model_validate_json(payload)
         except Exception as exc:  # malformed JSON or contract violation
             self._reject(topic, f"invalid telemetry: {type(exc).__name__}")
             return
         if message.device_id != topic_device:
-            self._reject(topic, f"topic/payload device mismatch ({topic_device} != {message.device_id})")
+            self._reject(
+                topic, f"topic/payload device mismatch ({topic_device} != {message.device_id})"
+            )
             return
         self.store.update(message)
         for sink in self._sinks:

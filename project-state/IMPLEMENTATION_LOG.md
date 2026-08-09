@@ -128,6 +128,15 @@
   - Frontend RTL/`tsc`/`vite build`: `npm install` blocked (TLS/proxy; no lockfile generated) → run in CI. package.json version pins unverified locally.
 - No DECISIONS change. U01–U14 untouched. docs/ + CLAUDE.md untouched. No Zustand/DB/auth/Redis/Aurora.
 
+## 2026-08-09 — CI fix (Python packaging) + lint debt found
+- CI run for M3.5 (`8483283`, run 31326829747): **frontend job PASSED** (typecheck + Vitest/RTL + vite build); **Python job FAILED** at `pip install ".[dev]"` — setuptools flat-layout auto-discovery found 5 top-level dirs ("Multiple top-level packages").
+- Fix (packaging only, no functionality change): root `pyproject.toml` now declares an explicit `[build-system]` (setuptools) and opts out of discovery via `[tool.setuptools] py-modules = []` — the root is a tooling/deps umbrella, not a distribution. `.gitignore` += `*.egg-info/` (build artifact).
+- Verified in a clean venv via the exact CI path `pip install ".[dev]" -r backend/requirements.txt`: **install succeeds**, `pytest -q` → **53 passed, 3 skipped**.
+- **Lint/format pass (approved, style-only, no behavior change):** `ruff check --fix` (import-order I001, pyupgrade UP035/037/038/017, unused-loop B007) + `black .`; plus 6 manual safe fixes — 2× `isinstance(x,(bytes,bytearray))`→`bytes|bytearray` (3.10+/TRD-3.11 OK), 3× long test-JSON wrapped via adjacent string-literal concatenation (identical value, not `# noqa`), 1× dropped an unused `enumerate` index. No lint errors suppressed.
+- **CI-equivalent, clean venv (host Python 3.14; CI uses 3.11 — all fixes are ≥3.11-compatible: `X|Y` isinstance, `datetime.UTC`, `collections.abc.Callable`):** `pip install ".[dev]" -r backend/requirements.txt` OK · `ruff check .` **clean** · `black --check .` **clean** · `pytest -q` → **53 passed, 3 skipped**. Python CI job now green end-to-end.
+- Frontend untouched (its job already passes).
+
 ## Status
-- P0 Milestone 3.5 code complete; MQTT→backend live-verified; WS-serving + RTL/build gated to CI/normal-serving (sandbox limits). **Not yet committed — awaiting approval.**
-- Next: E2E latency spike/harness + the P0 offline full-stack `docker compose up` gate.
+- P0 Milestone 3.5 code complete; MQTT→backend live-verified; WS-serving + RTL/build gated to CI/normal-serving (sandbox limits).
+- **CI repair (packaging + lint/format) done — Python checks all pass locally; frontend job already green.** One combined change, not yet committed — awaiting approval.
+- Next: commit CI repair → confirm CI green on GitHub → E2E latency spike + P0 offline full-stack `docker compose up` gate.

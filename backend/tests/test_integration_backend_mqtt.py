@@ -11,9 +11,9 @@ import os
 import time
 
 import pytest
-
 from app.mqtt.consumer import TelemetryConsumer
 from app.services.telemetry_store import TelemetryStore
+
 from simulator.generator import TelemetrySimulator
 from simulator.publisher import MqttTelemetryPublisher
 from simulator.roundtrip import broker_available
@@ -69,5 +69,10 @@ def test_simulator_to_backend_ingestion(broker):
     latest = store.latest("pump-01")
     assert latest is not None and latest.device_id == "pump-01"
     assert set(latest.sensors.model_dump().keys()) == {
-        "temperature", "vibration", "pressure", "humidity", "gas", "current",
+        "temperature",
+        "vibration",
+        "pressure",
+        "humidity",
+        "gas",
+        "current",
     }

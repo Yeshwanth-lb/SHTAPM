@@ -29,10 +29,10 @@ from app.schemas.contracts import CHANNELS, SensorReadings, TelemetryMessage
 BASELINES: dict[str, tuple[float, float]] = {
     "temperature": (26.0, 0.4),  # °C  — DS18B20 (motor/bearing temp)
     "vibration": (0.03, 0.005),  # g   — ADXL335 (bearing/cavitation)
-    "pressure": (1013.0, 0.6),   # hPa — BMP180 (atmospheric proxy)
-    "humidity": (45.0, 1.0),     # %   — DHT22 (seal-leak/wet-well)
-    "gas": (150.0, 5.0),         # ppm — MQ-135 (VOC/CO2 proxy)
-    "current": (0.42, 0.02),     # A   — INA219 (sub-1A pump load)
+    "pressure": (1013.0, 0.6),  # hPa — BMP180 (atmospheric proxy)
+    "humidity": (45.0, 1.0),  # %   — DHT22 (seal-leak/wet-well)
+    "gas": (150.0, 5.0),  # ppm — MQ-135 (VOC/CO2 proxy)
+    "current": (0.42, 0.02),  # A   — INA219 (sub-1A pump load)
 }
 
 # Datasheet-bounded plausibility clamps (simulator-only).

@@ -3,11 +3,22 @@
 # service directories and are pinned in their phases (edge: P1–P3, backend: P4).
 # This root file only configures the shared toolchain (frozen stack, TRD §02.2).
 
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "shtapm"
 version = "0.0.0"
 description = "Self-Healing Trust-Aware Predictive Maintenance (SHTAPM) — monorepo tooling root"
 requires-python = ">=3.11"
+
+# This root is a tooling/deps UMBRELLA, not a distributable package. Opt out of
+# setuptools flat-layout auto-discovery (which would otherwise try to bundle
+# backend/, edge/, simulator/, frontend/, infra/ into one wheel and fail). The
+# service directories are NOT packaged here; each stays independent.
+[tool.setuptools]
+py-modules = []
 
 [project.optional-dependencies]
 dev = [

@@ -3,6 +3,7 @@
 import json
 
 from app.schemas.contracts import TelemetryMessage
+
 from simulator.generator import TelemetrySimulator
 from simulator.publisher import MqttTelemetryPublisher
 

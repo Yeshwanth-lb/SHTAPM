@@ -14,6 +14,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.schemas.contracts import TelemetryMessage
+
 from simulator.publisher import TELEMETRY_TOPIC
 
 
@@ -38,7 +39,7 @@ class MqttTelemetrySubscriber:
         """Validate one message; append to messages, or record the error."""
         try:
             payload = msg.payload
-            if isinstance(payload, (bytes, bytearray)):
+            if isinstance(payload, bytes | bytearray):
                 payload = payload.decode("utf-8")
             self.messages.append(TelemetryMessage.model_validate_json(payload))
         except Exception as exc:  # invalid JSON or contract violation

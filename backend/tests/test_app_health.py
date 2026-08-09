@@ -10,9 +10,8 @@ fastapi = pytest.importorskip("fastapi")
 pytest.importorskip("httpx")
 pytest.importorskip("paho.mqtt.client")
 
-from fastapi.testclient import TestClient  # noqa: E402
-
 from app.main import app  # noqa: E402
+from fastapi.testclient import TestClient  # noqa: E402
 
 
 def test_healthz_ok_without_broker(monkeypatch):

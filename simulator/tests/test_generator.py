@@ -1,6 +1,7 @@
 """M3.1 tests — deterministic telemetry generator + frozen-contract conformance."""
 
 from app.schemas.contracts import CHANNELS, TelemetryMessage
+
 from simulator.generator import BASELINES, RANGES, TelemetrySimulator
 
 TS = [f"2026-08-09T12:00:{s:02d}.000Z" for s in range(5)]

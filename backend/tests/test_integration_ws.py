@@ -15,9 +15,9 @@ pytest.importorskip("fastapi")
 pytest.importorskip("httpx")
 pytest.importorskip("paho.mqtt.client")
 
+from app.main import app  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
-from app.main import app  # noqa: E402
 from simulator.generator import TelemetrySimulator  # noqa: E402
 from simulator.publisher import MqttTelemetryPublisher  # noqa: E402
 from simulator.roundtrip import broker_available  # noqa: E402
@@ -69,5 +69,10 @@ def test_mqtt_to_backend_to_ws(broker, monkeypatch):
     assert frame["type"] == "telemetry"
     assert frame["device_id"] == "pump-01"
     assert set(frame["sensors"].keys()) == {
-        "temperature", "vibration", "pressure", "humidity", "gas", "current",
+        "temperature",
+        "vibration",
+        "pressure",
+        "humidity",
+        "gas",
+        "current",
     }

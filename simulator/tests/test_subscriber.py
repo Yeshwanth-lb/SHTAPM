@@ -1,6 +1,7 @@
 """M3.2 unit tests — subscriber validation logic (no broker, no paho)."""
 
 from app.schemas.contracts import TelemetryMessage
+
 from simulator.generator import TelemetrySimulator
 from simulator.publisher import MqttTelemetryPublisher
 from simulator.subscriber import MqttTelemetrySubscriber
@@ -65,7 +66,10 @@ def test_contract_violation_recorded_as_error():
     client = FakeClient()
     sub = MqttTelemetrySubscriber(client, device_id="pump-01")
     # PRD shorthand "temp"/"vib" must be rejected by the frozen contract
-    bad = '{"device_id":"pump-01","ts":"t","sensors":{"temp":1,"vib":1,"pressure":1,"humidity":1,"gas":1,"current":1},"sample_seq":0}'
+    bad = (
+        '{"device_id":"pump-01","ts":"t","sensors":'
+        '{"temp":1,"vib":1,"pressure":1,"humidity":1,"gas":1,"current":1},"sample_seq":0}'
+    )
     sub.handle(FakeMsg("shtapm/pump-01/telemetry", bad))
     assert sub.messages == []
     assert len(sub.errors) == 1

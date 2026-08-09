@@ -6,13 +6,12 @@ superseded PRD shorthand) are rejected. No MQTT/simulator/ML involved.
 """
 
 import pytest
-from pydantic import ValidationError
-
 from app.schemas.contracts import (
     DecisionMessage,
     LedgerMessage,
     TelemetryMessage,
 )
+from pydantic import ValidationError
 
 VALID_TELEMETRY = {
     "device_id": "pump-01",
@@ -31,7 +30,12 @@ VALID_TELEMETRY = {
 VALID_DECISION = {
     "device_id": "pump-01",
     "ts": "2026-08-09T12:00:03.000Z",
-    "anomaly": {"flag": True, "severity": 0.82, "attribution": "attack", "reason": "pressure vs current"},
+    "anomaly": {
+        "flag": True,
+        "severity": 0.82,
+        "attribution": "attack",
+        "reason": "pressure vs current",
+    },
     "trust": {
         "temperature": 0.95,
         "vibration": 0.93,
@@ -60,6 +64,7 @@ VALID_LEDGER = {
 
 # ---- valid examples accepted -------------------------------------------------
 
+
 def test_valid_telemetry_accepted():
     TelemetryMessage.model_validate(VALID_TELEMETRY)
 
@@ -79,6 +84,7 @@ def test_empty_heal_arrays_valid():
 
 # ---- invalid structures rejected ---------------------------------------------
 
+
 def test_telemetry_missing_sample_seq_rejected():
     bad = {k: v for k, v in VALID_TELEMETRY.items() if k != "sample_seq"}
     with pytest.raises(ValidationError):
@@ -87,10 +93,17 @@ def test_telemetry_missing_sample_seq_rejected():
 
 def test_telemetry_prd_shorthand_rejected():
     # ruling A: "temp"/"vib" are superseded and must fail (extra + missing).
-    bad = {**VALID_TELEMETRY, "sensors": {
-        "temp": 24.5, "vib": 0.03, "pressure": 1013.2,
-        "humidity": 41.0, "gas": 120.0, "current": 0.42,
-    }}
+    bad = {
+        **VALID_TELEMETRY,
+        "sensors": {
+            "temp": 24.5,
+            "vib": 0.03,
+            "pressure": 1013.2,
+            "humidity": 41.0,
+            "gas": 120.0,
+            "current": 0.42,
+        },
+    }
     with pytest.raises(ValidationError):
         TelemetryMessage.model_validate(bad)
 

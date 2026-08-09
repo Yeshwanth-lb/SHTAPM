@@ -11,8 +11,8 @@ To run it, start the project's broker and point env at it, e.g.:
 import os
 
 import pytest
-
 from app.schemas.contracts import TelemetryMessage
+
 from simulator.roundtrip import broker_available, run_roundtrip
 
 HOST = os.environ.get("MQTT_HOST", "localhost")
@@ -37,12 +37,17 @@ def test_real_broker_roundtrip(broker):
     received = run_roundtrip(host, port, device_id="pump-01", count=3, seed=1337)
 
     assert len(received) == 3
-    for i, msg in enumerate(received):
+    for msg in received:
         assert isinstance(msg, TelemetryMessage)
         TelemetryMessage.model_validate(msg.model_dump())  # frozen contract
         assert msg.device_id == "pump-01"
         assert set(msg.sensors.model_dump().keys()) == {
-            "temperature", "vibration", "pressure", "humidity", "gas", "current",
+            "temperature",
+            "vibration",
+            "pressure",
+            "humidity",
+            "gas",
+            "current",
         }
     # order preserved end to end
     assert [m.sample_seq for m in received] == [0, 1, 2]

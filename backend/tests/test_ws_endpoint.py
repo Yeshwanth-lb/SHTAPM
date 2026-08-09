@@ -6,10 +6,9 @@ pytest.importorskip("fastapi")
 pytest.importorskip("httpx")
 pytest.importorskip("paho.mqtt.client")
 
-from fastapi.testclient import TestClient  # noqa: E402
-
 from app.main import app  # noqa: E402
 from app.schemas.contracts import SensorReadings, TelemetryMessage  # noqa: E402
+from fastapi.testclient import TestClient  # noqa: E402
 
 
 def _msg(device_id: str = "pump-01", seq: int = 0) -> TelemetryMessage:
@@ -17,8 +16,12 @@ def _msg(device_id: str = "pump-01", seq: int = 0) -> TelemetryMessage:
         device_id=device_id,
         ts="2026-08-09T12:00:00.000Z",
         sensors=SensorReadings(
-            temperature=26.0, vibration=0.03, pressure=1013.0,
-            humidity=45.0, gas=150.0, current=0.42,
+            temperature=26.0,
+            vibration=0.03,
+            pressure=1013.0,
+            humidity=45.0,
+            gas=150.0,
+            current=0.42,
         ),
         sample_seq=seq,
     )

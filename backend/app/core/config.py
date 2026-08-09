@@ -17,7 +17,7 @@ class MqttSettings:
     port: int
 
     @classmethod
-    def from_env(cls) -> "MqttSettings":
+    def from_env(cls) -> MqttSettings:
         return cls(
             host=os.environ.get("MQTT_HOST", "localhost"),
             port=int(os.environ.get("MQTT_PORT", "1883")),

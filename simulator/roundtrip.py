@@ -14,6 +14,7 @@ from __future__ import annotations
 import time
 
 from app.schemas.contracts import TelemetryMessage
+
 from simulator.generator import TelemetrySimulator
 from simulator.publisher import MqttTelemetryPublisher
 from simulator.subscriber import MqttTelemetrySubscriber
