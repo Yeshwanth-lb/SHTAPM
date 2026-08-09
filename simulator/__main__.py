@@ -16,16 +16,10 @@ from __future__ import annotations
 
 import os
 import time
-from datetime import datetime, timezone
 
 from simulator.generator import TelemetrySimulator
 from simulator.publisher import MqttTelemetryPublisher
-
-
-def _now_iso_ms() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.") + (
-        f"{datetime.now(timezone.utc).microsecond // 1000:03d}Z"
-    )
+from simulator.timesource import now_iso_ms
 
 
 def main() -> None:
@@ -47,7 +41,7 @@ def main() -> None:
     print(f"[simulator] publishing to {publisher.topic} at {rate_hz} Hz (Ctrl-C to stop)")
     try:
         while True:
-            publisher.publish(sim.next(_now_iso_ms()))
+            publisher.publish(sim.next(now_iso_ms()))
             time.sleep(period)
     except KeyboardInterrupt:
         print("\n[simulator] stopped")

@@ -55,6 +55,26 @@
 - **Verified (actually ran):** `pytest -q` (root config, no manual PYTHONPATH) → **27 passed** (13 contract, 2 placeholder, 12 simulator), venv pydantic 2.13.4. Emitted a deterministic example message (seed 1337) — see report.
 - Scope kept: no anomaly/trust/ML/decision/ledger/safety, no P1 hardware drivers, no auth/RBAC, no Aurora dashboard. U01–U14 untouched. docs/ + CLAUDE.md untouched.
 
+## 2026-08-09 — P0 Milestone 3.1 committed
+- Committed `P0 Milestone 3.1: add hardware-free telemetry simulator` (0b1c4dd), pushed to origin/main.
+
+## 2026-08-09 — P0 Milestone 3.2: MQTT broker integration (D005 path)
+- Connected the existing simulator publisher to the project's Mosquitto broker + a subscriber verifier proving: publish → Mosquitto → subscribe → validate against the frozen contract. No FastAPI/WS/DB/ML/hardware.
+- New in `simulator/`:
+  - `subscriber.py` — `MqttTelemetrySubscriber`: paho-wired (on_connect subscribes `shtapm/{device_id}/telemetry`; on_message validates → `TelemetryMessage`), duck-typed so unit-testable without paho/broker. Reuses `TELEMETRY_TOPIC` from `publisher.py` (no second topic def).
+  - `roundtrip.py` — `broker_available()` (stdlib socket check) + `run_roundtrip()` (real pub+sub over the broker; paho imported lazily).
+  - `timesource.py` — shared `now_iso_ms()`; `__main__.py` refactored to use it (fixes a latent double-`now()` in the old helper).
+  - Tests: `test_subscriber.py` (4 unit, no broker: subscribe, valid collected, bad-JSON + PRD-shorthand recorded as errors not crash); `test_integration_mqtt.py` (real round trip; skips cleanly if no broker / no paho).
+- `pyproject.toml`: registered `integration` marker.
+- Reused existing config exactly: topic `shtapm/{device_id}/telemetry`, QoS 0, env-driven host/port (no hardcoded secrets), no `type` on MQTT payload, frozen contract unchanged.
+- **Verified (actually ran):**
+  - `pytest -q` (no broker) → 31 passed, 1 skipped (integration, no broker reachable).
+  - Started **real Mosquitto** (`eclipse-mosquitto:2.0`) via `docker compose up -d mosquitto` (had to start the Docker daemon first — it was down; image pulled from the registry), port 1883 open.
+  - `pytest -m integration` against it → **1 passed** (real round trip: 3 msgs published→received→validated, order preserved, no `type`).
+  - Full suite with broker up → **32 passed**. Broker + volumes then torn down (`docker compose down -v`).
+- Side effect: I launched Docker Desktop (daemon) to run the real broker; it is left running (containers/volumes removed). Quit it if unwanted.
+- Out of scope / not implemented: status/LWT topic (payload underspecified in docs) — telemetry only. U01–U14 untouched. docs/ + CLAUDE.md untouched.
+
 ## Status
-- P0 Milestone 3.1 complete and verified; **not yet committed — awaiting approval**.
-- Next: P0 Milestone 3.2 — backend MQTT subscriber → WebSocket telemetry fan-out.
+- P0 Milestone 3.2 complete and verified (incl. a real Mosquitto round trip); **not yet committed — awaiting approval**.
+- Next: P0 Milestone 3.3 — backend MQTT subscriber → WebSocket telemetry fan-out.

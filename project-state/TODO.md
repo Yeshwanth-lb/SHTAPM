@@ -28,11 +28,12 @@
 - [x] Mirrored TS types `frontend/src/types/contracts.ts` + runtime mirror test *(authored; tsc/vitest NOT run locally — npm blocked by TLS/proxy; runs in CI/P5)*
 
 ### Milestone 3 — Hardware-free telemetry path (IN PROGRESS)
-- [x] **M3.1** Telemetry simulator (D005/D008): deterministic generator (6 frozen channels, 1 Hz-ready), MQTT publisher to `shtapm/{device_id}/telemetry` (QoS 0), tests *(verified: 27/27 pytest pass together, incl. 12 simulator)*
-- [ ] M3.2 Backend MQTT subscriber → WebSocket fan-out (telemetry only)
-- [ ] M3.3 Minimal React consumer renders live telemetry
+- [x] **M3.1** Telemetry simulator (D005/D008): deterministic generator (6 frozen channels, 1 Hz-ready), MQTT publisher to `shtapm/{device_id}/telemetry` (QoS 0), tests
+- [x] **M3.2** MQTT broker integration: existing publisher → Mosquitto → subscriber verifier; frozen-contract validated on receive. **Real round trip verified against `eclipse-mosquitto:2.0`** via project compose (32/32 pass incl. the integration test; it self-skips when no broker). Also: fixed `docker compose up` partially — mosquitto pulls + starts (full-stack `up` still a later gate).
+- [ ] M3.3 Backend MQTT subscriber → WebSocket fan-out (telemetry only)
+- [ ] M3.4 Minimal React consumer renders live telemetry
 - [ ] SPIKE: end-to-end MQTT→backend→WS→React; measure E2E latency (software path — hardware-free)
-- [ ] Gate: offline `docker compose up` clean on fresh machine; go/no-go recorded *(M1: `compose config` validated; full `up` not yet run)*
+- [ ] Gate: offline full-stack `docker compose up` clean on fresh machine; go/no-go recorded *(M1: `compose config` validated; M3.2: mosquitto service verified up)*
 
 ### P0 hardware-blocked (need Raspberry Pi + bench rig — DO NOT fake)
 - [ ] SPIKE (Pi): read one sensor per interface; INA219 resolves pump current  🔒 hardware-blocked

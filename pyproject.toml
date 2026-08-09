@@ -37,3 +37,6 @@ python_files = "test_*.py"
 # same-basename test files (test_placeholder.py in edge/ and backend/) coexist.
 pythonpath = ["backend", "."]
 addopts = "--import-mode=importlib"
+markers = [
+  "integration: requires a running MQTT broker (skips if none reachable)",
+]
