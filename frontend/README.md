@@ -30,7 +30,7 @@ npm run build        # tsc + vite build
 
 ## Live-path smoke (no npm; needs the stack running)
 ```bash
-node scripts/ws_smoke.mjs ws://localhost:8000/ws 2
+node scripts/ws_smoke.mjs ws://localhost:8002/ws 2
 ```
 
 > Local note: in the current dev sandbox `npm install` is blocked by a

@@ -4,7 +4,7 @@
 //   Simulator -> Mosquitto -> Backend -> WebSocket -> client
 //
 // Usage: node frontend/scripts/ws_smoke.mjs [wsUrl] [count]
-const url = process.argv[2] || process.env.VITE_WS_URL || "ws://localhost:8000/ws";
+const url = process.argv[2] || process.env.VITE_WS_URL || "ws://localhost:8002/ws";
 const need = Number(process.argv[3] || 1);
 const CHANNELS = ["temperature", "vibration", "pressure", "humidity", "gas", "current"];
 

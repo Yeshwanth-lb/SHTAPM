@@ -42,7 +42,7 @@ app at P0), **backend** (FastAPI), **frontend** (React via nginx).
 **Verify:**
 - Frontend: open `http://localhost:5173` → the live-telemetry page (shows
   "No telemetry yet…" until a source publishes).
-- Backend health: `curl http://localhost:8000/healthz` →
+- Backend health: `curl http://localhost:8002/healthz` →
   `{"status":"ok","mqtt_connected":true,...}`.
 
 **Telemetry source (host-side, not a compose service — D008).** The pump edge is
@@ -53,7 +53,8 @@ PYTHONPATH=backend:. EDGE_MQTT_HOST=localhost EDGE_MQTT_PORT=1883 \
   DEVICE_ID=pump-01 SAMPLE_RATE_HZ=1 python -m simulator
 ```
 The browser connects to the backend WebSocket at `VITE_WS_URL`
-(`ws://localhost:8000/ws`, consumed on the host).
+(`ws://localhost:8002/ws`, consumed on the host; baked into the frontend image
+via the compose `build.args`).
 
 **TLS-inspected networks (Zscaler etc.).** If Docker image builds fail with
 certificate-verification errors, drop your corporate root CA as a `.crt` into

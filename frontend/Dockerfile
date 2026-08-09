@@ -20,6 +20,10 @@ ENV NODE_EXTRA_CA_CERTS=/usr/local/share/ca-extra.pem
 COPY package.json ./
 RUN npm install
 COPY . .
+# Bake the WebSocket URL for the browser at build time (Vite inlines VITE_*).
+# Defaults to the local backend host port; overridden via compose build.args.
+ARG VITE_WS_URL=ws://localhost:8002/ws
+ENV VITE_WS_URL=$VITE_WS_URL
 RUN npm run build
 
 # ---- runtime stage (nginx static) ----

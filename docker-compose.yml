@@ -54,12 +54,15 @@ services:
     env_file:
       - .env
     ports:
-      - "${BACKEND_PORT:-8000}:8000"
+      - "${BACKEND_PORT:-8002}:8000"
 
   frontend:
     # React live-telemetry app built + served static by nginx (port 80).
     build:
       context: ./frontend
+      args:
+        # Baked into the browser bundle at build time (Vite inlines VITE_*).
+        VITE_WS_URL: "${VITE_WS_URL:-ws://localhost:8002/ws}"
     depends_on:
       - backend
     ports:
