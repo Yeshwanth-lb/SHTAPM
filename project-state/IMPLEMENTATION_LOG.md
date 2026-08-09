@@ -136,7 +136,21 @@
 - **CI-equivalent, clean venv (host Python 3.14; CI uses 3.11 — all fixes are ≥3.11-compatible: `X|Y` isinstance, `datetime.UTC`, `collections.abc.Callable`):** `pip install ".[dev]" -r backend/requirements.txt` OK · `ruff check .` **clean** · `black --check .` **clean** · `pytest -q` → **53 passed, 3 skipped**. Python CI job now green end-to-end.
 - Frontend untouched (its job already passes).
 
+## 2026-08-09 — CI repair committed + CI green
+- Committed `Fix CI: root packaging and Python lint/format checks` (fab702b), pushed. GitHub Actions run 31327554959 for fab702b: **both jobs green** (Python: pip install/ruff/black/pytest ✓; Frontend: typecheck/Vitest/build ✓).
+
+## 2026-08-09 — P0 offline four-service stack
+- Goal: `docker compose up` yields a usable offline stack — mosquitto + db + backend + frontend. Simulator stays host-side (D008), NOT a compose service.
+- Changes (no app functionality, no contracts/topics, no DB persistence/auth/Redis/ML):
+  - `backend/Dockerfile` — real image: `pip install -r requirements.txt` + `CMD uvicorn app.main:app --host [REDACTED_MOCK_PII] --port 8000`.
+  - `frontend/Dockerfile` — multi-stage: node build (`npm install` → `npm run build`) → `nginx:alpine` serving `dist/`; `frontend/nginx.conf` (SPA `try_files` fallback).
+  - `docker-compose.yml` — removed `profiles:["app"]` (plain `up` starts all four); frontend `5173:80`; header refreshed. db kept running-but-unused (no P4 persistence). Mosquitto unchanged.
+  - `README.md` — one-command offline bring-up (`cp .env.example .env` → set `POSTGRES_PASSWORD` → `docker compose up`), verify URLs (`http://localhost:5173`, `http://localhost:8000/healthz`), and host-side simulator command. `POSTGRES_PASSWORD:?` kept (no fake default).
+- **Verified locally (actually ran):** `docker compose config` valid (services: backend db frontend mosquitto); `docker compose up mosquitto db` → **db healthy**, mosquitto reachable (1883); backend app (same module/CMD the image runs) via host uvicorn → `/healthz` 200 + `mqtt_connected:true`; **host simulator → compose Mosquitto → backend** ingestion (`telemetry_count` rose to 3, `device pump-01`); `pytest` **56 passed** (broker up → integration ran too). Teardown clean.
+- **Environment-blocked (NOT verified here — sandbox TLS/proxy MITMs Docker-build package fetches; base images lack the gateway CA):** backend image build (`pip` cert-verify fail) and frontend image build (`npm` cert-verify fail), therefore full four-service `up` and the browser WebSocket render (the localhost WS-upgrade 403 also persists). NOT worked around — no insecure `--trusted-host`/`strict-ssl=false`/CA hacks added to the images. Builds succeed where TLS isn't intercepted (CI/normal machine); the frontend build already passes in CI (M3.5 frontend job).
+- No new DECISION (D008 already scopes the simulator out of compose; the rest is implementation).
+
 ## Status
-- P0 Milestone 3.5 code complete; MQTT→backend live-verified; WS-serving + RTL/build gated to CI/normal-serving (sandbox limits).
-- **CI repair (packaging + lint/format) done — Python checks all pass locally; frontend job already green.** One combined change, not yet committed — awaiting approval.
-- Next: commit CI repair → confirm CI green on GitHub → E2E latency spike + P0 offline full-stack `docker compose up` gate.
+- P0 offline stack implemented + partially verified (config + mosquitto/db + backend app + ingestion + tests). Image builds + browser render are environment-blocked here → close out on CI / a normal machine.
+- Not yet committed — awaiting approval.
+- Next: E2E latency spike + P0 gate close-out (full `up --build` on a normal machine) → go/no-go.

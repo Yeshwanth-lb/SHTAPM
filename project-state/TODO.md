@@ -38,7 +38,8 @@
   - [~] M3.5c live-path proof: MQTT→backend ingestion verified live under uvicorn (`/healthz` telemetry_count>0, mqtt_connected:true); **Backend→WS→external client NOT verifiable in this sandbox** (uvicorn WS upgrade → 403 with both websockets & wsproto; likely localhost Upgrade interception). App-level WS proven by M3.4 TestClient tests. Node `scripts/ws_smoke.mjs` authored.
   - 🔒 CI-only (npm TLS-blocked locally): RTL tests, `tsc`, `vite build` — run in CI (Option A gate). package.json version pins unverified locally.
 - [ ] SPIKE: end-to-end MQTT→backend→WS→React; measure E2E latency (software path — hardware-free)
-- [ ] Gate: offline full-stack `docker compose up` clean on fresh machine; go/no-go recorded *(M1: `compose config` validated; M3.2: mosquitto service verified up)*
+- [~] **P0 offline four-service stack** — `docker compose up` now starts all four (profiles removed); real backend Dockerfile (uvicorn app.main:app) + frontend multi-stage (npm build → nginx serving dist, `5173:80`) + `frontend/nginx.conf`; simulator stays host-side (D008). **Verified locally:** compose config valid (4 services); mosquitto + db up & **db healthy**; backend app serves `/healthz` + host-sim→Mosquitto→backend ingestion (`telemetry_count`, `mqtt_connected:true`); 56/56 pytest. **Env-blocked here (TLS/proxy MITM in Docker builds — pip & npm cert-verify fail):** backend & frontend *image builds*, full `up` of all four, browser WS render. → verify on CI / a normal machine.
+- [ ] Gate close-out: full-stack `docker compose up --build` on a normal machine (images build) + browser render + go/no-go recorded
 
 ### P0 hardware-blocked (need Raspberry Pi + bench rig — DO NOT fake)
 - [ ] SPIKE (Pi): read one sensor per interface; INA219 resolves pump current  🔒 hardware-blocked

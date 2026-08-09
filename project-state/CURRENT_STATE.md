@@ -10,9 +10,9 @@
 
 ## Snapshot
 - **Current phase:** P0 — Foundations & Spikes (IN PROGRESS)
-- **Current milestone:** P0 Milestone 3.5 — React live-telemetry consumer (code complete; RTL/build + real WS-serving gated to CI/normal-serving; commit pending approval)
-- **Overall completion:** repo + frozen contract + simulator + simulator→Mosquitto→backend(+WS at ASGI level) + minimal React consumer done; E2E latency spike + offline `up` gate + hardware spikes pending
-- **Repository:** github.com/Yeshwanth-lb/SHTAPM (branch `main`; M1 d841404; M2 e1f2e4a; M3.1 0b1c4dd; M3.2 aa1563c; M3.3 4c578c5; M3.4 728838f pushed; M3.5 uncommitted)
+- **Current milestone:** P0 offline four-service Docker stack (implemented; partially verified — image builds/browser env-blocked; commit pending approval)
+- **Overall completion:** repo + frozen contract + simulator + sim→Mosquitto→backend→WS(ASGI) + React consumer + offline compose stack (real Dockerfiles) done; E2E latency spike + gate close-out (full `up --build` on a normal machine) + hardware spikes pending
+- **Repository:** github.com/Yeshwanth-lb/SHTAPM (branch `main`; M1 d841404 … M3.5 8483283; CI-repair fab702b pushed & CI green; offline-stack uncommitted)
 
 ## Completed
 - Requirements + design docs authored (`docs/` — PRD, TRD, App Flow, Aurora UI/UX, Backend Schema, Impl Plan).
@@ -30,14 +30,17 @@
 - **P0 Milestone 3.5** (uncommitted) — minimal React consumer: `frontend/src/{App,main}.tsx`, `hooks/useTelemetryWebSocket.ts`, `features/telemetry/TelemetryView.tsx`, `lib/ws.ts` + RTL tests; `scripts/ws_smoke.mjs`. Reuses frozen TS contract, plain React state, capped-backoff reconnect. MQTT→backend live-verified under uvicorn; WS-serving-to-client + RTL/build gated to CI (sandbox blocks — see below).
 
 ## In progress
-- P0 Milestone 3.5 code complete; awaiting approval to commit/push (CI is the RTL/build + WS-serving gate per Option A).
+- P0 offline stack implemented + partially verified; awaiting approval to commit/push. Image builds + browser render close out on CI / a normal machine.
 
 ## Next
-- E2E latency spike/harness; P0 offline full-stack `docker compose up` gate.
+- E2E latency spike/harness; P0 gate close-out = full `docker compose up --build` (all four) on a normal machine + browser render + go/no-go.
 
-## M3.5 environment gates (honest — not local failures of the code)
-- Real uvicorn **WS serving to an external client** returns HTTP 403 in this sandbox (both `websockets` and `wsproto`); app-level WS is proven via Starlette TestClient (M3.4 tests). Likely localhost `Upgrade` interception by the sandbox gateway; works under normal serving/CI.
-- `npm install` blocked (TLS/proxy) → no lockfile; RTL/`tsc`/`vite build` and package.json pins are verified in CI, not locally.
+## Environment gates (honest — sandbox limits, not code failures)
+- **Docker image builds** (backend `pip`, frontend `npm`) fail cert-verify inside the build (gateway MITMs TLS; base images lack its CA). So the full four-service `up` can't be built here. Dockerfiles are standard/correct — no insecure workarounds added; they build on CI / a normal machine (frontend build already green in CI).
+- Real uvicorn **WS serving to an external client** returns HTTP 403 in this sandbox (localhost `Upgrade` interception); app-level WS proven via Starlette TestClient (M3.4). Works under normal serving/CI.
+- `npm install` blocked locally → no lockfile; RTL/`tsc`/`vite build` verified in CI.
+- To verify the full stack + browser render, run on a machine without the TLS interception:
+  `cp .env.example .env` → set `POSTGRES_PASSWORD` → `docker compose up --build` → open `http://localhost:5173`, `curl http://localhost:8000/healthz`, and run the host simulator (README).
 - Note: integration tests need a broker + paho-mqtt; they self-skip otherwise. Backend runtime now needs fastapi/paho (`backend/requirements.txt`); tests need httpx (dev extra). Docker daemon started to verify; quit Docker Desktop if unwanted.
 - P0 gate: clean offline `docker compose up` + go/no-go.
 - Hardware spikes (sensor/interface reads, INA219, on-Pi LSTM+IF timing) stay **hardware-blocked** until a Pi/rig is available (`TODO.md`).

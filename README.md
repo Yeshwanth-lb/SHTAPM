@@ -29,20 +29,35 @@ docs/       authoritative PRD/TRD/AppFlow/UIUX/Schema/ImplPlan
 project-state/  implementation memory (state, decisions, log, todo)
 ```
 
-## Local bring-up (offline)
-Requires Docker + Docker Compose. Images must be cached locally for a truly
-offline demo.
+## Local bring-up (offline four-service stack)
+Requires Docker + Docker Compose. Building the frontend image needs the npm
+registry once; after images are cached the stack runs offline.
 ```bash
-cp .env.example .env      # then set POSTGRES_PASSWORD and JWT_SECRET_KEY
-docker compose up         # starts mosquitto + db (functional infra)
+cp .env.example .env      # then set POSTGRES_PASSWORD (required; no default)
+docker compose up         # builds + starts all four services
 ```
-`backend` and `frontend` are **wired-empty** in P0 and gated behind the `app`
-profile (`docker compose --profile app up`) — they gain real applications in
-P4 / P5. Do not expect them to serve anything yet.
+Starts **mosquitto**, **db** (PostgreSQL/TimescaleDB — running but unused by the
+app at P0), **backend** (FastAPI), **frontend** (React via nginx).
+
+**Verify:**
+- Frontend: open `http://localhost:5173` → the live-telemetry page (shows
+  "No telemetry yet…" until a source publishes).
+- Backend health: `curl http://localhost:8000/healthz` →
+  `{"status":"ok","mqtt_connected":true,...}`.
+
+**Telemetry source (host-side, not a compose service — D008).** The pump edge is
+stood in for by the hardware-free simulator; run it on the host to feed live data:
+```bash
+pip install -r simulator/requirements.txt
+PYTHONPATH=backend:. EDGE_MQTT_HOST=localhost EDGE_MQTT_PORT=1883 \
+  DEVICE_ID=pump-01 SAMPLE_RATE_HZ=1 python -m simulator
+```
+The browser connects to the backend WebSocket at `VITE_WS_URL`
+(`ws://localhost:8000/ws`, consumed on the host).
 
 ## Tooling
 - Python (edge, backend): ruff + black + pytest — `pip install ".[dev]"`.
 - Frontend: Vite + TypeScript + Vitest + ESLint + Prettier (installed in P5).
 - Pre-commit: `pip install pre-commit && pre-commit install`.
-- CI: `.github/workflows/ci.yml` (Python now; frontend job activates once the
-  P5 lockfile exists).
+- CI: `.github/workflows/ci.yml` — Python (ruff/black/pytest) + Frontend
+  (typecheck/Vitest/build). Both green as of the CI-repair commit.

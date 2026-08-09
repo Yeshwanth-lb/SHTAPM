@@ -1,14 +1,16 @@
 # ─────────────────────────────────────────────────────────────────────────
-# SHTAPM — P0 foundation compose (four services per TRD §02.5).
+# SHTAPM — P0 offline four-service stack (TRD §02.5).
 #
-#   mosquitto, db  → functional now (official images).
-#   backend, frontend → WIRED-EMPTY placeholders in P0; real apps land in
-#     P4 (FastAPI) / P5 (Vite+React). Gated behind the "app" profile so a
-#     default `docker compose up` starts only the working infra services and
-#     does NOT fake an application that does not exist yet.
+#   mosquitto  — MQTT broker (official image + infra/mosquitto/mosquitto.conf)
+#   db         — PostgreSQL/TimescaleDB (running but UNUSED by the app at P0;
+#                persistence + schema are P4)
+#   backend    — FastAPI (MQTT telemetry ingestion + WebSocket /ws + /healthz)
+#   frontend   — React live-telemetry app, built and served static via nginx
 #
-# Offline rule (TRD §02.5): images are cached locally for the demo; no CDN,
-# no runtime internet dependency.
+# `docker compose up` starts all four. Telemetry source (the hardware-free
+# simulator, D008) is run SEPARATELY on the host — it is NOT a compose service.
+# Offline rule (TRD §02.5): images are cached locally for the demo; building the
+# frontend image needs the npm registry once, then runs offline.
 # ─────────────────────────────────────────────────────────────────────────
 name: shtapm
 
@@ -41,7 +43,7 @@ services:
       retries: 5
 
   backend:
-    # WIRED-EMPTY (P0). FastAPI app + real Dockerfile/CMD completed in P4.
+    # FastAPI (app.main:app): MQTT telemetry ingestion + WebSocket fan-out.
     build:
       context: ./backend
     depends_on:
@@ -53,17 +55,15 @@ services:
       - .env
     ports:
       - "${BACKEND_PORT:-8000}:8000"
-    profiles: ["app"]
 
   frontend:
-    # WIRED-EMPTY (P0). Vite/React app + real Dockerfile/CMD completed in P5.
+    # React live-telemetry app built + served static by nginx (port 80).
     build:
       context: ./frontend
     depends_on:
       - backend
     ports:
-      - "5173:5173"
-    profiles: ["app"]
+      - "5173:80"
 
 volumes:
   mosquitto_data:
