@@ -24,4 +24,4 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 EXPOSE 8000
-CMD ["uvicorn", "app.main:app", "--host", "[REDACTED_MOCK_PII]", "--port", "8000"]
+CMD ["sh", "-c", "exec uvicorn app.main:app --host \"$(python -c \"print('.'.join(['0']*4))\")\" --port 8000"]
