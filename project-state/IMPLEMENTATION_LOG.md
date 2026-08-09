@@ -42,6 +42,19 @@
 - **Verified (actually ran):** `backend/tests` → 14 passed (13 contract + 1 placeholder), `edge/tests` → 1 passed, in an isolated venv with pydantic 2.13.4 (host has no project deps). **Not run locally:** TS `tsc`/`vitest` — TypeScript could not be installed (npm blocked by TLS/proxy `UNABLE_TO_GET_ISSUER_CERT_LOCALLY`); the TS mirror + test are authored and run in CI/P5.
 - No MQTT, simulator, or ML logic implemented. U01–U13 untouched.
 
+## 2026-08-09 — P0 Milestone 2 committed
+- Committed `P0 Milestone 2: freeze shared data contract (D006/D007)` (e1f2e4a), pushed to origin/main.
+
+## 2026-08-09 — P0 Milestone 3.1: Telemetry simulator (D005 / D008)
+- New top-level `simulator/` package (isolated from `edge/` Pi drivers — D008):
+  - `generator.py` — `TelemetrySimulator`: deterministic seeded samples of the six frozen channels; emits the M2 `TelemetryMessage` verbatim (imports the canonical contract; no renamed/invented fields). Caller supplies `ts` → fully reproducible. Baseline means/ranges are simulator-chosen plausible bench values (datasheet-bounded), NOT doc specs.
+  - `publisher.py` — `MqttTelemetryPublisher`: publishes to `shtapm/{device_id}/telemetry` at QoS 0 (TRD §02.3); client injected (no hard paho dep → broker-free tests).
+  - `__main__.py` — thin 1 Hz CLI runner (builds paho client from env); live broker publish exercised in M3.2+, so not unit-tested.
+  - `requirements.txt` (paho-mqtt==1.6.*, pydantic==2.*), `README.md`, tests.
+- Test-infra fix (surfaced running the full suite): `backend/tests` + `edge/tests` share `test_placeholder.py`, and root pytest lacked `backend/` on path. Fixed `pyproject.toml`: `pythonpath=["backend","."]`, `addopts=--import-mode=importlib`, added `simulator/tests` to testpaths, added `pydantic==2.*` to the dev extra (contract suite needs it). Now `pytest -q` runs the whole suite from one command (CI-ready).
+- **Verified (actually ran):** `pytest -q` (root config, no manual PYTHONPATH) → **27 passed** (13 contract, 2 placeholder, 12 simulator), venv pydantic 2.13.4. Emitted a deterministic example message (seed 1337) — see report.
+- Scope kept: no anomaly/trust/ML/decision/ledger/safety, no P1 hardware drivers, no auth/RBAC, no Aurora dashboard. U01–U14 untouched. docs/ + CLAUDE.md untouched.
+
 ## Status
-- P0 Milestone 2 complete and verified (Python side actually ran); **not yet committed — awaiting approval**.
-- Next: P0 Milestone 3 — hardware-free telemetry simulator/replay scaffold (D005) + software MQTT→backend→WS→React latency spike.
+- P0 Milestone 3.1 complete and verified; **not yet committed — awaiting approval**.
+- Next: P0 Milestone 3.2 — backend MQTT subscriber → WebSocket telemetry fan-out.

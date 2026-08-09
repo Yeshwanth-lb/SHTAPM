@@ -27,9 +27,11 @@
 - [x] Pydantic v2 canonical models `backend/app/schemas/contracts.py` *(14 tests pass: valid accepted, invalid/shorthand/nested-healing/missing-payload_hash rejected)*
 - [x] Mirrored TS types `frontend/src/types/contracts.ts` + runtime mirror test *(authored; tsc/vitest NOT run locally — npm blocked by TLS/proxy; runs in CI/P5)*
 
-### Milestone 3+ (P0, NOT started)
-- [ ] Hardware-free telemetry simulator/replay scaffold (D005)
-- [ ] SPIKE: MQTT→backend→WS→React number render; measure E2E latency (software path — hardware-free)
+### Milestone 3 — Hardware-free telemetry path (IN PROGRESS)
+- [x] **M3.1** Telemetry simulator (D005/D008): deterministic generator (6 frozen channels, 1 Hz-ready), MQTT publisher to `shtapm/{device_id}/telemetry` (QoS 0), tests *(verified: 27/27 pytest pass together, incl. 12 simulator)*
+- [ ] M3.2 Backend MQTT subscriber → WebSocket fan-out (telemetry only)
+- [ ] M3.3 Minimal React consumer renders live telemetry
+- [ ] SPIKE: end-to-end MQTT→backend→WS→React; measure E2E latency (software path — hardware-free)
 - [ ] Gate: offline `docker compose up` clean on fresh machine; go/no-go recorded *(M1: `compose config` validated; full `up` not yet run)*
 
 ### P0 hardware-blocked (need Raspberry Pi + bench rig — DO NOT fake)

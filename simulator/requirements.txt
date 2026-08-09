@@ -1,0 +1,5 @@
+# SHTAPM hardware-free telemetry simulator (D005) — dependencies.
+# Frozen stack (TRD §02.2). The simulator also imports the canonical contract
+# from backend/app/schemas (add `backend` to PYTHONPATH), which needs pydantic.
+paho-mqtt==1.6.*
+pydantic==2.*

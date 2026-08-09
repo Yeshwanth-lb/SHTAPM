@@ -10,9 +10,9 @@
 
 ## Snapshot
 - **Current phase:** P0 — Foundations & Spikes (IN PROGRESS)
-- **Current milestone:** P0 Milestone 2 — Shared data contract (complete + verified; commit pending approval)
-- **Overall completion:** repo scaffolding + frozen data contract done; still ~0% application functionality
-- **Repository:** github.com/Yeshwanth-lb/SHTAPM (branch `main`; M1 pushed @ d841404; M2 uncommitted)
+- **Current milestone:** P0 Milestone 3.1 — Telemetry simulator (complete + verified; commit pending approval)
+- **Overall completion:** repo scaffolding + frozen contract + hardware-free telemetry generator done; live path (M3.2/3.3) + hardware spikes pending
+- **Repository:** github.com/Yeshwanth-lb/SHTAPM (branch `main`; M1 d841404; M2 e1f2e4a pushed; M3.1 uncommitted)
 
 ## Completed
 - Requirements + design docs authored (`docs/` — PRD, TRD, App Flow, Aurora UI/UX, Backend Schema, Impl Plan).
@@ -22,13 +22,15 @@
 - Reconciled implementation roadmap agreed (PRD phase authority; Doc06 = detailed task/test spec mapped into PRD phases).
 - Project-state / handoff files created and committed (30b03ee).
 - **P0 Milestone 1** (committed d841404) — monorepo skeleton (TRD §02.6); docker-compose (mosquitto+db functional, backend+frontend wired-empty behind `app` profile); `.env.example`; Python + frontend lint/test tooling + CI + pre-commit skeleton; self-hosted font foundation; `.gitignore` hardened; READMEs.
-- **P0 Milestone 2** (uncommitted) — froze the canonical telemetry/decision/ledger contract per **D007** (Doc05 §05.8 authoritative). Pydantic v2 models in `backend/app/schemas/contracts.py`, mirrored TS in `frontend/src/types/contracts.ts`, accept/reject tests. Verified: 14 Python tests pass (isolated venv, pydantic 2.13.4).
+- **P0 Milestone 2** (committed e1f2e4a) — froze the canonical telemetry/decision/ledger contract per **D007** (Doc05 §05.8 authoritative). Pydantic v2 models in `backend/app/schemas/contracts.py`, mirrored TS in `frontend/src/types/contracts.ts`, accept/reject tests.
+- **P0 Milestone 3.1** (uncommitted) — hardware-free telemetry simulator in top-level `simulator/` (D005/D008): deterministic generator emitting the frozen contract + MQTT publisher to `shtapm/{device_id}/telemetry`. Fixed root pytest wiring so the whole suite runs in one command. Verified: 27/27 pytest pass.
 
 ## In progress
-- P0 Milestone 2 verified (Python side); awaiting approval to commit/push. Nothing else started.
+- P0 Milestone 3.1 verified; awaiting approval to commit/push. M3.2/3.3 not started.
 
 ## Next
-- **P0 Milestone 3** — hardware-free telemetry **simulator/replay** scaffold (D005) + software MQTT→backend→WS→React latency spike + harness.
+- **P0 Milestone 3.2** — backend MQTT subscriber → WebSocket telemetry fan-out.
+- **M3.3** — minimal React consumer renders live telemetry; then the E2E latency spike/harness.
 - P0 gate: clean offline `docker compose up` + go/no-go.
 - Hardware spikes (sensor/interface reads, INA219, on-Pi LSTM+IF timing) stay **hardware-blocked** until a Pi/rig is available (`TODO.md`).
 

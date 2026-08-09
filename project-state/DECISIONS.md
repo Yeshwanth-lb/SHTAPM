@@ -61,6 +61,12 @@
 - **Affects:** shared contract everywhere (D006); `backend/app/schemas/contracts.py`, `frontend/src/types/contracts.ts`; future simulator/edge/backend/WS/frontend (P1–P5).
 - **Supersedes:** nothing (refines D006). Message field `event`/`health` map to DB columns `event_type`/`health_state` (message-vs-storage layer; not a conflict).
 
+### D008 — Hardware-free simulator lives in top-level `simulator/`, isolated from `edge/`
+- **Date:** 2026-08-09
+- **Decision:** The D005 telemetry simulator is a top-level `simulator/` package, deliberately separate from `edge/` (the Raspberry Pi drivers, P1). It reuses the canonical contract from `backend/app/schemas` (D006/D007) rather than duplicating field names; for now it imports it via `PYTHONPATH` (`backend` on path). Root pytest config sets `pythonpath = ["backend", "."]` + `--import-mode=importlib` so the whole suite runs from one command.
+- **Reason:** Keeps the dev/replay source cleanly isolated from real hardware code (instruction + PRD framing) while honoring the single-contract rule. A dedicated shared contract package may be introduced later when edge (P1) also needs the contract — noted, not resolved.
+- **Affects:** `simulator/` (M3), test wiring (`pyproject.toml`), future edge P1 contract import.
+
 ---
 
 ## UNDECIDED (must not be silently resolved — see CURRENT_STATE blockers)
