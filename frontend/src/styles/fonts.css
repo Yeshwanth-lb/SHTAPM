@@ -1,0 +1,26 @@
+/* SHTAPM — self-hosted fonts (Aurora typography, Doc04 §04.3).
+ *
+ * Geist + Geist Mono, SIL OFL 1.1. NO CDN, NO external network: the fonts are
+ * served from vendored local woff2 under ../assets/fonts/ (see FONTS.md).
+ *
+ * P0 fixes the @font-face contract. The woff2 binaries + the exact vendoring
+ * mechanism (@fontsource package pin vs. manual woff2) are finalized in P5
+ * when frontend deps install and the package/version is verifiable — see
+ * FONTS.md and ../../../project-state/TODO.md (font item is foundation-only).
+ */
+
+@font-face {
+  font-family: "Geist";
+  src: url("../assets/fonts/geist/Geist-Variable.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Geist Mono";
+  src: url("../assets/fonts/geist-mono/GeistMono-Variable.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}

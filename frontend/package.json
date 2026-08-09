@@ -1,0 +1,25 @@
+{
+  "name": "shtapm-frontend",
+  "private": true,
+  "type": "module",
+  "description": "SHTAPM Aurora dashboard — P0 tooling/font foundation only. App scaffolded in P5.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest"
+  },
+  "devDependencies": {
+    "typescript": "5.4.5",
+    "vite": "5.2.11",
+    "vitest": "1.6.0",
+    "eslint": "8.57.0",
+    "prettier": "3.3.2",
+    "@typescript-eslint/eslint-plugin": "7.13.1",
+    "@typescript-eslint/parser": "7.13.1"
+  }
+}

@@ -1,0 +1,4 @@
+# SHTAPM backend runtime dependencies — pinned in P4 from the frozen stack
+# (TRD §02.2): fastapi==0.110.*, uvicorn==0.29.*, paho-mqtt==1.6.*,
+# sqlalchemy==2.0.*, alembic, psycopg[binary], python-jose, passlib[bcrypt],
+# pydantic. Kept empty in P0 so nothing installs before P4.

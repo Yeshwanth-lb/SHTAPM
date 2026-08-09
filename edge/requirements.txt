@@ -1,0 +1,7 @@
+# SHTAPM edge runtime dependencies.
+# Populated in later phases from the frozen stack (TRD §02.2), NOT in P0:
+#   P1: paho-mqtt==1.6.*, gpiozero, smbus2, spidev, w1thermsensor,
+#       adafruit-circuitpython-dht
+#   P2: scikit-learn==1.4.*
+#   P3: torch==2.2.*, stable-baselines3==2.3.*
+# (kept empty in P0 so nothing is installed before its phase)

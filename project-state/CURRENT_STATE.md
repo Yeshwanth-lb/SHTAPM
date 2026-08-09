@@ -9,10 +9,10 @@
 ---
 
 ## Snapshot
-- **Current phase:** P0 — Foundations & Spikes (NOT started)
-- **Current milestone:** Project-state / handoff system being established (pre-P0)
-- **Overall completion:** ~0% — documentation + planning only; no application code exists
-- **Repository:** github.com/Yeshwanth-lb/SHTAPM (branch `main`, in sync with origin)
+- **Current phase:** P0 — Foundations & Spikes (IN PROGRESS)
+- **Current milestone:** P0 Milestone 1 — Repository foundation & configuration (complete + verified; commit pending approval)
+- **Overall completion:** repo scaffolding done; still ~0% application functionality
+- **Repository:** github.com/Yeshwanth-lb/SHTAPM (branch `main`, in sync with origin @ 30b03ee)
 
 ## Completed
 - Requirements + design docs authored (`docs/` — PRD, TRD, App Flow, Aurora UI/UX, Backend Schema, Impl Plan).
@@ -20,15 +20,21 @@
 - Git repo initialized and pushed to GitHub.
 - PRD ↔ Doc06 phase conflict identified and reconciled (see `DECISIONS.md` D001/D002).
 - Reconciled implementation roadmap agreed (PRD phase authority; Doc06 = detailed task/test spec mapped into PRD phases).
-- Project-state / handoff files created (this set).
+- Project-state / handoff files created and committed (30b03ee).
+- **P0 Milestone 1** — monorepo skeleton (TRD §02.6); docker-compose (mosquitto+db functional, backend+frontend wired-empty behind `app` profile); `.env.example` (all §02.7 vars); Python + frontend lint/test tooling + CI + pre-commit skeleton; self-hosted font foundation; `.gitignore` hardened; READMEs. Verified: compose config valid, JSON/YAML valid, python compiles, ignore rules correct. No application logic, no faked hardware.
 
 ## In progress
-- Establishing persistent project-state system (this directory). No application functionality.
+- P0 Milestone 1 verified; awaiting approval to commit/push. Nothing else started.
 
 ## Next
-- P0 — Foundations & Spikes. Blocked from a clean start only for hardware spikes (see below); software scaffolding can begin.
-- P0 scope (reconciled): monorepo per TRD §02.6; `docker-compose` (mosquitto, postgres+timescale, backend, frontend) wired-empty; `.env.example` with all TRD §02.7 vars; self-hosted Geist/Geist Mono fonts (no CDN); CI lint/test skeleton; edge/latency/compute spikes; freeze shared data contract stub.
-- Recommend front-loading a hardware-free telemetry **simulator/replay source** emitting the frozen contract (D005) so P4/P5 proceed without the rig.
+- **P0 Milestone 2** — freeze the shared data-contract stub (telemetry/decision/ledger; D006).
+- Then hardware-free telemetry **simulator/replay** scaffold (D005) and the software MQTT→backend→WS→React latency spike + harness.
+- Remaining P0 hardware spikes (sensor/interface reads, INA219, on-Pi LSTM+IF timing) stay **hardware-blocked** until a Pi/rig is available (see `TODO.md`).
+
+## Milestone-1 caveats (honest state)
+- Fonts: foundation only — woff2 binaries + exact vendoring pin deferred to P5 (npm package unverifiable in P0; not guessed).
+- Linters (ruff/black/eslint) configured but NOT executed locally (not installed here) — they run in CI.
+- `docker compose config` validated; a full `docker compose up` on a clean machine has not been run yet (that is the P0 gate, a later milestone).
 
 ## Known blockers
 Blocking questions are tracked in the roadmap discussion; the ones that gate *code* (not yet resolved — DO NOT silently assume):

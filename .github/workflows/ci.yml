@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  python:
+    name: Python lint + test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install ".[dev]"
+      - run: ruff check .
+      - run: black --check .
+      - run: pytest -q
+
+  frontend:
+    name: Frontend lint + test
+    runs-on: ubuntu-latest
+    # Skips until the frontend lockfile exists (created in P5). Keeps the
+    # pipeline honest: green now, real once the app is scaffolded.
+    if: ${{ hashFiles('frontend/package-lock.json') != '' }}
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm run typecheck
+      - run: npm run test -- --run

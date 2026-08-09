@@ -10,20 +10,27 @@
 - [x] Git repo + CLAUDE.md + GitHub push
 - [x] PRD/Doc06 phase conflict reconciled
 - [x] project-state/ handoff system created
-- [ ] project-state/ committed to Git *(pending approval)*
+- [x] project-state/ committed to Git (commit 30b03ee)
 
-## P0 — Foundations & Spikes  (NEXT)
-- [ ] Monorepo structure per TRD §02.6
-- [ ] `docker-compose.yml` — mosquitto, postgres+timescale, backend, frontend (wired, empty)
-- [ ] `.env.example` — all TRD §02.7 vars (incl. `VITE_AURORA_MOTION`, `VITE_REDUCE_TRANSPARENCY_DEFAULT`)
-- [ ] Self-host Geist / Geist Mono fonts (no external CDN)
-- [ ] CI skeleton (lint + test placeholders; ruff/black/eslint/prettier/pre-commit)
+## P0 — Foundations & Spikes  (IN PROGRESS)
+
+### Milestone 1 — Repository foundation & configuration  ✅ (verified, pending commit)
+- [x] Monorepo structure per TRD §02.6
+- [x] `docker-compose.yml` — 4 services; mosquitto+db functional, backend+frontend wired-empty behind `app` profile *(verified: `docker compose config` valid)*
+- [x] `.env.example` — all TRD §02.7 vars (incl. `VITE_AURORA_MOTION`, `VITE_REDUCE_TRANSPARENCY_DEFAULT`)
+- [x] CI + lint/test skeleton (pyproject ruff/black/pytest; ESLint/Prettier/Vitest configs; `.pre-commit-config.yaml`; `.github/workflows/ci.yml`) *(configs valid; linters execute in CI — not installed locally)*
+- [x] `.gitignore` improved (model binaries, broker state, logs); root + service READMEs
+- [~] Self-host Geist / Geist Mono fonts (no CDN) — **foundation only**: `@font-face` contract + `assets/fonts/` + OFL note done; woff2 binaries + exact vendoring pin deferred to P5 (npm package name/version unverifiable in P0 — not guessed)
+
+### Milestone 2+ (P0, NOT started)
 - [ ] Freeze shared data-contract stub (telemetry/decision/ledger — D006)
 - [ ] Hardware-free telemetry simulator/replay scaffold (D005)
-- [ ] SPIKE (Pi): read one sensor per interface; INA219 resolves pump current
-- [ ] SPIKE: MQTT→backend→WS→React number render; measure E2E latency
-- [ ] SPIKE (Pi): time LSTM + Isolation Forest forward pass (<500ms budget)
-- [ ] Gate: offline `docker-compose up` clean on fresh machine; go/no-go recorded
+- [ ] SPIKE: MQTT→backend→WS→React number render; measure E2E latency (software path — hardware-free)
+- [ ] Gate: offline `docker compose up` clean on fresh machine; go/no-go recorded *(M1: `compose config` validated; full `up` not yet run)*
+
+### P0 hardware-blocked (need Raspberry Pi + bench rig — DO NOT fake)
+- [ ] SPIKE (Pi): read one sensor per interface; INA219 resolves pump current  🔒 hardware-blocked
+- [ ] SPIKE (Pi): time LSTM + Isolation Forest forward pass (<500ms budget)  🔒 hardware-blocked
 
 ## P1 — Hardware / Acquisition
 - [ ] Pi OS + I2C/SPI/1-Wire enabled

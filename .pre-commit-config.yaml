@@ -1,0 +1,29 @@
+# SHTAPM pre-commit hooks — frozen stack (TRD §02.2): ruff + black (Python),
+# prettier (TS/CSS/MD). ESLint runs in CI (needs the frontend deps installed
+# in P5). Install locally with:  pip install pre-commit && pre-commit install
+minimum_pre_commit_version: "3.5.0"
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-json
+      - id: check-added-large-files
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.6.9
+    hooks:
+      - id: ruff            # lint only (black owns formatting per TRD)
+
+  - repo: https://github.com/psf/black
+    rev: 24.8.0
+    hooks:
+      - id: black
+
+  - repo: https://github.com/pre-commit/mirrors-prettier
+    rev: v3.1.0
+    hooks:
+      - id: prettier
+        files: \.(ts|tsx|js|jsx|css|json|md)$

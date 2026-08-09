@@ -10,6 +10,24 @@ node_modules/
 dist/
 build/
 .pytest_cache/
+.ruff_cache/
+.mypy_cache/
 .coverage
 htmlcov/
 .vscode/
+
+# Trained model artifacts (generated in P2/P3 — never committed)
+edge/models/*.pkl
+edge/models/*.pt
+edge/models/*.zip
+edge/models/*.onnx
+
+# Recorded/replay session data (generated; can be large)
+data/replay/
+
+# Broker runtime state
+infra/mosquitto/data/
+infra/mosquitto/log/
+
+# Logs
+*.log

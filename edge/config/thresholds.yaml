@@ -1,0 +1,20 @@
+# SHTAPM trust/self-heal thresholds — P0 stub.
+# Stores PARAMETERS only. The trust-update ALGORITHM (Beta-reputation math)
+# is UNDECIDED (U01) and the attribution rules are UNDECIDED (U02) — this file
+# must not be read as defining them. Defaults below are the values explicitly
+# specified in Doc05 §05.2 (`thresholds` table). UNDECIDED values are left null
+# and MUST NOT be invented (see ../../project-state/DECISIONS.md).
+
+trust_trusted_min: 0.7          # T >= 0.7 → Trusted   (Doc05 default)
+trust_malicious_max: 0.4        # T <  0.4 → Malicious (Doc05 default)
+
+# Trust-update weights (present in schema; the update FORMULA is UNDECIDED U01)
+trust_w_consistency: 0.4
+trust_w_correlation: 0.3
+trust_w_reliability: 0.3
+
+window_size: 30                 # samples (Doc05 default)
+
+# Self-healing bounds (FR-H3)
+substitution_max_seconds: 60    # Doc05 default
+divergence_threshold: null      # UNDECIDED (U05) — escalate-to-safe-stop trigger; do not guess

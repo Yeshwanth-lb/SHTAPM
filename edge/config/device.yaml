@@ -1,0 +1,16 @@
+# SHTAPM edge device config — P0 stub.
+# Values mirror the frozen contract / .env defaults. The edge loader (P1)
+# reads DEVICE_ID etc. from the environment; this file documents per-device
+# static config. Channel order is the frozen six-channel contract (D006).
+
+device_id: pump-01          # matches edge DEVICE_ID and devices.device_id
+sample_rate_hz: 1           # default 1 Hz (FR-Q1 range 1–10)
+window_size: 30             # 30-sample sliding window (FR-P2)
+
+channels:                   # logical → part (PRD §12.1). is_proxy per Doc05.sensors
+  - {channel: temperature, part: DS18B20, unit: "°C", is_proxy: false}
+  - {channel: vibration,   part: ADXL335, unit: "g",  is_proxy: false}
+  - {channel: pressure,    part: BMP180,  unit: "hPa", is_proxy: true}   # atmospheric proxy
+  - {channel: humidity,    part: DHT22,   unit: "%",  is_proxy: false}
+  - {channel: gas,         part: MQ-135,  unit: "ppm", is_proxy: true}   # VOC/CO2 proxy
+  - {channel: current,     part: INA219,  unit: "A",  is_proxy: false}

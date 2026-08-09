@@ -1,0 +1,71 @@
+# ─────────────────────────────────────────────────────────────────────────
+# SHTAPM — P0 foundation compose (four services per TRD §02.5).
+#
+#   mosquitto, db  → functional now (official images).
+#   backend, frontend → WIRED-EMPTY placeholders in P0; real apps land in
+#     P4 (FastAPI) / P5 (Vite+React). Gated behind the "app" profile so a
+#     default `docker compose up` starts only the working infra services and
+#     does NOT fake an application that does not exist yet.
+#
+# Offline rule (TRD §02.5): images are cached locally for the demo; no CDN,
+# no runtime internet dependency.
+# ─────────────────────────────────────────────────────────────────────────
+name: shtapm
+
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2.0
+    restart: unless-stopped
+    ports:
+      - "${MQTT_PORT:-1883}:1883"
+    volumes:
+      - ./infra/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - mosquitto_data:/mosquitto/data
+      - mosquitto_log:/mosquitto/log
+
+  db:
+    image: timescale/timescaledb:2.14.2-pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-shtapm}
+      POSTGRES_USER: ${POSTGRES_USER:-shtapm}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-shtapm} -d ${POSTGRES_DB:-shtapm}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    # WIRED-EMPTY (P0). FastAPI app + real Dockerfile/CMD completed in P4.
+    build:
+      context: ./backend
+    depends_on:
+      db:
+        condition: service_healthy
+      mosquitto:
+        condition: service_started
+    env_file:
+      - .env
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    profiles: ["app"]
+
+  frontend:
+    # WIRED-EMPTY (P0). Vite/React app + real Dockerfile/CMD completed in P5.
+    build:
+      context: ./frontend
+    depends_on:
+      - backend
+    ports:
+      - "5173:5173"
+    profiles: ["app"]
+
+volumes:
+  mosquitto_data:
+  mosquitto_log:
+  db_data:
