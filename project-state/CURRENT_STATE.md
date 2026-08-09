@@ -10,9 +10,9 @@
 
 ## Snapshot
 - **Current phase:** P0 — Foundations & Spikes (IN PROGRESS)
-- **Current milestone:** P0 Milestone 3.4 — Backend WebSocket telemetry fan-out (complete + verified incl. real MQTT→backend→WS path; commit pending approval)
-- **Overall completion:** repo + frozen contract + simulator + verified simulator→Mosquitto→backend→WebSocket path done; React (M3.5) + E2E latency spike + offline `up` gate + hardware spikes pending
-- **Repository:** github.com/Yeshwanth-lb/SHTAPM (branch `main`; M1 d841404; M2 e1f2e4a; M3.1 0b1c4dd; M3.2 aa1563c; M3.3 4c578c5 pushed; M3.4 uncommitted)
+- **Current milestone:** P0 Milestone 3.5 — React live-telemetry consumer (code complete; RTL/build + real WS-serving gated to CI/normal-serving; commit pending approval)
+- **Overall completion:** repo + frozen contract + simulator + simulator→Mosquitto→backend(+WS at ASGI level) + minimal React consumer done; E2E latency spike + offline `up` gate + hardware spikes pending
+- **Repository:** github.com/Yeshwanth-lb/SHTAPM (branch `main`; M1 d841404; M2 e1f2e4a; M3.1 0b1c4dd; M3.2 aa1563c; M3.3 4c578c5; M3.4 728838f pushed; M3.5 uncommitted)
 
 ## Completed
 - Requirements + design docs authored (`docs/` — PRD, TRD, App Flow, Aurora UI/UX, Backend Schema, Impl Plan).
@@ -26,14 +26,18 @@
 - **P0 Milestone 3.1** (committed 0b1c4dd) — hardware-free telemetry simulator in top-level `simulator/` (D005/D008): deterministic generator emitting the frozen contract + MQTT publisher to `shtapm/{device_id}/telemetry`. Fixed root pytest wiring so the whole suite runs in one command.
 - **P0 Milestone 3.2** (committed aa1563c) — connected simulator → Mosquitto → subscriber verifier. Real round trip verified against `eclipse-mosquitto:2.0`.
 - **P0 Milestone 3.3** (committed 4c578c5) — backend MQTT telemetry ingestion: consumer + `TelemetryStore` + FastAPI lifespan + `/healthz`.
-- **P0 Milestone 3.4** (uncommitted) — backend WebSocket fan-out: `app/ws/{frames,broadcaster,routes}.py` + consumer `add_sink` seam; `/ws` streams Doc05 §05.8 telemetry frames, optional `?device_id` filter. Real MQTT→backend→WS verified. 56/56 with broker; 53 pass + 3 skip without.
+- **P0 Milestone 3.4** (committed 728838f) — backend WebSocket fan-out: `app/ws/{frames,broadcaster,routes}.py` + consumer `add_sink` seam; `/ws` Doc05 §05.8 frames.
+- **P0 Milestone 3.5** (uncommitted) — minimal React consumer: `frontend/src/{App,main}.tsx`, `hooks/useTelemetryWebSocket.ts`, `features/telemetry/TelemetryView.tsx`, `lib/ws.ts` + RTL tests; `scripts/ws_smoke.mjs`. Reuses frozen TS contract, plain React state, capped-backoff reconnect. MQTT→backend live-verified under uvicorn; WS-serving-to-client + RTL/build gated to CI (sandbox blocks — see below).
 
 ## In progress
-- P0 Milestone 3.4 verified; awaiting approval to commit/push. M3.5 not started.
+- P0 Milestone 3.5 code complete; awaiting approval to commit/push (CI is the RTL/build + WS-serving gate per Option A).
 
 ## Next
-- **P0 Milestone 3.5** — minimal React consumer renders live telemetry over `/ws`.
-- Then the E2E latency spike/harness and the P0 offline full-stack `docker compose up` gate.
+- E2E latency spike/harness; P0 offline full-stack `docker compose up` gate.
+
+## M3.5 environment gates (honest — not local failures of the code)
+- Real uvicorn **WS serving to an external client** returns HTTP 403 in this sandbox (both `websockets` and `wsproto`); app-level WS is proven via Starlette TestClient (M3.4 tests). Likely localhost `Upgrade` interception by the sandbox gateway; works under normal serving/CI.
+- `npm install` blocked (TLS/proxy) → no lockfile; RTL/`tsc`/`vite build` and package.json pins are verified in CI, not locally.
 - Note: integration tests need a broker + paho-mqtt; they self-skip otherwise. Backend runtime now needs fastapi/paho (`backend/requirements.txt`); tests need httpx (dev extra). Docker daemon started to verify; quit Docker Desktop if unwanted.
 - P0 gate: clean offline `docker compose up` + go/no-go.
 - Hardware spikes (sensor/interface reads, INA219, on-Pi LSTM+IF timing) stay **hardware-blocked** until a Pi/rig is available (`TODO.md`).

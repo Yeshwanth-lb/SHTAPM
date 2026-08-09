@@ -2,7 +2,7 @@
   "name": "shtapm-frontend",
   "private": true,
   "type": "module",
-  "description": "SHTAPM Aurora dashboard — P0 tooling/font foundation only. App scaffolded in P5.",
+  "description": "SHTAPM frontend — P0 M3.5 minimal live-telemetry proof (Aurora dashboard is P5).",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
@@ -11,12 +11,24 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "typecheck": "tsc --noEmit",
-    "test": "vitest"
+    "test": "vitest run",
+    "smoke": "node scripts/ws_smoke.mjs"
+  },
+  "dependencies": {
+    "react": "18.2.0",
+    "react-dom": "18.2.0"
   },
   "devDependencies": {
     "typescript": "5.4.5",
     "vite": "5.2.11",
+    "@vitejs/plugin-react": "4.2.1",
     "vitest": "1.6.0",
+    "jsdom": "24.1.0",
+    "@testing-library/react": "16.0.0",
+    "@testing-library/dom": "10.4.0",
+    "@testing-library/jest-dom": "6.4.6",
+    "@types/react": "18.2.79",
+    "@types/react-dom": "18.2.25",
     "eslint": "8.57.0",
     "prettier": "3.3.2",
     "@typescript-eslint/eslint-plugin": "7.13.1",

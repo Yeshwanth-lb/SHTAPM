@@ -1,9 +1,13 @@
+import react from "@vitejs/plugin-react";
 import { defineConfig } from "vitest/config";
 
-// P0 minimal Vitest config. jsdom + React Testing Library are added in P5.
+// P0 M3.5: jsdom + React Testing Library for hook/component tests.
 export default defineConfig({
+  plugins: [react()],
   test: {
-    environment: "node",
+    environment: "jsdom",
+    globals: true,
+    setupFiles: ["./src/test/setup.ts"],
     include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
   },
 });

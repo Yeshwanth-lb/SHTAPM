@@ -112,6 +112,22 @@
   - Not run locally: ruff/black/eslint/tsc (env lacks them / npm TLS-blocked) → CI. Host warnings = starlette/fastapi asyncio deprecation on Python 3.14 (CI uses 3.11).
 - No DECISIONS change (broadcaster/sink seam is standard within the frozen FastAPI+paho stack; no architectural decision, no new infra). U01–U14 untouched. docs/ + CLAUDE.md untouched.
 
+## 2026-08-09 — P0 Milestone 3.4 committed
+- Committed `P0 Milestone 3.4: WebSocket telemetry layer` (728838f), pushed.
+
+## 2026-08-09 — P0 Milestone 3.5: React live-telemetry consumer (Option A)
+- **M3.5a** React 18.2 scaffold: `index.html`, `src/main.tsx`; Vite react plugin (`@vitejs/plugin-react`); Vitest jsdom + RTL config (`vitest.config.ts`, `src/test/setup.ts`); `tsconfig` jsx + types; `vite-env.d.ts`.
+- **M3.5b** `src/hooks/useTelemetryWebSocket.ts` (connects `VITE_WS_URL`, `isTelemetryFrame` guard accepts ONLY frozen-contract telemetry, latest-per-device plain React state — no Zustand, capped-backoff reconnect, `?device_id` filter), `src/features/telemetry/TelemetryView.tsx` (plain six-channel table — no Aurora/Tailwind/charts), `src/App.tsx`, `src/lib/ws.ts`. Reuses `frontend/src/types/contracts.ts` verbatim (no new/renamed fields).
+- **M3.5c** `frontend/scripts/ws_smoke.mjs` — dependency-free Node (global WebSocket) live-path client.
+- CI: frontend job de-gated (no lockfile locally — npm blocked); now `npm install` → `typecheck` → `test` → `build` (Option A: CI is the RTL/build gate). `backend/requirements.txt` += `websockets==12.*` was added in M3.4.
+- **Verified locally (actually ran):**
+  - Python full suite (no broker) → **53 passed, 3 skipped** — M3.3/M3.4 intact (frontend files not in pytest scope).
+  - **MQTT→backend live under real uvicorn**: started Mosquitto + uvicorn(app) + simulator → `/healthz` showed `mqtt_connected:true, telemetry_count:28` — real simulator→Mosquitto→backend confirmed end-to-end (beyond TestClient).
+- **Environment-blocked (NOT verified locally; honest gates):**
+  - Real **Backend→WebSocket→external client** under uvicorn: WS upgrade returns **HTTP 403** with both `--ws websockets` and `--ws wsproto` (impl imports fine, `/ws` route registered, HTTP works). App-level WS is proven by the M3.4 Starlette TestClient tests (3 WS tests) + `test_integration_ws`; this is a sandbox uvicorn-WS-serving block (likely localhost `Upgrade` interception by the same gateway that TLS-blocks npm/docker-hub). Node smoke reproduces it here; it will pass against a normally-served backend.
+  - Frontend RTL/`tsc`/`vite build`: `npm install` blocked (TLS/proxy; no lockfile generated) → run in CI. package.json version pins unverified locally.
+- No DECISIONS change. U01–U14 untouched. docs/ + CLAUDE.md untouched. No Zustand/DB/auth/Redis/Aurora.
+
 ## Status
-- P0 Milestone 3.4 complete and verified (incl. real MQTT→backend→WebSocket path); **not yet committed — awaiting approval**.
-- Next: P0 Milestone 3.5 — minimal React consumer renders live telemetry; then the E2E latency spike/harness and the P0 offline `docker compose up` gate.
+- P0 Milestone 3.5 code complete; MQTT→backend live-verified; WS-serving + RTL/build gated to CI/normal-serving (sandbox limits). **Not yet committed — awaiting approval.**
+- Next: E2E latency spike/harness + the P0 offline full-stack `docker compose up` gate.

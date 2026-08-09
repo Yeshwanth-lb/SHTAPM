@@ -20,11 +20,12 @@ jobs:
       - run: pytest -q
 
   frontend:
-    name: Frontend lint + test
+    name: Frontend typecheck + test + build
     runs-on: ubuntu-latest
-    # Skips until the frontend lockfile exists (created in P5). Keeps the
-    # pipeline honest: green now, real once the app is scaffolded.
-    if: ${{ hashFiles('frontend/package-lock.json') != '' }}
+    # M3.5: no lockfile yet (npm is blocked in the dev sandbox, so it could not
+    # be generated locally). CI has network → `npm install` resolves the pins,
+    # then runs the RTL/typecheck/build gate (Option A). A committed lockfile +
+    # lint/format come in P5.
     defaults:
       run:
         working-directory: frontend
@@ -33,8 +34,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-      - run: npm ci
-      - run: npm run lint
-      - run: npm run format:check
+      - run: npm install
       - run: npm run typecheck
-      - run: npm run test -- --run
+      - run: npm run test
+      - run: npm run build

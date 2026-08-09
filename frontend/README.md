@@ -1,16 +1,39 @@
 # frontend/ — Aurora admin dashboard (React + Vite + TS)
 
-**P0 status: tooling + font foundation only.** No application code yet.
+**P0 M3.5 status: minimal live-telemetry proof.** Not the Aurora dashboard (P5).
 
-Present now (P0):
-- Build/lint/test toolchain: Vite 5, TypeScript 5.4, Vitest, ESLint (flat),
-  Prettier — configs + one placeholder test.
-- Self-hosted font foundation: `src/styles/fonts.css` + `src/assets/fonts/`
-  (Geist / Geist Mono, OFL, no CDN — see `src/assets/fonts/FONTS.md`).
-- Directory skeleton per TRD §02.6 (`pages/`, `components/{charts,panels,ui,aurora}/`,
-  `features/`, `hooks/`, `store/`, `api/`, `lib/`, `styles/`, `types/`).
+Present now:
+- React 18 app: `index.html`, `src/main.tsx`, `src/App.tsx`.
+- `src/hooks/useTelemetryWebSocket.ts` — connects `VITE_WS_URL`, accepts only
+  frozen-contract telemetry frames, latest-per-device state, capped-backoff reconnect.
+- `src/features/telemetry/TelemetryView.tsx` — plain table of the six channels
+  (no Aurora/Tailwind/charts).
+- `src/types/contracts.ts` — the frozen M2 TS mirror (reused verbatim).
+- Vitest + jsdom + React Testing Library tests (run in CI — see below).
+- `scripts/ws_smoke.mjs` — dependency-free Node live-path proof (global WebSocket).
 
-Added in **P5** (not now): React 18.2, React Router 6, Zustand, TanStack Query,
-uPlot, ECharts, Framer Motion, Tailwind + Aurora tokens (Doc04), shadcn/Radix,
-the `package-lock.json`, and the actual pages/components. The `frontend` compose
-service is gated behind the `app` profile until then.
+Added in **P5** (not now): Aurora tokens/Tailwind, shadcn/Radix, uPlot/ECharts,
+Framer Motion, Zustand, TanStack Query, routing, the full dashboard.
+
+## Run (needs backend `/ws` reachable at `VITE_WS_URL`)
+```bash
+npm install
+npm run dev          # http://localhost:5173
+```
+
+## Test / build
+```bash
+npm run test         # Vitest + RTL (jsdom)
+npm run typecheck    # tsc --noEmit
+npm run build        # tsc + vite build
+```
+
+## Live-path smoke (no npm; needs the stack running)
+```bash
+node scripts/ws_smoke.mjs ws://localhost:8000/ws 2
+```
+
+> Local note: in the current dev sandbox `npm install` is blocked by a
+> TLS/proxy cert error, so frontend deps, Vitest/RTL, `tsc`, and `vite build`
+> run in **CI**, not locally. Dependency versions here are pins for CI to
+> resolve; they were not installed/verified locally.

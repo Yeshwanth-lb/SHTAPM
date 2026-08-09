@@ -32,7 +32,11 @@
 - [x] **M3.2** MQTT broker integration: existing publisher → Mosquitto → subscriber verifier; frozen-contract validated on receive. **Real round trip verified against `eclipse-mosquitto:2.0`** via project compose (32/32 pass incl. the integration test; it self-skips when no broker). Also: fixed `docker compose up` partially — mosquitto pulls + starts (full-stack `up` still a later gate).
 - [x] **M3.3** Backend MQTT telemetry ingestion: FastAPI lifespan starts a paho consumer (`shtapm/+/telemetry`), validates via frozen contract → in-memory `TelemetryStore`; graceful under broker-down; `/healthz` liveness. **Real path simulator→Mosquitto→backend verified** (46/46 with broker; 44 pass + 2 skip without). No DB/auth/WS/REST-history.
 - [x] **M3.4** Backend WebSocket fan-out: `/ws` telemetry frames (Doc05 §05.8 envelope) via a `TelemetryBroadcaster` seam fed by the consumer sink; optional `?device_id` filter; bounded per-client queues. **Real MQTT→backend→WS path verified** (56/56 with broker; 53 pass + 3 skip without). No auth (P4), no decision/ledger frames yet.
-- [ ] M3.5 Minimal React consumer renders live telemetry
+- [~] **M3.5** Minimal React live-telemetry consumer (code complete; verification split — see below)
+  - [x] M3.5a React 18 scaffold, Vite react plugin, Vitest+jsdom+RTL config
+  - [x] M3.5b `useTelemetryWebSocket` + `TelemetryView` + `App`, reuse frozen contract, plain state, capped-backoff reconnect, contract-guarded frames
+  - [~] M3.5c live-path proof: MQTT→backend ingestion verified live under uvicorn (`/healthz` telemetry_count>0, mqtt_connected:true); **Backend→WS→external client NOT verifiable in this sandbox** (uvicorn WS upgrade → 403 with both websockets & wsproto; likely localhost Upgrade interception). App-level WS proven by M3.4 TestClient tests. Node `scripts/ws_smoke.mjs` authored.
+  - 🔒 CI-only (npm TLS-blocked locally): RTL tests, `tsc`, `vite build` — run in CI (Option A gate). package.json version pins unverified locally.
 - [ ] SPIKE: end-to-end MQTT→backend→WS→React; measure E2E latency (software path — hardware-free)
 - [ ] Gate: offline full-stack `docker compose up` clean on fresh machine; go/no-go recorded *(M1: `compose config` validated; M3.2: mosquitto service verified up)*
 
