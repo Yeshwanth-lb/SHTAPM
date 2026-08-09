@@ -176,7 +176,13 @@ Three fixes landed (separate commits) + the container crash root-caused:
 
 **Still outstanding for full P0 (NOT done):** hardware-dependent spikes — Pi sensor/interface reads, INA219 pump-current, on-Pi LSTM+IF <500ms timing — and a formal sensor→UI E2E-latency measurement. P0 is NOT complete until those are addressed.
 
+## 2026-08-10 — Hardware-free E2E latency probe
+- Added `frontend/scripts/latency_probe.mjs` (no deps; Node global WebSocket). Measures **simulator publish `ts` → WS client receipt** (`latency_ms = Date.now() − Date.parse(frame.ts)`); reports n/min/p50/p95/max; PASS iff p95<2000 AND max<2000. Discards invalid/negative timestamps and reports the counts (nothing hidden). No backend/contract/compose/app change.
+- Command: `node frontend/scripts/latency_probe.mjs ws://localhost:8002/ws 60` against the running four-service stack + host simulator at 5 Hz.
+- Result: **3 runs × 60 = 180 valid samples, 0 discarded** — p50=2ms, p95=3–5ms, max=6–14ms → **PASS** vs PRD NFR-P1/AC6 `<2000ms`.
+- Limitation: WS-receipt timing on a single host clock, NOT physical sensor→DOM render, and not under load/Aurora. Full sensor→pixel-under-load needs Pi/rig + headless browser (deferred).
+
 ## Status
-- **Hardware-free P0 offline-stack gate: VERIFIED/COMPLETE.** Overall P0 still open on the hardware spikes above.
+- **Hardware-free P0 offline-stack gate: VERIFIED/COMPLETE** (incl. hardware-free E2E latency). Overall P0 still open on the hardware spikes above + physical sensor→DOM/under-load latency.
 - Committing port-remap / MQTT-retry / bind-fix / this project-state update as four logical commits (this session). Not pushed yet.
 - Next: hardware spikes when a Pi/rig is available; optional formal E2E-latency harness.

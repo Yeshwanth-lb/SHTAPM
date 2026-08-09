@@ -37,7 +37,8 @@
   - [x] M3.5b `useTelemetryWebSocket` + `TelemetryView` + `App`, reuse frozen contract, plain state, capped-backoff reconnect, contract-guarded frames
   - [~] M3.5c live-path proof: MQTT→backend ingestion verified live under uvicorn (`/healthz` telemetry_count>0, mqtt_connected:true); **Backend→WS→external client NOT verifiable in this sandbox** (uvicorn WS upgrade → 403 with both websockets & wsproto; likely localhost Upgrade interception). App-level WS proven by M3.4 TestClient tests. Node `scripts/ws_smoke.mjs` authored.
   - 🔒 CI-only (npm TLS-blocked locally): RTL tests, `tsc`, `vite build` — run in CI (Option A gate). package.json version pins unverified locally.
-- [~] SPIKE: end-to-end MQTT→backend→WS→React path VERIFIED (below); E2E latency not yet formally measured
+- [x] SPIKE: end-to-end MQTT→backend→WS→React path VERIFIED; **hardware-free E2E latency VERIFIED** via `frontend/scripts/latency_probe.mjs` (sim publish `ts` → WS receipt): 3×60=180 samples, p50=2ms, p95=3–5ms, max=6–14ms → PASS `<2000ms`
+- [ ] Physical sensor→UI/DOM latency + under-load (Aurora, real rig) — 🔒 hardware-dependent, NOT verified
 - [x] **P0 offline four-service stack — VERIFIED end-to-end (hardware-free)** — `docker compose up --build` starts all four; backend reachable on **host :8002** (`/healthz` `mqtt_connected:true`, `--host` = runtime-built IPv4 wildcard), frontend served on **:5173**; simulator→Mosquitto→backend ingestion (`telemetry_count` rises, `devices:["pump-01"]`); **live WS frames confirmed with an external WS client on `ws://localhost:8002/ws`** (`ws_clients` rose). Docker builds succeed via the per-machine corporate-CA drop-in (D-note); simulator stays host-side (D008). *Browser GUI render not run in-sandbox (no GUI); WS-client receipt of the frozen-contract frames proves the browser path.*
 - [ ] Gate close-out (formal): measure sensor→UI E2E latency (<2s) under load; browser GUI render on a workstation — nice-to-have, hardware-free
 

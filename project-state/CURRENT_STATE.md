@@ -11,7 +11,13 @@
 ## Snapshot
 - **Current phase:** P0 — Foundations & Spikes (IN PROGRESS — hardware-free path done; hardware spikes outstanding)
 - **Current milestone:** P0 offline four-service stack — **VERIFIED end-to-end (hardware-free)**
-- **Overall completion:** hardware-free P0 path COMPLETE + verified (simulator→Mosquitto→backend→WebSocket→frontend); **P0 NOT fully done** — Pi/rig spikes (sensor reads, INA219 current, on-Pi LSTM+IF <500ms timing) + formal E2E-latency measurement remain.
+- **Overall completion:** hardware-free P0 path COMPLETE + verified (simulator→Mosquitto→backend→WebSocket→frontend) incl. **hardware-free E2E latency VERIFIED**; **P0 NOT fully done** — Pi/rig spikes (sensor reads, INA219 current, on-Pi LSTM+IF <500ms timing) + physical sensor→DOM / under-load latency remain.
+
+## Hardware-free E2E latency — VERIFIED (2026-08-10)
+- Probe: `frontend/scripts/latency_probe.mjs` (no deps). Measures **simulator publish timestamp (`ts`) → WebSocket client receipt** — NOT physical sensor→DOM.
+- **3 runs × 60 samples = 180 valid** (0 invalid/negative/discarded): p50 = **2 ms**, p95 = **3–5 ms**, max = **6–14 ms**.
+- **PASS** vs PRD NFR-P1/AC6 `<2000 ms` (well under the <1s target).
+- Unverified: physical sensor→DOM rendering and under-load (Aurora, real rig) latency — needs Pi/rig + headless browser.
 - **Repository:** github.com/Yeshwanth-lb/SHTAPM (branch `main`; M1 d841404 … M3.5 8483283; CI-repair fab702b; offline-stack 75cef26; CA fixes c663ed6/6835b8e; port-remap/MQTT-retry/bind-fix committing now)
 
 ## Completed
