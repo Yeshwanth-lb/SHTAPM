@@ -4,15 +4,15 @@
 > `DECISIONS.md`, `TODO.md`, `IMPLEMENTATION_LOG.md`. Authoritative product spec
 > lives in `../CLAUDE.md` and `../docs/` — not duplicated here.
 
-**Last updated:** 2026-08-09
+**Last updated:** 2026-08-10
 
 ---
 
 ## Snapshot
-- **Current phase:** P0 — Foundations & Spikes (IN PROGRESS)
-- **Current milestone:** P0 offline four-service Docker stack (implemented; partially verified — image builds/browser env-blocked; commit pending approval)
-- **Overall completion:** repo + frozen contract + simulator + sim→Mosquitto→backend→WS(ASGI) + React consumer + offline compose stack (real Dockerfiles) done; E2E latency spike + gate close-out (full `up --build` on a normal machine) + hardware spikes pending
-- **Repository:** github.com/Yeshwanth-lb/SHTAPM (branch `main`; M1 d841404 … M3.5 8483283; CI-repair fab702b pushed & CI green; offline-stack uncommitted)
+- **Current phase:** P0 — Foundations & Spikes (IN PROGRESS — hardware-free path done; hardware spikes outstanding)
+- **Current milestone:** P0 offline four-service stack — **VERIFIED end-to-end (hardware-free)**
+- **Overall completion:** hardware-free P0 path COMPLETE + verified (simulator→Mosquitto→backend→WebSocket→frontend); **P0 NOT fully done** — Pi/rig spikes (sensor reads, INA219 current, on-Pi LSTM+IF <500ms timing) + formal E2E-latency measurement remain.
+- **Repository:** github.com/Yeshwanth-lb/SHTAPM (branch `main`; M1 d841404 … M3.5 8483283; CI-repair fab702b; offline-stack 75cef26; CA fixes c663ed6/6835b8e; port-remap/MQTT-retry/bind-fix committing now)
 
 ## Completed
 - Requirements + design docs authored (`docs/` — PRD, TRD, App Flow, Aurora UI/UX, Backend Schema, Impl Plan).
@@ -40,7 +40,7 @@
 - Real uvicorn **WS serving to an external client** returns HTTP 403 in this sandbox (localhost `Upgrade` interception); app-level WS proven via Starlette TestClient (M3.4). Works under normal serving/CI.
 - `npm install` blocked locally → no lockfile; RTL/`tsc`/`vite build` verified in CI.
 - To verify the full stack + browser render, run on a machine without the TLS interception:
-  `cp .env.example .env` → set `POSTGRES_PASSWORD` → `docker compose up --build` → open `http://localhost:5173`, `curl http://localhost:8000/healthz`, and run the host simulator (README).
+  `cp .env.example .env` → set `POSTGRES_PASSWORD` → `docker compose up --build` → open `http://localhost:5173`, `curl http://localhost:8002/healthz`, and run the host simulator (README). (Backend host port is 8002 → container 8000; browser WS = `ws://localhost:8002/ws`, baked via compose build.args.)
 - Note: integration tests need a broker + paho-mqtt; they self-skip otherwise. Backend runtime now needs fastapi/paho (`backend/requirements.txt`); tests need httpx (dev extra). Docker daemon started to verify; quit Docker Desktop if unwanted.
 - P0 gate: clean offline `docker compose up` + go/no-go.
 - Hardware spikes (sensor/interface reads, INA219, on-Pi LSTM+IF timing) stay **hardware-blocked** until a Pi/rig is available (`TODO.md`).

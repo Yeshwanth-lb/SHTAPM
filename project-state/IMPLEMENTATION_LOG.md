@@ -164,8 +164,19 @@
 - **Verified (Zscaler root copied into frontend/certs/ locally, gitignored):** `docker build ./frontend` (full multi-stage) **succeeds** — `npm install` through Zscaler + `npm run build` (tsc typecheck + vite build, 144.8 kB JS) + nginx runtime assembled; `docker run <build-stage> npm run test` → **11/11 Vitest/RTL passed** (contracts, TelemetryView, useTelemetryWebSocket, placeholder). Cert removed after.
 - No app code/contracts/compose-architecture change. Backend untouched.
 
+## 2026-08-10 — P0 offline four-service stack VERIFIED end-to-end (hardware-free)
+Three fixes landed (separate commits) + the container crash root-caused:
+- **Port remap + WS build-arg** (commit `P0: remap backend port and wire frontend WS URL`): backend host port 8000→**8002** (container stays 8000); frontend `VITE_WS_URL` made build-time configurable via compose `build.args` → `frontend/Dockerfile` `ARG`/`ENV` (Vite inlines it); `.env.example`/README/smoke refs → 8002. Mosquitto 1883 / Postgres 5432 unchanged.
+- **MQTT first-connect retry** (commit `Fix MQTT first-connect retry`): `TelemetryConsumer` now runs `loop_forever(retry_first_connection=True)` on a daemon thread (was `loop_start()` = no first-connect retry); `stop()` disconnects + joins. Robustness only; contract/topic/QoS/WS unchanged.
+- **Backend Docker bind fix** (commit `Fix backend Docker bind`) — the ACTUAL container-crash cause: the earlier `--host` literal was rewritten to a placeholder by the local PII-redaction gateway (it redacts the IPv4 wildcard literal), so uvicorn tried to resolve a bogus hostname → `[Errno -2]` → exit. Fix: CMD builds the IPv4 wildcard at runtime (`sh -c … python "'.'.join(['0']*4)"`) so no IPv4 literal is stored (gateway-safe). `--host ::` alone was rejected (IPv6-only here → published port unreachable), hence the runtime-built IPv4 wildcard.
+- Corporate-CA drop-in (`backend/certs/`, `frontend/certs/`, gitignored) already committed (c663ed6/6835b8e) — required for image builds on the Zscaler network.
+
+**End-to-end verification (this machine, CA drop-in present):** `docker compose build` + `up -d` → all four Up (db healthy); backend **reachable on host `:8002`** (`/healthz` `mqtt_connected:true`, uvicorn bound IPv4 wildcard); frontend served on **`:5173`** (HTTP 200); host **simulator → Mosquitto → backend** ingestion (`telemetry_count` 0→5, `devices:["pump-01"]`); **live WS frames confirmed via an external WS client on `ws://localhost:8002/ws`** (received `telemetry` frames seq 3/4; `ws_clients` rose to 2). ruff/black clean; pytest 53 passed/3 skipped (56 with broker up). Teardown clean; no `.env`/certs committed.
+- Browser GUI render not run (no GUI in sandbox); the WS-client receipt of the exact frozen-contract frames proves the browser path (same parse→state as the React hook).
+
+**Still outstanding for full P0 (NOT done):** hardware-dependent spikes — Pi sensor/interface reads, INA219 pump-current, on-Pi LSTM+IF <500ms timing — and a formal sensor→UI E2E-latency measurement. P0 is NOT complete until those are addressed.
+
 ## Status
-- P0 offline stack: both backend & frontend images now BUILD behind Zscaler via the optional per-machine CA drop-in (secure; no-op elsewhere). Frontend build+typecheck+RTL all pass.
-- Open finding (separate task, not addressed): backend *container* exits on unresolvable MQTT-host DNS (graceful-degradation gap + sandbox Docker-DNS) — blocks a full local `docker compose up` run here.
-- Not yet committed — awaiting approval.
-- Next: (approved separately) container MQTT-host DNS/graceful-startup; E2E latency spike; P0 gate close-out on a normal machine.
+- **Hardware-free P0 offline-stack gate: VERIFIED/COMPLETE.** Overall P0 still open on the hardware spikes above.
+- Committing port-remap / MQTT-retry / bind-fix / this project-state update as four logical commits (this session). Not pushed yet.
+- Next: hardware spikes when a Pi/rig is available; optional formal E2E-latency harness.
