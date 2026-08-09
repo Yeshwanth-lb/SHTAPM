@@ -55,6 +55,13 @@ PYTHONPATH=backend:. EDGE_MQTT_HOST=localhost EDGE_MQTT_PORT=1883 \
 The browser connects to the backend WebSocket at `VITE_WS_URL`
 (`ws://localhost:8000/ws`, consumed on the host).
 
+**TLS-inspected networks (Zscaler etc.).** If Docker image builds fail with
+certificate-verification errors, drop your corporate root CA as a `.crt` into
+`backend/certs/` (gitignored, never committed); the backend image installs it
+into its trust store at build time. This is optional and a no-op on normal
+networks — TLS verification is never disabled. Export example:
+`security find-certificate -a -p ... > backend/certs/zscaler-root-ca.crt` (macOS).
+
 ## Tooling
 - Python (edge, backend): ruff + black + pytest — `pip install ".[dev]"`.
 - Frontend: Vite + TypeScript + Vitest + ESLint + Prettier (installed in P5).

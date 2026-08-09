@@ -30,5 +30,9 @@ data/replay/
 infra/mosquitto/data/
 infra/mosquitto/log/
 
+# Optional corporate/proxy root CAs (TLS-inspected networks) — never commit certs
+backend/certs/*
+!backend/certs/.gitkeep
+
 # Logs
 *.log

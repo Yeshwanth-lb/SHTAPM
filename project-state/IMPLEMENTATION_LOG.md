@@ -150,7 +150,17 @@
 - **Environment-blocked (NOT verified here — sandbox TLS/proxy MITMs Docker-build package fetches; base images lack the gateway CA):** backend image build (`pip` cert-verify fail) and frontend image build (`npm` cert-verify fail), therefore full four-service `up` and the browser WebSocket render (the localhost WS-upgrade 403 also persists). NOT worked around — no insecure `--trusted-host`/`strict-ssl=false`/CA hacks added to the images. Builds succeed where TLS isn't intercepted (CI/normal machine); the frontend build already passes in CI (M3.5 frontend job).
 - No new DECISION (D008 already scopes the simulator out of compose; the rest is implementation).
 
+## 2026-08-10 — Backend Docker build: optional corporate-CA trust (Zscaler)
+- Root cause of the earlier backend image-build failure: the dev network uses Zscaler HTTPS inspection; the Mac trusts the Zscaler root CA but the Docker build's base image does not → `pip` cert-verify fails.
+- Fix (build env only; no app/arch/deps change; TLS never disabled; no `--trusted-host`):
+  - `backend/Dockerfile`: `COPY certs/ /usr/local/share/ca-certificates/` → `apt-get install ca-certificates` + `update-ca-certificates`, then `ENV PIP_CERT=/etc/ssl/certs/ca-certificates.crt` so pip verifies against the SYSTEM bundle (which now includes any dropped-in corporate root) instead of its bundled certifi. Empty `certs/` → no-op on normal networks (standard verification).
+  - `backend/certs/.gitkeep` + `.gitignore` (`backend/certs/*` except `.gitkeep`) — corporate certs are drop-in and NEVER committed.
+  - `README.md`: how to drop a `.crt` for TLS-inspected networks.
+- **Verified (actually ran, with the Zscaler root copied into backend/certs/ locally, gitignored):** `docker compose config` valid; `docker compose build backend` **succeeds** (pip installs fastapi/uvicorn/paho/pydantic/websockets inside the image); `docker run shtapm-backend python -c "import fastapi,uvicorn,paho.mqtt.client,pydantic,websockets"` → OK; `pytest -q` → 56 passed. First build attempt (system trust only, no PIP_CERT) still failed → confirmed pip needs `PIP_CERT`; second build passed.
+- **Not confirmed (out of scope — separate finding):** the backend *container* run — it starts uvicorn then logs `ERROR: [Errno -2] Name or service not known` (MQTT host DNS) and exits. Appears to be sandbox Docker-DNS resolving `mosquitto` + a graceful-degradation gap (an unresolvable MQTT host aborts startup rather than degrading). NOT fixed here (this task is the build env only; no app changes). Needs a separate app-scope fix/investigation. App runs fine when the MQTT host resolves (host-uvicorn `/healthz` + ingestion verified previously; TestClient tests pass). Also: repeated Docker daemon instability in the sandbox (stale docker-proxy holding host :8000, daemon crashes on kill) hampered container runtime checks.
+
 ## Status
-- P0 offline stack implemented + partially verified (config + mosquitto/db + backend app + ingestion + tests). Image builds + browser render are environment-blocked here → close out on CI / a normal machine.
+- P0 offline stack implemented + partially verified. Backend image now BUILDS behind Zscaler (CA drop-in). Image builds + browser render otherwise close out on CI / a normal machine.
+- Open finding (separate task): backend container exits on unresolvable MQTT host DNS (graceful-degradation gap + sandbox Docker-DNS). Frontend image build still needs the same CA drop-in pattern (not done — backend-only per this task).
 - Not yet committed — awaiting approval.
-- Next: E2E latency spike + P0 gate close-out (full `up --build` on a normal machine) → go/no-go.
+- Next: (approved) address container MQTT-host DNS/graceful-startup; frontend CA drop-in; E2E latency spike; P0 gate close-out on a normal machine.
