@@ -22,8 +22,12 @@
 - [x] `.gitignore` improved (model binaries, broker state, logs); root + service READMEs
 - [~] Self-host Geist / Geist Mono fonts (no CDN) — **foundation only**: `@font-face` contract + `assets/fonts/` + OFL note done; woff2 binaries + exact vendoring pin deferred to P5 (npm package name/version unverifiable in P0 — not guessed)
 
-### Milestone 2+ (P0, NOT started)
-- [ ] Freeze shared data-contract stub (telemetry/decision/ledger — D006)
+### Milestone 2 — Shared data contract  ✅ (verified, pending commit)
+- [x] Freeze canonical telemetry/decision/ledger contract (D006/**D007**)
+- [x] Pydantic v2 canonical models `backend/app/schemas/contracts.py` *(14 tests pass: valid accepted, invalid/shorthand/nested-healing/missing-payload_hash rejected)*
+- [x] Mirrored TS types `frontend/src/types/contracts.ts` + runtime mirror test *(authored; tsc/vitest NOT run locally — npm blocked by TLS/proxy; runs in CI/P5)*
+
+### Milestone 3+ (P0, NOT started)
 - [ ] Hardware-free telemetry simulator/replay scaffold (D005)
 - [ ] SPIKE: MQTT→backend→WS→React number render; measure E2E latency (software path — hardware-free)
 - [ ] Gate: offline `docker compose up` clean on fresh machine; go/no-go recorded *(M1: `compose config` validated; full `up` not yet run)*
@@ -69,6 +73,7 @@
 - [ ] WebSocket gateway + connection manager (per-device scope, token auth), immediate fan-out
 - [ ] `system_health` WS frame (Aurora feed)
 - [ ] REST endpoints (Doc05 §05.7)
+- [ ] Define `…/command` inject payload — 🔒 BLOCKED U14 (unspecified in docs; do not invent)
 - [ ] Ledger verify service (walk chain, report `broken_at`)
 - [ ] Gate: MQTT→WS <1s; role checks pass; tamper caught; malformed input never downs a service
 
@@ -105,4 +110,4 @@
 - [ ] Gate: AC9 — SWaT/WADI (or documented substitute) + ablations + confusion matrix
 
 ---
-**Legend of blockers:** U01–U13 tracked in `DECISIONS.md` (UNDECIDED section). Do not silently resolve.
+**Legend of blockers:** U01–U14 tracked in `DECISIONS.md` (UNDECIDED section). Do not silently resolve.

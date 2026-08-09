@@ -10,9 +10,9 @@
 
 ## Snapshot
 - **Current phase:** P0 — Foundations & Spikes (IN PROGRESS)
-- **Current milestone:** P0 Milestone 1 — Repository foundation & configuration (complete + verified; commit pending approval)
-- **Overall completion:** repo scaffolding done; still ~0% application functionality
-- **Repository:** github.com/Yeshwanth-lb/SHTAPM (branch `main`, in sync with origin @ 30b03ee)
+- **Current milestone:** P0 Milestone 2 — Shared data contract (complete + verified; commit pending approval)
+- **Overall completion:** repo scaffolding + frozen data contract done; still ~0% application functionality
+- **Repository:** github.com/Yeshwanth-lb/SHTAPM (branch `main`; M1 pushed @ d841404; M2 uncommitted)
 
 ## Completed
 - Requirements + design docs authored (`docs/` — PRD, TRD, App Flow, Aurora UI/UX, Backend Schema, Impl Plan).
@@ -21,20 +21,25 @@
 - PRD ↔ Doc06 phase conflict identified and reconciled (see `DECISIONS.md` D001/D002).
 - Reconciled implementation roadmap agreed (PRD phase authority; Doc06 = detailed task/test spec mapped into PRD phases).
 - Project-state / handoff files created and committed (30b03ee).
-- **P0 Milestone 1** — monorepo skeleton (TRD §02.6); docker-compose (mosquitto+db functional, backend+frontend wired-empty behind `app` profile); `.env.example` (all §02.7 vars); Python + frontend lint/test tooling + CI + pre-commit skeleton; self-hosted font foundation; `.gitignore` hardened; READMEs. Verified: compose config valid, JSON/YAML valid, python compiles, ignore rules correct. No application logic, no faked hardware.
+- **P0 Milestone 1** (committed d841404) — monorepo skeleton (TRD §02.6); docker-compose (mosquitto+db functional, backend+frontend wired-empty behind `app` profile); `.env.example`; Python + frontend lint/test tooling + CI + pre-commit skeleton; self-hosted font foundation; `.gitignore` hardened; READMEs.
+- **P0 Milestone 2** (uncommitted) — froze the canonical telemetry/decision/ledger contract per **D007** (Doc05 §05.8 authoritative). Pydantic v2 models in `backend/app/schemas/contracts.py`, mirrored TS in `frontend/src/types/contracts.ts`, accept/reject tests. Verified: 14 Python tests pass (isolated venv, pydantic 2.13.4).
 
 ## In progress
-- P0 Milestone 1 verified; awaiting approval to commit/push. Nothing else started.
+- P0 Milestone 2 verified (Python side); awaiting approval to commit/push. Nothing else started.
 
 ## Next
-- **P0 Milestone 2** — freeze the shared data-contract stub (telemetry/decision/ledger; D006).
-- Then hardware-free telemetry **simulator/replay** scaffold (D005) and the software MQTT→backend→WS→React latency spike + harness.
-- Remaining P0 hardware spikes (sensor/interface reads, INA219, on-Pi LSTM+IF timing) stay **hardware-blocked** until a Pi/rig is available (see `TODO.md`).
+- **P0 Milestone 3** — hardware-free telemetry **simulator/replay** scaffold (D005) + software MQTT→backend→WS→React latency spike + harness.
+- P0 gate: clean offline `docker compose up` + go/no-go.
+- Hardware spikes (sensor/interface reads, INA219, on-Pi LSTM+IF timing) stay **hardware-blocked** until a Pi/rig is available (`TODO.md`).
 
-## Milestone-1 caveats (honest state)
-- Fonts: foundation only — woff2 binaries + exact vendoring pin deferred to P5 (npm package unverifiable in P0; not guessed).
-- Linters (ruff/black/eslint) configured but NOT executed locally (not installed here) — they run in CI.
-- `docker compose config` validated; a full `docker compose up` on a clean machine has not been run yet (that is the P0 gate, a later milestone).
+## Contract authority (frozen — read before touching any message)
+- **D007:** Doc05 §05.8 is authoritative for wire field names/shapes. Full channel names; flat `isolated[]`/`substituted[]`; ledger keeps `payload_hash`; `type` is a WS-envelope concern only (MQTT payloads omit it). Canonical Python = `backend/app/schemas/contracts.py`; TS mirror MUST stay in sync.
+- **U14:** `…/command` inject payload is unspecified — do not invent; blocks P4 injection.
+
+## Standing caveats (honest state)
+- Fonts (M1): foundation only — woff2 binaries + `@fontsource` pin deferred to P5.
+- Local tooling gaps in this env: linters (ruff/black/eslint) and TypeScript are NOT installed; npm is blocked by a TLS/proxy cert error. Python tests run via an isolated venv; ruff/black/eslint/tsc/vitest execute in CI. Do not claim they ran locally.
+- `docker compose config` validated; full `docker compose up` on a clean machine not yet run (P0 gate, later milestone).
 
 ## Known blockers
 Blocking questions are tracked in the roadmap discussion; the ones that gate *code* (not yet resolved — DO NOT silently assume):

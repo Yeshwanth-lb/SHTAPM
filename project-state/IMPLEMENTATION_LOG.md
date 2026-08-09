@@ -27,6 +27,21 @@
 - Root `README.md` (offline bring-up, layout, architecture constraints).
 - **No application functionality implemented.** No simulator, no MQTT/backend/frontend logic. No Pi spikes faked — recorded hardware-blocked in TODO.
 
+## 2026-08-09 — P0 Milestone 1 committed
+- Committed `P0 Milestone 1: repository foundation and configuration` (d841404) and pushed to origin/main.
+
+## 2026-08-09 — P0 Milestone 2: Shared data contract (D006 / D007)
+- Resolved the PRD §10.3 ↔ Doc05 §05.8 contract conflict via ruling **D007** (Doc05 §05.8 authoritative; rulings A–E). Recorded in DECISIONS.md.
+- Froze the canonical telemetry/decision/ledger contract:
+  - `backend/app/schemas/contracts.py` — Pydantic v2 models (`TelemetryMessage`, `DecisionMessage`, `LedgerMessage`, `SensorReadings`, `AnomalyInfo`, `TrustScores`) + enums (`Channel`, `Attribution`, `HealthState`, `RLAction`, `WSFrameType`), `extra="forbid"`, scores constrained [0,1]. Full channel names (A/B), flat `isolated[]`/`substituted[]` (C), ledger keeps `payload_hash` (D), no `type` in MQTT payloads (E).
+  - `backend/app/schemas/__init__.py` — exports.
+  - `frontend/src/types/contracts.ts` — verbatim TS mirror (interfaces, string-literal unions, WS envelope, typed EXAMPLE_* constants).
+- Added `pydantic==2.*` to `backend/requirements.txt` (the contract module needs it; frozen stack). Other backend deps still deferred to P4.
+- Tests: `backend/tests/test_contracts.py` (13 cases) + `frontend/src/__tests__/contracts.test.ts` (3 cases).
+- Recorded **U14** — the `…/command` inject payload is unspecified in the docs; not invented; blocks P4 injection.
+- **Verified (actually ran):** `backend/tests` → 14 passed (13 contract + 1 placeholder), `edge/tests` → 1 passed, in an isolated venv with pydantic 2.13.4 (host has no project deps). **Not run locally:** TS `tsc`/`vitest` — TypeScript could not be installed (npm blocked by TLS/proxy `UNABLE_TO_GET_ISSUER_CERT_LOCALLY`); the TS mirror + test are authored and run in CI/P5.
+- No MQTT, simulator, or ML logic implemented. U01–U13 untouched.
+
 ## Status
-- P0 Milestone 1 complete and verified (see checks above); **not yet committed — awaiting approval**.
-- Next: P0 Milestone 2 — freeze the shared data-contract stub (D006), then the hardware-free telemetry simulator (D005) and the software MQTT→WS→UI latency spike.
+- P0 Milestone 2 complete and verified (Python side actually ran); **not yet committed — awaiting approval**.
+- Next: P0 Milestone 3 — hardware-free telemetry simulator/replay scaffold (D005) + software MQTT→backend→WS→React latency spike.

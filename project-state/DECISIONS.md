@@ -50,6 +50,17 @@
 - **Reason:** "The contract is sacred" (TRD §02.6) — coherence across tiers; changing a name in one place silently breaks the others.
 - **Affects:** All tiers, all phases.
 
+### D007 — Doc05 §05.8 is authoritative for the canonical wire contract
+- **Date:** 2026-08-09
+- **Decision:** The frozen shared contract (D006) uses **Doc05 §05.8** field names and shapes. PRD §10.3 shorthand is superseded. Explicit rulings:
+  - **A/B** — telemetry `sensors` and decision `trust` use the full channel names `temperature, vibration, pressure, humidity, gas, current` (never `temp`/`vib`/`s1..s6`).
+  - **C** — decision self-healing is flat `isolated[]` / `substituted[]` (never nested `healing:{}`).
+  - **D** — the canonical ledger message keeps `payload_hash` (required for hash-chain verification, FR-L2). Its omission from the Doc05 §05.8 WS example is a doc omission, not permission to drop it. Canonical ledger fields: `device_id, ts, block_index, event, payload_hash, prev_hash, this_hash`.
+  - **E** — `type` is a WebSocket envelope concern only. MQTT topics (`telemetry/decision/ledger/status/command`) identify the category, so MQTT payloads carry no `type`; WS frames are `{"type": <cat>, **payload}`. Payload fields are otherwise identical on MQTT and WS.
+- **Reason:** CLAUDE.md source-of-truth hierarchy puts schema under Doc05; its names are used consistently across DB columns, ENUMs, and WS frames. Resolves the PRD §10.3 ↔ Doc05 §05.8 conflicts flagged before M2.
+- **Affects:** shared contract everywhere (D006); `backend/app/schemas/contracts.py`, `frontend/src/types/contracts.ts`; future simulator/edge/backend/WS/frontend (P1–P5).
+- **Supersedes:** nothing (refines D006). Message field `event`/`health` map to DB columns `event_type`/`health_state` (message-vs-storage layer; not a conflict).
+
 ---
 
 ## UNDECIDED (must not be silently resolved — see CURRENT_STATE blockers)
@@ -66,3 +77,4 @@
 - U11 — Dashboard branding (logo/palette) beyond Aurora defaults (P5).
 - U12 — Primary graded artifact: live demo vs paper (shifts P6/P7 weighting).
 - U13 — White-box adaptive-adversary evaluation in submission scope or future (P7).
+- U14 — `…/command` (scenario-inject) message payload is UNSPECIFIED in all docs (TRD §02.3 names the topic only). Blocks P4 injection (FR-A4/FR-D7). Not part of the M2 telemetry/decision/ledger freeze; do not invent.
