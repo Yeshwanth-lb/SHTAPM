@@ -15,6 +15,7 @@ No persistence, no WebSockets, no decision/ledger handling — those are later.
 from __future__ import annotations
 
 import logging
+import threading
 from collections.abc import Callable
 from typing import Any
 
@@ -41,6 +42,7 @@ class TelemetryConsumer:
     def __init__(self, store: TelemetryStore) -> None:
         self.store = store
         self._client: Any | None = None
+        self._thread: threading.Thread | None = None
         self.subscription = TELEMETRY_SUBSCRIPTION
         self.error_count = 0
         self._sinks: list[TelemetrySink] = []
@@ -105,13 +107,23 @@ class TelemetryConsumer:
 
         client = mqtt.Client()
         self.attach(client)
-        client.connect_async(host, port)  # non-blocking; retries if broker down
-        client.loop_start()
+        client.connect_async(host, port)  # non-blocking; resolves in the loop
+        # Run the network loop with retry_first_connection=True so a first-attempt
+        # failure (e.g. DNS/broker not ready yet at startup) RETRIES instead of
+        # killing the thread — loop_start() would use retry_first_connection=False.
+        self._thread = threading.Thread(
+            target=client.loop_forever,
+            kwargs={"retry_first_connection": True},
+            daemon=True,
+        )
+        self._thread.start()
 
     def stop(self) -> None:
         if self._client is not None:
-            self._client.loop_stop()
-            self._client.disconnect()
+            self._client.disconnect()  # breaks loop_forever
+        if self._thread is not None:
+            self._thread.join(timeout=5)
+            self._thread = None
 
     def is_connected(self) -> bool:
         return bool(self._client is not None and self._client.is_connected())
