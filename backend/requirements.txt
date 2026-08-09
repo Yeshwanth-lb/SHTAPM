@@ -1,9 +1,9 @@
-# SHTAPM backend runtime dependencies.
-# Pydantic is pinned now because the P0 canonical shared contract
-# (app/schemas/contracts.py, D006/D007) is built on it — part of the frozen
-# stack (TRD §02.2: "Pydantic validation").
-pydantic==2.*
+# SHTAPM backend runtime dependencies (frozen stack, TRD §02.2).
+# Active from P0/M3.3 (contract + MQTT telemetry ingestion):
+pydantic==2.*        # shared contract (D006/D007)
+fastapi==0.110.*     # backend framework + lifespan
+uvicorn==0.29.*      # ASGI server
+paho-mqtt==1.6.*     # MQTT telemetry consumer
 
-# The remaining backend deps are pinned in P4 from the frozen stack (TRD §02.2):
-# fastapi==0.110.*, uvicorn==0.29.*, paho-mqtt==1.6.*, sqlalchemy==2.0.*,
-# alembic, psycopg[binary], python-jose, passlib[bcrypt].
+# Deferred to P4 (persistence + auth), pinned then:
+# sqlalchemy==2.0.*, alembic, psycopg[binary], python-jose, passlib[bcrypt]

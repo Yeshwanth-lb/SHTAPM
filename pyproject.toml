@@ -15,6 +15,7 @@ dev = [
   "black==24.*",
   "pytest==8.*",
   "pydantic==2.*",  # required by the shared-contract test suite (D006/D007)
+  "httpx",          # FastAPI TestClient (M3.3 app health test)
 ]
 
 [tool.ruff]

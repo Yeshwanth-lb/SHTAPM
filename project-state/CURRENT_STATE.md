@@ -10,9 +10,9 @@
 
 ## Snapshot
 - **Current phase:** P0 — Foundations & Spikes (IN PROGRESS)
-- **Current milestone:** P0 Milestone 3.2 — MQTT broker integration (complete + verified incl. real Mosquitto round trip; commit pending approval)
-- **Overall completion:** repo scaffolding + frozen contract + simulator + verified simulator→Mosquitto→subscriber path done; backend/WS/React (M3.3/3.4) + hardware spikes pending
-- **Repository:** github.com/Yeshwanth-lb/SHTAPM (branch `main`; M1 d841404; M2 e1f2e4a; M3.1 0b1c4dd pushed; M3.2 uncommitted)
+- **Current milestone:** P0 Milestone 3.3 — Backend MQTT telemetry ingestion (complete + verified incl. real simulator→Mosquitto→backend path; commit pending approval)
+- **Overall completion:** repo + frozen contract + simulator + verified simulator→Mosquitto→backend ingestion done; WS fan-out (M3.4) + React (M3.5) + hardware spikes pending
+- **Repository:** github.com/Yeshwanth-lb/SHTAPM (branch `main`; M1 d841404; M2 e1f2e4a; M3.1 0b1c4dd; M3.2 aa1563c pushed; M3.3 uncommitted)
 
 ## Completed
 - Requirements + design docs authored (`docs/` — PRD, TRD, App Flow, Aurora UI/UX, Backend Schema, Impl Plan).
@@ -24,15 +24,16 @@
 - **P0 Milestone 1** (committed d841404) — monorepo skeleton (TRD §02.6); docker-compose (mosquitto+db functional, backend+frontend wired-empty behind `app` profile); `.env.example`; Python + frontend lint/test tooling + CI + pre-commit skeleton; self-hosted font foundation; `.gitignore` hardened; READMEs.
 - **P0 Milestone 2** (committed e1f2e4a) — froze the canonical telemetry/decision/ledger contract per **D007** (Doc05 §05.8 authoritative). Pydantic v2 models in `backend/app/schemas/contracts.py`, mirrored TS in `frontend/src/types/contracts.ts`, accept/reject tests.
 - **P0 Milestone 3.1** (committed 0b1c4dd) — hardware-free telemetry simulator in top-level `simulator/` (D005/D008): deterministic generator emitting the frozen contract + MQTT publisher to `shtapm/{device_id}/telemetry`. Fixed root pytest wiring so the whole suite runs in one command.
-- **P0 Milestone 3.2** (uncommitted) — connected simulator → Mosquitto → subscriber verifier (`subscriber.py`, `roundtrip.py`, `timesource.py` + tests). Real round trip verified against `eclipse-mosquitto:2.0` via project compose. Verified: 32/32 pytest (incl. real integration; self-skips without a broker).
+- **P0 Milestone 3.2** (committed aa1563c) — connected simulator → Mosquitto → subscriber verifier. Real round trip verified against `eclipse-mosquitto:2.0`.
+- **P0 Milestone 3.3** (uncommitted) — backend MQTT telemetry ingestion: `app/mqtt/consumer.py` (subscribes `shtapm/+/telemetry`, validates frozen contract), `app/services/telemetry_store.py` (in-memory latest-per-device, the seam for M3.4), `app/core/config.py`, `app/main.py` (FastAPI lifespan + `/healthz`). Real simulator→Mosquitto→backend verified. 46/46 with broker; 44 pass + 2 skip without.
 
 ## In progress
-- P0 Milestone 3.2 verified; awaiting approval to commit/push. M3.3/3.4 not started.
+- P0 Milestone 3.3 verified; awaiting approval to commit/push. M3.4/3.5 not started.
 
 ## Next
-- **P0 Milestone 3.3** — backend MQTT subscriber → WebSocket telemetry fan-out.
-- **M3.4** — minimal React consumer renders live telemetry; then the E2E latency spike/harness.
-- Note: the integration test needs a broker + paho-mqtt; it self-skips otherwise. Docker daemon was started to verify; leave/quit Docker Desktop as desired.
+- **P0 Milestone 3.4** — backend WebSocket fan-out of validated telemetry (reads `TelemetryStore`).
+- **M3.5** — minimal React consumer renders live telemetry; then the E2E latency spike/harness.
+- Note: integration tests need a broker + paho-mqtt; they self-skip otherwise. Backend runtime now needs fastapi/paho (`backend/requirements.txt`); tests need httpx (dev extra). Docker daemon started to verify; quit Docker Desktop if unwanted.
 - P0 gate: clean offline `docker compose up` + go/no-go.
 - Hardware spikes (sensor/interface reads, INA219, on-Pi LSTM+IF timing) stay **hardware-blocked** until a Pi/rig is available (`TODO.md`).
 

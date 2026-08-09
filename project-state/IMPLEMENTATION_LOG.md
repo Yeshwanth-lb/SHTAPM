@@ -75,6 +75,25 @@
 - Side effect: I launched Docker Desktop (daemon) to run the real broker; it is left running (containers/volumes removed). Quit it if unwanted.
 - Out of scope / not implemented: status/LWT topic (payload underspecified in docs) — telemetry only. U01–U14 untouched. docs/ + CLAUDE.md untouched.
 
+## 2026-08-09 — P0 Milestone 3.2 committed
+- Committed `P0 Milestone 3.2: integrate telemetry simulator with MQTT broker` (aa1563c), pushed.
+
+## 2026-08-09 — P0 Milestone 3.3: Backend MQTT telemetry ingestion
+- Path proven: simulator → Mosquitto → **FastAPI backend** (validate via frozen contract → in-memory store). No DB/auth/WS/REST-history/decisions/ledger/ML.
+- New backend modules:
+  - `app/core/config.py` — `MqttSettings.from_env()` (MQTT_HOST/PORT; no secrets logged).
+  - `app/services/telemetry_store.py` — `TelemetryStore`: thread-safe latest-per-device + count, for M3.4 to read.
+  - `app/mqtt/consumer.py` — `TelemetryConsumer`: subscribes `shtapm/+/telemetry`, decodes JSON, validates `TelemetryMessage`, writes store; rejects (counts + logs topic/reason, never payload) malformed JSON, contract violations, wrong topic, topic/payload device mismatch. paho `loop_start` (background thread) = non-blocking; paho imported lazily so `handle` is unit-testable without paho/broker.
+  - `app/main.py` — FastAPI app; lifespan starts consumer (`connect_async`+`loop_start`, tolerates broker down) and exposes store/consumer on `app.state`; minimal `/healthz` liveness (no auth, no history).
+- Single contract reused (D006/D007) — no second telemetry contract. WS fan-out is M3.4 (store is the seam).
+- Deps: `backend/requirements.txt` now activates fastapi==0.110.*, uvicorn==0.29.*, paho-mqtt==1.6.* (+ existing pydantic); DB/auth still deferred to P4. Root dev extra += httpx (TestClient). CI python job now also installs `backend/requirements.txt`.
+- Tests added: `test_telemetry_store.py` (3), `test_mqtt_consumer.py` (9: valid/malformed/contract-invalid/extra-field/PRD-shorthand/wrong-topic/device-mismatch/multi-device/topic-parse), `test_app_health.py` (1: /healthz ok with broker down), `test_integration_backend_mqtt.py` (real; skips without broker).
+- **Verified (actually ran):**
+  - `pytest -q` (no broker) → **44 passed, 2 skipped** (both integration; app-health passed with broker down).
+  - Real Mosquitto (`eclipse-mosquitto:2.0`, compose) up → `pytest -m integration` → **2 passed** (backend ingestion + simulator roundtrip); full `pytest -q` → **46 passed**. Broker torn down.
+  - Not run locally: ruff/black/eslint/tsc (env lacks them / npm TLS-blocked) → CI. Host warnings from starlette/fastapi on Python 3.14 (`asyncio.iscoroutinefunction` deprecation) are library-internal; CI runs Python 3.11.
+- No DECISIONS change (FastAPI lifespan + paho loop_start are standard within the frozen stack; no architectural decision). U01–U14 untouched. docs/ + CLAUDE.md untouched.
+
 ## Status
-- P0 Milestone 3.2 complete and verified (incl. a real Mosquitto round trip); **not yet committed — awaiting approval**.
-- Next: P0 Milestone 3.3 — backend MQTT subscriber → WebSocket telemetry fan-out.
+- P0 Milestone 3.3 complete and verified (incl. real simulator→Mosquitto→backend round trip); **not yet committed — awaiting approval**.
+- Next: P0 Milestone 3.4 — backend WebSocket fan-out of validated telemetry.

@@ -30,8 +30,9 @@
 ### Milestone 3 — Hardware-free telemetry path (IN PROGRESS)
 - [x] **M3.1** Telemetry simulator (D005/D008): deterministic generator (6 frozen channels, 1 Hz-ready), MQTT publisher to `shtapm/{device_id}/telemetry` (QoS 0), tests
 - [x] **M3.2** MQTT broker integration: existing publisher → Mosquitto → subscriber verifier; frozen-contract validated on receive. **Real round trip verified against `eclipse-mosquitto:2.0`** via project compose (32/32 pass incl. the integration test; it self-skips when no broker). Also: fixed `docker compose up` partially — mosquitto pulls + starts (full-stack `up` still a later gate).
-- [ ] M3.3 Backend MQTT subscriber → WebSocket fan-out (telemetry only)
-- [ ] M3.4 Minimal React consumer renders live telemetry
+- [x] **M3.3** Backend MQTT telemetry ingestion: FastAPI lifespan starts a paho consumer (`shtapm/+/telemetry`), validates via frozen contract → in-memory `TelemetryStore`; graceful under broker-down; `/healthz` liveness. **Real path simulator→Mosquitto→backend verified** (46/46 with broker; 44 pass + 2 skip without). No DB/auth/WS/REST-history.
+- [ ] M3.4 Backend WebSocket fan-out of validated telemetry (reads the in-memory store)
+- [ ] M3.5 Minimal React consumer renders live telemetry
 - [ ] SPIKE: end-to-end MQTT→backend→WS→React; measure E2E latency (software path — hardware-free)
 - [ ] Gate: offline full-stack `docker compose up` clean on fresh machine; go/no-go recorded *(M1: `compose config` validated; M3.2: mosquitto service verified up)*
 
