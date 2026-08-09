@@ -57,10 +57,11 @@ The browser connects to the backend WebSocket at `VITE_WS_URL`
 
 **TLS-inspected networks (Zscaler etc.).** If Docker image builds fail with
 certificate-verification errors, drop your corporate root CA as a `.crt` into
-`backend/certs/` (gitignored, never committed); the backend image installs it
-into its trust store at build time. This is optional and a no-op on normal
-networks — TLS verification is never disabled. Export example:
-`security find-certificate -a -p ... > backend/certs/zscaler-root-ca.crt` (macOS).
+**both** `backend/certs/` and `frontend/certs/` (gitignored, never committed).
+The backend trusts it for pip (`PIP_CERT` → system bundle) and the frontend for
+npm (`NODE_EXTRA_CA_CERTS`). Optional and a no-op on normal networks — TLS
+verification is never disabled. Export example (macOS):
+`security find-certificate -a -p ... > backend/certs/zscaler-root-ca.crt` (copy the same file into `frontend/certs/`).
 
 ## Tooling
 - Python (edge, backend): ruff + black + pytest — `pip install ".[dev]"`.
