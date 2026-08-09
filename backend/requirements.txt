@@ -3,6 +3,7 @@
 pydantic==2.*        # shared contract (D006/D007)
 fastapi==0.110.*     # backend framework + lifespan
 uvicorn==0.29.*      # ASGI server
+websockets==12.*     # WS protocol for uvicorn to serve /ws (FastAPI-native WS)
 paho-mqtt==1.6.*     # MQTT telemetry consumer
 
 # Deferred to P4 (persistence + auth), pinned then:

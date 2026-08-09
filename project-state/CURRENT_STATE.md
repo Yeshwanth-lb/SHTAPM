@@ -10,9 +10,9 @@
 
 ## Snapshot
 - **Current phase:** P0 — Foundations & Spikes (IN PROGRESS)
-- **Current milestone:** P0 Milestone 3.3 — Backend MQTT telemetry ingestion (complete + verified incl. real simulator→Mosquitto→backend path; commit pending approval)
-- **Overall completion:** repo + frozen contract + simulator + verified simulator→Mosquitto→backend ingestion done; WS fan-out (M3.4) + React (M3.5) + hardware spikes pending
-- **Repository:** github.com/Yeshwanth-lb/SHTAPM (branch `main`; M1 d841404; M2 e1f2e4a; M3.1 0b1c4dd; M3.2 aa1563c pushed; M3.3 uncommitted)
+- **Current milestone:** P0 Milestone 3.4 — Backend WebSocket telemetry fan-out (complete + verified incl. real MQTT→backend→WS path; commit pending approval)
+- **Overall completion:** repo + frozen contract + simulator + verified simulator→Mosquitto→backend→WebSocket path done; React (M3.5) + E2E latency spike + offline `up` gate + hardware spikes pending
+- **Repository:** github.com/Yeshwanth-lb/SHTAPM (branch `main`; M1 d841404; M2 e1f2e4a; M3.1 0b1c4dd; M3.2 aa1563c; M3.3 4c578c5 pushed; M3.4 uncommitted)
 
 ## Completed
 - Requirements + design docs authored (`docs/` — PRD, TRD, App Flow, Aurora UI/UX, Backend Schema, Impl Plan).
@@ -25,14 +25,15 @@
 - **P0 Milestone 2** (committed e1f2e4a) — froze the canonical telemetry/decision/ledger contract per **D007** (Doc05 §05.8 authoritative). Pydantic v2 models in `backend/app/schemas/contracts.py`, mirrored TS in `frontend/src/types/contracts.ts`, accept/reject tests.
 - **P0 Milestone 3.1** (committed 0b1c4dd) — hardware-free telemetry simulator in top-level `simulator/` (D005/D008): deterministic generator emitting the frozen contract + MQTT publisher to `shtapm/{device_id}/telemetry`. Fixed root pytest wiring so the whole suite runs in one command.
 - **P0 Milestone 3.2** (committed aa1563c) — connected simulator → Mosquitto → subscriber verifier. Real round trip verified against `eclipse-mosquitto:2.0`.
-- **P0 Milestone 3.3** (uncommitted) — backend MQTT telemetry ingestion: `app/mqtt/consumer.py` (subscribes `shtapm/+/telemetry`, validates frozen contract), `app/services/telemetry_store.py` (in-memory latest-per-device, the seam for M3.4), `app/core/config.py`, `app/main.py` (FastAPI lifespan + `/healthz`). Real simulator→Mosquitto→backend verified. 46/46 with broker; 44 pass + 2 skip without.
+- **P0 Milestone 3.3** (committed 4c578c5) — backend MQTT telemetry ingestion: consumer + `TelemetryStore` + FastAPI lifespan + `/healthz`.
+- **P0 Milestone 3.4** (uncommitted) — backend WebSocket fan-out: `app/ws/{frames,broadcaster,routes}.py` + consumer `add_sink` seam; `/ws` streams Doc05 §05.8 telemetry frames, optional `?device_id` filter. Real MQTT→backend→WS verified. 56/56 with broker; 53 pass + 3 skip without.
 
 ## In progress
-- P0 Milestone 3.3 verified; awaiting approval to commit/push. M3.4/3.5 not started.
+- P0 Milestone 3.4 verified; awaiting approval to commit/push. M3.5 not started.
 
 ## Next
-- **P0 Milestone 3.4** — backend WebSocket fan-out of validated telemetry (reads `TelemetryStore`).
-- **M3.5** — minimal React consumer renders live telemetry; then the E2E latency spike/harness.
+- **P0 Milestone 3.5** — minimal React consumer renders live telemetry over `/ws`.
+- Then the E2E latency spike/harness and the P0 offline full-stack `docker compose up` gate.
 - Note: integration tests need a broker + paho-mqtt; they self-skip otherwise. Backend runtime now needs fastapi/paho (`backend/requirements.txt`); tests need httpx (dev extra). Docker daemon started to verify; quit Docker Desktop if unwanted.
 - P0 gate: clean offline `docker compose up` + go/no-go.
 - Hardware spikes (sensor/interface reads, INA219, on-Pi LSTM+IF timing) stay **hardware-blocked** until a Pi/rig is available (`TODO.md`).

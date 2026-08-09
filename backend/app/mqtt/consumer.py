@@ -15,10 +15,13 @@ No persistence, no WebSockets, no decision/ledger handling — those are later.
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, Callable
 
 from app.schemas.contracts import TelemetryMessage
 from app.services.telemetry_store import TelemetryStore
+
+# A sink receives each VALIDATED telemetry message (e.g. the WS broadcaster).
+TelemetrySink = Callable[[TelemetryMessage], None]
 
 log = logging.getLogger("shtapm.mqtt")
 
@@ -39,6 +42,16 @@ class TelemetryConsumer:
         self._client: Any | None = None
         self.subscription = TELEMETRY_SUBSCRIPTION
         self.error_count = 0
+        self._sinks: list[TelemetrySink] = []
+
+    def add_sink(self, sink: TelemetrySink) -> None:
+        """Register a downstream consumer of validated telemetry (e.g. WS fan-out).
+
+        Keeps ingestion decoupled from the WS layer: the consumer knows only
+        'sinks', so the WS broadcaster (or a P4 replacement) can be wired in
+        without changing this class.
+        """
+        self._sinks.append(sink)
 
     # ---- wiring (paho callbacks; safe to attach to a fake client in tests) ---
     def attach(self, client: Any) -> None:
@@ -72,6 +85,11 @@ class TelemetryConsumer:
             self._reject(topic, f"topic/payload device mismatch ({topic_device} != {message.device_id})")
             return
         self.store.update(message)
+        for sink in self._sinks:
+            try:
+                sink(message)
+            except Exception:  # a sink failure must not break ingestion
+                log.warning("telemetry sink error", exc_info=False)
 
     def _reject(self, topic: str, reason: str) -> None:
         self.error_count += 1

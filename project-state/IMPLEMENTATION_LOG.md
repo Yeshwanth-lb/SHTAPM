@@ -94,6 +94,24 @@
   - Not run locally: ruff/black/eslint/tsc (env lacks them / npm TLS-blocked) → CI. Host warnings from starlette/fastapi on Python 3.14 (`asyncio.iscoroutinefunction` deprecation) are library-internal; CI runs Python 3.11.
 - No DECISIONS change (FastAPI lifespan + paho loop_start are standard within the frozen stack; no architectural decision). U01–U14 untouched. docs/ + CLAUDE.md untouched.
 
+## 2026-08-09 — P0 Milestone 3.3 committed
+- Committed `P0 Milestone 3.3: add backend MQTT telemetry ingestion` (4c578c5), pushed.
+
+## 2026-08-09 — P0 Milestone 3.4: Backend WebSocket telemetry fan-out
+- Full path proven: simulator → Mosquitto → backend consumer → **WebSocket `/ws`** → client. No auth/DB/decision/ledger.
+- New backend WS layer (`app/ws/`):
+  - `frames.py` — `telemetry_frame(msg)` = `{"type":"telemetry", **msg.model_dump()}` (Doc05 §05.8 flat envelope; ruling E; payload = frozen contract).
+  - `broadcaster.py` — `TelemetryBroadcaster`: the seam between the paho thread and asyncio WS clients. `publish_from_thread` → `loop.call_soon_threadsafe` → bounded per-client `asyncio.Queue` (slow client → drop, never block). `subscribe`/`unsubscribe`/`client_count`. P4 can swap for a Redis fan-out without touching the consumer or route.
+  - `routes.py` — `/ws` websocket: subscribes to the broadcaster, streams frames, optional `?device_id` filter; `?token=` accepted but NOT enforced (auth = P4); disconnect/errors clean up the subscription.
+- Wiring: `consumer.add_sink(...)` (new — ingestion stays decoupled, just calls sinks; sink errors can't break ingestion); `main.py` lifespan creates the broadcaster with the running loop, wires the consumer sink to it, includes the WS router; `/healthz` now reports `ws_clients`.
+- Deps: `backend/requirements.txt` += `websockets==12.*` (uvicorn WS protocol for real serving). No new broker/infra (no Redis).
+- Tests added: `test_ws_frames.py` (2), `test_broadcaster.py` (4, asyncio via `asyncio.run`, no pytest-asyncio), `test_ws_endpoint.py` (3: broadcast delivery, device filter, healthz ws_clients — TestClient, no broker), `test_integration_ws.py` (real MQTT→backend→WS; skips without broker).
+- **Verified (actually ran):**
+  - `pytest -q` (no broker) → **53 passed, 3 skipped** (all 3 integration; WS unit + endpoint tests passed without a broker).
+  - Real Mosquitto up → `pytest -m integration` → **3 passed** (simulator roundtrip, MQTT→backend ingestion, MQTT→backend→WS); full `pytest -q` → **56 passed**. Broker torn down.
+  - Not run locally: ruff/black/eslint/tsc (env lacks them / npm TLS-blocked) → CI. Host warnings = starlette/fastapi asyncio deprecation on Python 3.14 (CI uses 3.11).
+- No DECISIONS change (broadcaster/sink seam is standard within the frozen FastAPI+paho stack; no architectural decision, no new infra). U01–U14 untouched. docs/ + CLAUDE.md untouched.
+
 ## Status
-- P0 Milestone 3.3 complete and verified (incl. real simulator→Mosquitto→backend round trip); **not yet committed — awaiting approval**.
-- Next: P0 Milestone 3.4 — backend WebSocket fan-out of validated telemetry.
+- P0 Milestone 3.4 complete and verified (incl. real MQTT→backend→WebSocket path); **not yet committed — awaiting approval**.
+- Next: P0 Milestone 3.5 — minimal React consumer renders live telemetry; then the E2E latency spike/harness and the P0 offline `docker compose up` gate.
