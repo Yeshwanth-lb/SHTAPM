@@ -9,9 +9,12 @@
 ---
 
 ## Snapshot
-- **Current phase:** P0 — Foundations & Spikes (IN PROGRESS — hardware-free path done; hardware spikes outstanding)
-- **Current milestone:** P0 offline four-service stack — **VERIFIED end-to-end (hardware-free)**
-- **Overall completion:** hardware-free P0 path COMPLETE + verified (simulator→Mosquitto→backend→WebSocket→frontend) incl. **hardware-free E2E latency VERIFIED**; **P0 NOT fully done** — Pi/rig spikes (sensor reads, INA219 current, on-Pi LSTM+IF <500ms timing) + physical sensor→DOM / under-load latency remain.
+- **Current phase:** P1 — Hardware / Acquisition (hardware-free software COMPLETE; physical gates blocked). P0 hardware-free path complete + verified.
+- **Current milestone:** P1 edge acquisition + safety abstractions (C1–C4) COMPLETE hardware-free; awaiting a Pi/rig for physical gates.
+- **Overall completion:**
+  - **P0 hardware-free: VERIFIED** — offline four-service stack (simulator→Mosquitto→backend→WebSocket→frontend) + E2E latency probe (p95 3–5 ms).
+  - **P1 hardware-free: COMPLETE** — C1 driver abstraction, C2 sampler/ring buffer, C3 MQTT buffered-resume/LWT, C2→C3 runtime, C4 relay/watchdog. All unit + real-broker-integration verified.
+  - **BLOCKED / PENDING (need Pi/rig — not faked):** physical sensor/interface reads, **INA219 pump-current**, **on-Pi LSTM+IF <500 ms** timing, **physical relay safe-stop**, and **physical sensor→DOM / under-load latency**. Neither P0 nor P1 is *fully* done until these are addressed.
 
 ## Hardware-free E2E latency — VERIFIED (2026-08-10)
 - Probe: `frontend/scripts/latency_probe.mjs` (no deps). Measures **simulator publish timestamp (`ts`) → WebSocket client receipt** — NOT physical sensor→DOM.

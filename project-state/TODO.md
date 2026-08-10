@@ -46,13 +46,14 @@
 - [ ] SPIKE (Pi): read one sensor per interface; INA219 resolves pump current  🔒 hardware-blocked
 - [ ] SPIKE (Pi): time LSTM + Isolation Forest forward pass (<500ms budget)  🔒 hardware-blocked
 
-## P1 — Hardware / Acquisition
-- [ ] Pi OS + I2C/SPI/1-Wire enabled
-- [ ] One driver per sensor: `read() → {value, unit, ts, healthy}` + calibration + range clamp
-- [ ] 1 Hz sampler → telemetry frame (contract) → local ring buffer
-- [ ] `paho-mqtt` publisher → `…/telemetry`; retained LWT status; reconnect/backoff/buffered resume
-- [ ] Relay driver + hardware/software watchdog (manual stop/start; watchdog → pump OFF on death)
-- [ ] Gate: <1% dropped over 10 min; watchdog safe-state verified physically; buffered resume proven
+## P1 — Hardware / Acquisition  (hardware-free software COMPLETE; physical gates blocked)
+- [x] **C1** sensor driver abstraction — `SensorDriver`/`Reading` interface + `Sensor` (calibration, range-clamp, health, ts) + fakes (511537c). Real GPIO/I2C/1-Wire driver bodies remain 🔒 hardware-blocked.
+- [x] **C2** 1 Hz sampler → frozen telemetry frame via shared `build_telemetry` → bounded overwrite ring buffer; monotonic `sample_seq`; 1–10 Hz; injected clock (3bbbf19).
+- [x] **C3** resilient MQTT publisher — retained LWT `online`/`offline`, online-on-connect, FR-Q4 buffered resume (`ceil(rate×60)`) + FIFO replay, reconnect backoff (3a82229); real-broker integration verified.
+- [x] **C2→C3 runtime** — `AcquisitionRuntime` (sample_once→publish) + hardware-free dev CLI `edge/main.py` (345fdde); real-broker integration verified.
+- [x] **C4** relay + deadman watchdog software abstraction — default OFF, `on`/`off`/`safe_off`, watchdog expiry→OFF, explicit reset/recovery, injected clock (10d39be).
+- [ ] Pi OS + I2C/SPI/1-Wire enabled  🔒 hardware-blocked
+- [ ] **Physical acquisition gate** (needs Pi/rig — DO NOT fake): <1% dropped over 10 min on real sensors; **INA219 pump-current resolved**; **physical relay safe-stop** clicks pump OFF before damage; watchdog defaults pump OFF on real process death  🔒 hardware-blocked
 
 ## P2 — Anomaly Detection + Attribution + Trust  ⚠ (no Doc06 phase; from PRD P2)
 - [ ] Preprocess: median/low-pass filter, min-max normalize, 30-sample sliding window

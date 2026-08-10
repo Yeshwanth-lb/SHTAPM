@@ -182,7 +182,17 @@ Three fixes landed (separate commits) + the container crash root-caused:
 - Result: **3 runs × 60 = 180 valid samples, 0 discarded** — p50=2ms, p95=3–5ms, max=6–14ms → **PASS** vs PRD NFR-P1/AC6 `<2000ms`.
 - Limitation: WS-receipt timing on a single host clock, NOT physical sensor→DOM render, and not under load/Aurora. Full sensor→pixel-under-load needs Pi/rig + headless browser (deferred).
 
+## 2026-08-10 — P1 edge acquisition + safety abstractions (C1–C4) — hardware-free COMPLETE
+Five commits (unpushed at time of writing): 511537c, 3bbbf19, 3a82229, 345fdde, 10d39be.
+- **C1 (511537c)** `edge/drivers/` — `SensorDriver`/`Reading` interface + `Sensor` (calibration, range-clamp, health, ts) + fakes. Real GPIO/I2C/1-Wire bodies NOT implemented (hardware-blocked). `read()` per TRD §02.8.
+- **C2 (3bbbf19)** `edge/acquisition/` — `Sampler` (1–10 Hz, monotonic `sample_seq`, injected clock, all six channels via C1) + bounded overwrite `RingBuffer`; shared `build_telemetry()` (`backend/app/schemas/build.py`) reused by the simulator (behavior-preserving refactor). Unhealthy tick → `frame=None` (no wire representation invented; contract untouched).
+- **C3 (3a82229)** `edge/acquisition/mqtt_publisher.py` — resilient publisher: retained LWT `offline`, `online`-on-connect, graceful `offline`-on-stop; FR-Q4 buffered resume (buffer sized `ceil(rate×60)`, reuses C2 `RingBuffer`) with FIFO replay oldest→newest; reconnect backoff (configurable). Frozen contract unchanged.
+- **C2→C3 runtime (345fdde)** `edge/acquisition/runtime.py` + `edge/main.py` — `AcquisitionRuntime` owns the loop (`sample_once → publish`), unhealthy ticks skipped, publish errors propagate; dev CLI runs the fake pipeline (HARDWARE-FREE/DEV). `fake_drivers()` added to `edge/drivers/fake.py`.
+- **C4 (10d39be)** `edge/actuation/` — `RelayController` (default OFF, `on`/`off`/`safe_off`) + `Watchdog` (deadman, injected clock, expiry→OFF once, explicit reset/recovery, kick-after-expiry no-op) + `FakeActuator`. Isolated from C1/C2/C3.
+- **Verification:** unit suite 120 passed / 5 skipped; real-Mosquitto integration (C3 publisher, C2→C3 runtime, backend MQTT/WS, simulator roundtrip) passed with the broker up; ruff/black/diff-check clean. Contract, backend app, frontend, Docker/Compose, docs, CLAUDE.md untouched (only the approved `build.py`/`test_build.py` + simulator refactor).
+- **NOT done — hardware-blocked (need Pi/rig; not faked):** physical sensor/interface reads, INA219 pump-current, on-Pi LSTM+IF <500 ms timing, **physical relay safe-stop**, physical sensor→DOM / under-load latency.
+
 ## Status
-- **Hardware-free P0 offline-stack gate: VERIFIED/COMPLETE** (incl. hardware-free E2E latency). Overall P0 still open on the hardware spikes above + physical sensor→DOM/under-load latency.
-- Committing port-remap / MQTT-retry / bind-fix / this project-state update as four logical commits (this session). Not pushed yet.
-- Next: hardware spikes when a Pi/rig is available; optional formal E2E-latency harness.
+- **P0 hardware-free: VERIFIED/COMPLETE** (offline stack + latency probe). **P1 hardware-free: COMPLETE** (C1–C4 + runtime).
+- **Outstanding = hardware-only:** physical sensor reads, INA219 current, on-Pi LSTM+IF <500 ms, physical relay safe-stop, physical sensor→DOM/under-load latency. Neither P0 nor P1 is *fully* closed until a Pi/rig is available.
+- Local branch is ahead of origin by the P1 commits (+ earlier P0 commits already on origin). Not pushed.
