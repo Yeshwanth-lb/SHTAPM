@@ -23,7 +23,8 @@ from __future__ import annotations
 import random
 from dataclasses import dataclass, field
 
-from app.schemas.contracts import CHANNELS, SensorReadings, TelemetryMessage
+from app.schemas.build import build_telemetry
+from app.schemas.contracts import CHANNELS, TelemetryMessage
 
 # (mean, noise_sd) — plausible steady-state bench baselines. Simulator-only.
 BASELINES: dict[str, tuple[float, float]] = {
@@ -78,12 +79,7 @@ class TelemetrySimulator:
     def next(self, ts: str) -> TelemetryMessage:
         """Return the next telemetry sample stamped with the caller-supplied ts."""
         readings = {ch: self._sample_channel(ch) for ch in CHANNELS}
-        message = TelemetryMessage(
-            device_id=self.device_id,
-            ts=ts,
-            sensors=SensorReadings(**readings),
-            sample_seq=self._seq,
-        )
+        message = build_telemetry(self.device_id, ts, readings, self._seq)
         self._seq += 1
         return message
 
