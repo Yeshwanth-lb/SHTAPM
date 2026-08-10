@@ -15,6 +15,7 @@
   - **P0 hardware-free: VERIFIED** — offline four-service stack (simulator→Mosquitto→backend→WebSocket→frontend) + E2E latency probe (p95 3–5 ms).
   - **P1 hardware-free: COMPLETE** — C1 driver abstraction, C2 sampler/ring buffer, C3 MQTT buffered-resume/LWT, C2→C3 runtime, C4 relay/watchdog. All unit + real-broker-integration verified.
   - **P2 hardware-free FOUNDATIONS: COMPLETE (plumbing only)** — preprocess/windowing, injection framework, Beta trust core + engine, attribution shell, pipeline orchestrator, multivariate IF detector. Unit/interface tests only (math/shape/branch/plumbing).
+  - **P2 DIAGNOSTICS: COMPLETE (probes, not acceptance)** — IF behaviour probe (~21.6% clean FP) + normalization comparison (per-window min-max vs train-fit global/z-score). Normalization decision DEFERRED to real dataset (see P2 diagnostics section).
   - **P2 VALIDATION: NOT done (see below)** — c/k/h definitions, `ChannelFlagPolicy` localization, real physics attribution rule, IF tuning + flag threshold, dataset evaluation, spoof/trust acceptance tests, and O3/O10 metrics all remain pending (U01/U02/U07).
   - **BLOCKED / PENDING (need Pi/rig — not faked):** physical sensor/interface reads, **INA219 pump-current**, **on-Pi LSTM+IF <500 ms** timing, **physical relay safe-stop**, and **physical sensor→DOM / under-load latency**. Neither P0 nor P1 is *fully* done until these are addressed.
 
@@ -60,8 +61,19 @@ All unit/interface-tested (math/shape/branch/plumbing only — NO detection/trus
 - **O3 (≥85% attribution accuracy) / O10 (SWaT/WADI ablations + confusion matrix)** — NOT produced.
 - **Authenticated scenario-injection hook (FR-A4)** — not started (command payload U14).
 
+## P2 diagnostics (2026-08-10) — behaviour probes, NOT acceptance (commit d17942f)
+Diagnostic-only tooling under `edge/eval/` (not on pytest `testpaths`, not in the production pipeline; scikit-learn-gated tests). All magnitudes + flag threshold are EVALUATION FIXTURES, not project specs. **No P2 acceptance criterion is claimed passed.**
+- **IF behaviour probe** (`edge/eval/if_eval.py`) — real `IsolationForestDetector` on the simulator + the 7 §12.4 injections. Finding: **clean-vs-clean false-positive rate ≈ 21.6%** at the eval-fixture threshold 0.95 → per-window min-max on the simulator's structureless independent-noise windows does not calibrate tightly; "detected" flags sit on that FP floor and are not reliable separation.
+- **Preprocessing comparison** (`edge/eval/preproc_experiment.py`) — per-window min-max (A, current) vs train-fit global min-max (B) vs train-fit z-score (C), all feeding the UNCHANGED detector:
+  - clean FP: **A 0.216 · B 0.035 · C 0.041** (B/C ≈ ideal ~5% for a 0.95 threshold).
+  - **per-window min-max washes out constant additive bias** within a fully-injected window (bias_fdi inside 0.989 ≈ clean, A) → B/C preserve it (inside 1.000, flagged).
+  - **constant-spoof under A "detects" as a normalization flatness artifact** (flat channel → all-zeros), NOT cross-sensor spoof detection; B/C correctly do NOT detect a plausible constant near the mean (inside 0.79/0.81 < 0.95) — the honest limitation: a plausible constant spoof needs **cross-sensor physics**.
+  - New risk of B/C: they assume **stationarity** (train-fit params) → would flag legitimate operating-point drift on real signals; the stationary, physics-free simulator structurally favours global normalization and cannot show per-window's robustness.
+- **Decision:** **normalization choice DEFERRED to real SWaT/WADI/TEP evaluation (U07).** No production preprocessing/detector/pipeline change approved or made. FR-P1 "min-max normalize" does not mandate per-window vs global — both remain doc-compatible.
+- **Reproduce:** `PYTHONPATH=backend:. python -m edge.eval.if_eval` · `… -m edge.eval.preproc_experiment`.
+
 ## In progress
-- P2: hardware-free foundations complete; next real steps blocked on U01 (c/h defs + λ approval), U02 (physics rule / ChannelFlagPolicy), U07 (dataset). Nothing further implementable faithfully without those decisions.
+- P2: hardware-free foundations + diagnostics complete; next real steps blocked on U01 (c/h defs + λ approval), U02 (physics rule / ChannelFlagPolicy), U07 (dataset + normalization decision). Nothing further implementable faithfully without those decisions.
 
 ## Next
 - Resolve U01 (c/h definitions + confirm λ=0.7), U02 (physics rule + per-channel flag localization), U07 (SWaT/WADI access vs TEP substitute); add scikit-learn to CI deps (follow-up); THEN wire real signals/detector and run P2 acceptance/dataset validation.

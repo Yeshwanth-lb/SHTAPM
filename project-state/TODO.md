@@ -67,6 +67,11 @@
 - [x] Synthetic §12.4 injection framework (7 hardware-free injections) — `edge/injection/` (ee730fe); magnitudes/durations REQUIRED args (no spec values); dry-run excluded (physical). Test/eval labels only, not wire.
 - [x] Hardware-free P2 pipeline orchestrator — `edge/anomaly/pipeline.py` (d1ec0da): frames→preprocess→detector→ChannelFlagPolicy→trust→attribution; internal `WindowOutcome` (no wire contract).
 
+### P2 diagnostics (hardware-free, done — probes, NOT acceptance)
+- [x] IF behaviour probe on the simulator + §12.4 injections — `edge/eval/if_eval.py` (d17942f). Finding: **~21.6% clean-vs-clean FP** at the eval-fixture threshold; constant-spoof "detection" under per-window min-max is a normalization flatness artifact, not cross-sensor detection.
+- [x] Preprocessing comparison (per-window min-max vs train-fit global min-max vs z-score) — `edge/eval/preproc_experiment.py` (d17942f). Clean FP 0.216 / 0.035 / 0.041; per-window min-max washes out additive bias; global/z-score preserve it but assume stationarity.
+- [ ] **Normalization decision DEFERRED to real SWaT/WADI/TEP evaluation** (U07) — no production preprocessing change approved; FR-P1 "min-max" doesn't mandate per-window vs global.
+
 ### P2 validation + decisions — NOT done
 - [ ] c/k/h signal definitions (consistency / cross-sensor correlation / historical reliability)  *(blocked: U01/U02)*
 - [ ] `ChannelFlagPolicy` per-channel localization from the window-level IF result  *(undecided; needs multivariate per-feature attribution — not from IF internals)*
