@@ -6,9 +6,11 @@ clamp / health logic — not a parallel fake implementation.
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 
-from edge.drivers.base import RawRead
+from app.schemas.contracts import CHANNELS
+
+from edge.drivers.base import Clock, RawRead, Sensor, SensorDriver, now_iso_ms
 
 
 def constant_raw(value: float) -> RawRead:
@@ -35,3 +37,33 @@ def scripted_raw(values: Iterable) -> RawRead:
         return item
 
     return _read
+
+
+def fake_drivers(
+    values: Mapping[str, float],
+    *,
+    units: Mapping[str, str] | None = None,
+    clock: Clock = now_iso_ms,
+) -> dict[str, SensorDriver]:
+    """Build one healthy fake ``Sensor`` per frozen channel (hardware-free).
+
+    ``values`` must cover exactly the six frozen channels. Each driver returns a
+    constant value; ``units`` are cosmetic (units are not carried on the frozen
+    wire frame). Real GPIO/I2C drivers are NOT implemented (hardware-blocked).
+    """
+    missing = set(CHANNELS) - set(values)
+    extra = set(values) - set(CHANNELS)
+    if missing or extra:
+        raise ValueError(
+            "values must cover exactly the frozen channels; "
+            f"missing={sorted(missing)} extra={sorted(extra)}"
+        )
+    units = units or {}
+    return {
+        channel: Sensor(
+            unit=units.get(channel, ""),
+            raw_read=constant_raw(values[channel]),
+            clock=clock,
+        )
+        for channel in CHANNELS
+    }

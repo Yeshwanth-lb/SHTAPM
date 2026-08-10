@@ -1,4 +1,5 @@
-"""Edge acquisition (P1): sampler + ring buffer (C2), resilient publisher (C3)."""
+"""Edge acquisition (P1): sampler + ring buffer (C2), resilient publisher (C3),
+runtime supervisor (C2→C3 integration)."""
 
 from edge.acquisition.mqtt_publisher import (
     STATUS_OFFLINE,
@@ -9,6 +10,7 @@ from edge.acquisition.mqtt_publisher import (
     buffer_capacity,
 )
 from edge.acquisition.ring_buffer import RingBuffer
+from edge.acquisition.runtime import AcquisitionRuntime
 from edge.acquisition.sampler import (
     DEFAULT_BUFFER_CAPACITY,
     MAX_RATE_HZ,
@@ -18,6 +20,7 @@ from edge.acquisition.sampler import (
 )
 
 __all__ = [
+    "AcquisitionRuntime",
     "DEFAULT_BUFFER_CAPACITY",
     "MAX_RATE_HZ",
     "MIN_RATE_HZ",
