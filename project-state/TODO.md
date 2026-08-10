@@ -56,12 +56,26 @@
 - [ ] **Physical acquisition gate** (needs Pi/rig — DO NOT fake): <1% dropped over 10 min on real sensors; **INA219 pump-current resolved**; **physical relay safe-stop** clicks pump OFF before damage; watchdog defaults pump OFF on real process death  🔒 hardware-blocked
 
 ## P2 — Anomaly Detection + Attribution + Trust  ⚠ (no Doc06 phase; from PRD P2)
-- [ ] Preprocess: median/low-pass filter, min-max normalize, 30-sample sliding window
-- [ ] Isolation Forest trained on clean baseline + scoring
-- [ ] Cross-sensor physics/correlation attribution (fault vs attack) + reason tag  *(blocked: U02)*
-- [ ] Beta-reputation trust update + banding (0.7/0.4) + recovery  *(blocked: U01)*
-- [ ] Authenticated scenario-injection hook
-- [ ] Gate: no false anomaly on clean 5-min baseline; spoof trust <0.4 in ≤3 windows; attribution ≥85%
+> Hardware-free **FOUNDATIONS complete** (commits 26de8c2 … 5a1af31); actual P2 **VALIDATION NOT done**.
+> `[x]` here = scaffolding/plumbing implemented + unit/interface-tested — NOT a detection/trust/attribution accuracy claim.
+
+### Foundations (hardware-free, done)
+- [x] Preprocess: median/low-pass filter, min-max normalize, 30-sample window — `edge/anomaly/preprocess.py` (f75b9dc). Filter kernel/alpha are REQUIRED caller args (no spec value); window_size default 30 (documented).
+- [x] Multivariate Isolation Forest detector — `edge/anomaly/iforest.py` (5a1af31): single IF over flattened 180-dim 30×6 window (D-A); empirical-CDF/rank severity (D-B); `flag_threshold` a REQUIRED config param (no baked value); hyperparameters optional passthroughs. **NOT tuned/validated on real data** (dataset-gated, U07). Tests SKIP in CI until scikit-learn added to CI deps (follow-up).
+- [x] Beta-reputation trust core + per-channel engine + banding (0.7/0.4) — `edge/trust/beta.py` (26de8c2) + `edge/trust/engine.py` (9479968). λ=0.7 **PENDING U01 approval**; signal-agnostic (c/k/h supplied, not defined).
+- [x] Attribution-engine shell (none/fault/attack branch logic) + `PhysicsRule` seam — `edge/anomaly/attribution.py` (cbd7527); reuses frozen `Attribution` enum (contract unchanged); real physics rule NOT implemented (U02).
+- [x] Synthetic §12.4 injection framework (7 hardware-free injections) — `edge/injection/` (ee730fe); magnitudes/durations REQUIRED args (no spec values); dry-run excluded (physical). Test/eval labels only, not wire.
+- [x] Hardware-free P2 pipeline orchestrator — `edge/anomaly/pipeline.py` (d1ec0da): frames→preprocess→detector→ChannelFlagPolicy→trust→attribution; internal `WindowOutcome` (no wire contract).
+
+### P2 validation + decisions — NOT done
+- [ ] c/k/h signal definitions (consistency / cross-sensor correlation / historical reliability)  *(blocked: U01/U02)*
+- [ ] `ChannelFlagPolicy` per-channel localization from the window-level IF result  *(undecided; needs multivariate per-feature attribution — not from IF internals)*
+- [ ] Real cross-sensor physics/correlation attribution rule + tolerances + reason tag  *(blocked: U02; bench pressure = atmospheric proxy → dataset-gated)*
+- [ ] IF hyperparameter tuning + flag threshold + real clean-baseline fit  *(dataset-gated: U07; simulator validates plumbing/marginal faults only, NOT cross-sensor spoof)*
+- [ ] Add `scikit-learn` to CI deps so the IF test module runs in CI  *(follow-up)*
+- [ ] Authenticated scenario-injection hook (FR-A4)  *(command payload blocked: U14)*
+- [ ] Dataset evaluation on SWaT/WADI (or TEP substitute)  *(blocked: U07)*
+- [ ] Gate: no false anomaly on clean 5-min baseline; spoof trust <0.4 in ≤3 windows; attribution ≥85% (O3); O10 confusion matrix  *(NOT validated — needs U01/U02 + dataset)*
 
 ## P3 — Prognosis + RL + Self-Healing + Safety  ⚠ (no Doc06 phase; from PRD P3)
 - [ ] LSTM health (Healthy/Warning/Critical) + failure-ETA on trust-weighted windows  *(blocked: U03/U04)*

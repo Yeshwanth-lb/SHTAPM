@@ -9,11 +9,13 @@
 ---
 
 ## Snapshot
-- **Current phase:** P1 — Hardware / Acquisition (hardware-free software COMPLETE; physical gates blocked). P0 hardware-free path complete + verified.
-- **Current milestone:** P1 edge acquisition + safety abstractions (C1–C4) COMPLETE hardware-free; awaiting a Pi/rig for physical gates.
+- **Current phase:** P2 — Anomaly / Trust / Attribution (hardware-free FOUNDATIONS complete; actual P2 VALIDATION NOT done). P0 + P1 hardware-free paths complete + verified.
+- **Current milestone:** P2 hardware-free foundations implemented + unit/interface-tested (commits 26de8c2 … 5a1af31): preprocessing/windowing, synthetic §12.4 injection framework, Beta trust core + per-channel engine, attribution-engine shell, pipeline orchestrator, and the multivariate Isolation Forest detector. **These are scaffolding/plumbing — NOT validated detection/trust/attribution.**
 - **Overall completion:**
   - **P0 hardware-free: VERIFIED** — offline four-service stack (simulator→Mosquitto→backend→WebSocket→frontend) + E2E latency probe (p95 3–5 ms).
   - **P1 hardware-free: COMPLETE** — C1 driver abstraction, C2 sampler/ring buffer, C3 MQTT buffered-resume/LWT, C2→C3 runtime, C4 relay/watchdog. All unit + real-broker-integration verified.
+  - **P2 hardware-free FOUNDATIONS: COMPLETE (plumbing only)** — preprocess/windowing, injection framework, Beta trust core + engine, attribution shell, pipeline orchestrator, multivariate IF detector. Unit/interface tests only (math/shape/branch/plumbing).
+  - **P2 VALIDATION: NOT done (see below)** — c/k/h definitions, `ChannelFlagPolicy` localization, real physics attribution rule, IF tuning + flag threshold, dataset evaluation, spoof/trust acceptance tests, and O3/O10 metrics all remain pending (U01/U02/U07).
   - **BLOCKED / PENDING (need Pi/rig — not faked):** physical sensor/interface reads, **INA219 pump-current**, **on-Pi LSTM+IF <500 ms** timing, **physical relay safe-stop**, and **physical sensor→DOM / under-load latency**. Neither P0 nor P1 is *fully* done until these are addressed.
 
 ## Hardware-free E2E latency — VERIFIED (2026-08-10)
@@ -38,11 +40,31 @@
 - **P0 Milestone 3.4** (committed 728838f) — backend WebSocket fan-out: `app/ws/{frames,broadcaster,routes}.py` + consumer `add_sink` seam; `/ws` Doc05 §05.8 frames.
 - **P0 Milestone 3.5** (uncommitted) — minimal React consumer: `frontend/src/{App,main}.tsx`, `hooks/useTelemetryWebSocket.ts`, `features/telemetry/TelemetryView.tsx`, `lib/ws.ts` + RTL tests; `scripts/ws_smoke.mjs`. Reuses frozen TS contract, plain React state, capped-backoff reconnect. MQTT→backend live-verified under uvicorn; WS-serving-to-client + RTL/build gated to CI (sandbox blocks — see below).
 
+## P2 — hardware-free foundations (2026-08-10) — plumbing COMPLETE, validation NOT
+All unit/interface-tested (math/shape/branch/plumbing only — NO detection/trust/attribution accuracy claim):
+- **Beta trust core** (26de8c2) `edge/trust/beta.py` — signal-agnostic `BetaState` (α₀=β₀=1, `T=α/(α+β)`), documented weights 0.4/0.3/0.3, bands 0.7/0.4, `combine_g`. **λ=0.7 = PENDING U01 approval** (analyzed default, not a spec number).
+- **Synthetic §12.4 injection framework** (ee730fe) `edge/injection/` — 7 hardware-free injections (drift/spike/stuck-at + bias-FDI/ramp-FDI/replay/constant-spoof) as pure stream transforms; magnitudes/durations REQUIRED args (no spec values); `dry-run` excluded (physical). Ground-truth labels are test/eval-only, not wire.
+- **Anomaly foundation** (f75b9dc) `edge/anomaly/{preprocess,detector}.py` — documented pipeline (median→low-pass→30-window→per-window min-max; kernel/alpha required args, window_size default 30); `AnomalyDetector` protocol + `NullDetector` + internal `AnomalyResult`.
+- **Trust-engine shell** (9479968) `edge/trust/engine.py` — one `BetaState` per channel, `SignalProvider` seam for c/k/h (NO definitions), per-channel independence.
+- **Attribution-engine shell** (cbd7527) `edge/anomaly/attribution.py` — documented none/fault/attack branch logic over an injected `PhysicsRule` seam; reuses frozen `Attribution` enum (contract unchanged); NO physics equations.
+- **Pipeline orchestrator** (d1ec0da) `edge/anomaly/pipeline.py` — frames→preprocess→detector→`ChannelFlagPolicy`→trust→attribution; internal `WindowOutcome` (no wire contract). `ChannelFlagPolicy` (window-level→per-channel bridge) is an injected seam, NOT implemented.
+- **Multivariate Isolation Forest detector** (5a1af31) `edge/anomaly/iforest.py` — single sklearn IF over flattened 180-dim 30×6 window (D-A); empirical-CDF/rank severity on stored clean-baseline scores (D-B); `flag_threshold` a REQUIRED config param (no baked value); IF hyperparameters optional passthroughs; fixed `random_state` allowed. **scikit-learn dep**: `edge/requirements.txt` pins `scikit-learn==1.4.*`; the IF test module **skips in CI until sklearn is added to CI deps** (separate follow-up) — verified locally (sklearn present).
+
+### P2 NOT done — explicitly pending (do NOT mistake foundations for validation)
+- **c/k/h signal definitions** (consistency / cross-sensor correlation / historical reliability) — UNDECIDED (U01/U02). Trust engine is signal-agnostic until then.
+- **`ChannelFlagPolicy` localization** — window-level IF result → per-channel flags; needs multivariate per-feature attribution; UNDECIDED. Must NOT be derived from IF internals.
+- **Real physics attribution rule** (current↔pressure / flow↔pressure) + tolerances — UNDECIDED (U02); bench pressure is an atmospheric proxy → dataset-gated.
+- **IF tuning** — hyperparameters + flag threshold; real clean-baseline fit — dataset-gated (U07). Simulator (independent-channel Gaussians) can exercise plumbing + marginal faults only, NOT cross-sensor spoof.
+- **Dataset evaluation** — SWaT/WADI (access pending) or TEP substitute (U07).
+- **P2 acceptance tests NOT satisfied:** P2-ANOM-H1/H2/H3/E1/E2/S1, P2-TRUST-H1/H2/E1/E2/S1 (spoof→T<0.4 in ≤3 windows, attribution=attack, etc.) — none validated.
+- **O3 (≥85% attribution accuracy) / O10 (SWaT/WADI ablations + confusion matrix)** — NOT produced.
+- **Authenticated scenario-injection hook (FR-A4)** — not started (command payload U14).
+
 ## In progress
-- P0 offline stack implemented + partially verified; awaiting approval to commit/push. Image builds + browser render close out on CI / a normal machine.
+- P2: hardware-free foundations complete; next real steps blocked on U01 (c/h defs + λ approval), U02 (physics rule / ChannelFlagPolicy), U07 (dataset). Nothing further implementable faithfully without those decisions.
 
 ## Next
-- E2E latency spike/harness; P0 gate close-out = full `docker compose up --build` (all four) on a normal machine + browser render + go/no-go.
+- Resolve U01 (c/h definitions + confirm λ=0.7), U02 (physics rule + per-channel flag localization), U07 (SWaT/WADI access vs TEP substitute); add scikit-learn to CI deps (follow-up); THEN wire real signals/detector and run P2 acceptance/dataset validation.
 
 ## Environment gates (honest — sandbox limits, not code failures)
 - **Docker image builds** (backend `pip`, frontend `npm`) fail cert-verify inside the build (gateway MITMs TLS; base images lack its CA). So the full four-service `up` can't be built here. Dockerfiles are standard/correct — no insecure workarounds added; they build on CI / a normal machine (frontend build already green in CI).
@@ -65,9 +87,11 @@
 
 ## Known blockers
 Blocking questions are tracked in the roadmap discussion; the ones that gate *code* (not yet resolved — DO NOT silently assume):
-- P2: Beta-reputation trust-update formula + recovery dynamics UNDECIDED (weights exist in schema, math does not).
-- P2: fault-vs-attack physics/correlation attribution rules + thresholds UNDECIDED.
-- P2/P7: SWaT/WADI dataset access UNCONFIRMED (fallback: TEP + bench).
+- P2: Beta math IMPLEMENTED (signal-agnostic core, 26de8c2) with λ=0.7 **pending U01 approval**; the **c/k/h signal definitions** (esp. consistency `c`) remain UNDECIDED (U01/U02) — trust engine stays signal-agnostic until then.
+- P2: fault-vs-attack physics/correlation attribution RULE + thresholds UNDECIDED (U02); attribution-engine shell + `PhysicsRule` seam exist, but no real rule (bench pressure = atmospheric proxy → dataset-gated).
+- P2: `ChannelFlagPolicy` (window-level IF → per-channel flags) UNDECIDED (needs multivariate per-feature attribution; not derivable from IF internals).
+- P2: IF hyperparameters + flag threshold UNDECIDED — dataset-gated tuning; simulator can validate plumbing + marginal faults only, NOT cross-sensor spoof.
+- P2/P7: SWaT/WADI dataset access UNCONFIRMED (fallback: TEP + bench) — gates all P2 detection/attribution/trust ACCEPTANCE tests + O3/O10 metrics.
 - P3: LSTM — one shared model or two (prognosis vs digital-twin)? UNDECIDED (edge stores single `lstm.pt`).
 - P3: digital-twin training-data source UNDECIDED.
 - P3: `divergence_threshold` + substitution uncertainty-cap values UNDECIDED (schema column, no default).
