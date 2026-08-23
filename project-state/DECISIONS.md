@@ -67,10 +67,34 @@
 - **Reason:** Keeps the dev/replay source cleanly isolated from real hardware code (instruction + PRD framing) while honoring the single-contract rule. A dedicated shared contract package may be introduced later when edge (P1) also needs the contract — noted, not resolved.
 - **Affects:** `simulator/` (M3), test wiring (`pyproject.toml`), future edge P1 contract import.
 
+### D009 — `h` (historical-reliability) signal formulation for TrustEngine
+- **Date:** 2026-08-23
+- **Decision:** `h` is implemented as a per-channel slow exponential moving average of binary
+  healthy/unhealthy window outcomes: `h_ch,t = GAMMA * h_ch,t-1 + (1 - GAMMA) * outcome_ch,t`.
+  Approved parameters: **GAMMA = 0.95** (approved slow forgetting factor; half-life ~13 windows,
+  chosen to be significantly slower than lambda=0.7's ~2-window half-life); **H_INIT = 1.0**
+  (clean-history prior). `outcome_ch,t in {0.0, 1.0}` supplied by the caller as a bool via
+  `record_outcome(channel, was_healthy)`. Implemented as `HReliabilityProvider` in
+  `edge/trust/h_reliability.py`, satisfying the existing `SignalProvider` protocol.
+  `h` is independent of `c` (different observation type, timescale, object), independent of
+  `g` and `BetaState` (no shared computation), and agnostic about the source of `was_healthy`
+  (`ChannelFlagPolicy` remains a seam). Causal ordering: `h_t` reflects outcomes through
+  window `t-1`; the caller invokes `record_outcome` before `TrustEngine.update_from_providers`.
+- **Reason:** Satisfies FR-T2 (weight historical reliability), P2-TRUST-S1 (collusive attack
+  cannot hold full trust — `h` degrades at 0.95^n, slower than `k` can compensate), and
+  FR-T4 (recovery is possible via the same EMA formula).
+- **Affects:** `edge/trust/h_reliability.py` (new), `edge/trust/__init__.py`; future
+  `edge/anomaly/pipeline.py` (caller of `record_outcome`).
+- **Partially resolves U01:** `h` definition and memory length decided. **Remaining U01 open:**
+  lambda=0.7 (PENDING explicit approval); `c` signal definition (UNDECIDED).
+- **Does NOT resolve:** U02 (`k`/physics), `ChannelFlagPolicy`, IF tuning, normalization (U07).
+
 ---
 
 ## UNDECIDED (must not be silently resolved — see CURRENT_STATE blockers)
-- U01 — Beta-reputation trust-update formula + recovery dynamics (P2).
+- U01 — Beta-reputation trust-update formula + recovery dynamics (P2). **Partial:** `h` resolved
+  (D009). **Still open:** lambda=0.7 forgetting factor (PENDING approval); `c` consistency signal
+  definition (UNDECIDED).
 - U02 — Fault-vs-attack physics/correlation attribution rules + thresholds (P2).
 - U03 — LSTM: one shared model or two (prognosis vs digital-twin) (P3); edge stores single `lstm.pt`.
 - U04 — Digital-twin training-data source: bench-collected vs synthetic (P3).
