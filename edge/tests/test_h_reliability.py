@@ -22,7 +22,6 @@ from app.schemas.contracts import CHANNELS
 from edge.trust.engine import SignalProvider
 from edge.trust.h_reliability import GAMMA, H_INIT, HReliabilityProvider
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
