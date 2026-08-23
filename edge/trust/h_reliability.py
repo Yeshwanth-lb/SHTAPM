@@ -39,8 +39,8 @@ from __future__ import annotations
 from app.schemas.contracts import CHANNELS
 
 # Approved constants (D009 -- 2026-08-23).
-GAMMA: float = 0.95   # slow forgetting factor (approved)
-H_INIT: float = 1.0   # clean-history prior for every channel
+GAMMA: float = 0.95  # slow forgetting factor (approved)
+H_INIT: float = 1.0  # clean-history prior for every channel
 
 
 class HReliabilityProvider:
@@ -112,6 +112,4 @@ class HReliabilityProvider:
         try:
             return self._h[channel]
         except KeyError:
-            raise ValueError(
-                f"unknown channel {channel!r}; must be one of {CHANNELS}"
-            ) from None
+            raise ValueError(f"unknown channel {channel!r}; must be one of {CHANNELS}") from None

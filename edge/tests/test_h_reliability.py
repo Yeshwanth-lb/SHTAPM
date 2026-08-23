@@ -26,6 +26,7 @@ from edge.trust.h_reliability import GAMMA, H_INIT, HReliabilityProvider
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _drive_bad(provider: HReliabilityProvider, channel: str, n: int) -> list[float]:
     """Record n consecutive unhealthy outcomes; return h after each."""
     results = []
@@ -95,7 +96,7 @@ def test_repeated_bad_outcomes_follow_ema():
     """h_n = GAMMA^n after n consecutive unhealthy windows from h0=1.0."""
     p = HReliabilityProvider()
     for n, h in enumerate(_drive_bad(p, "temperature", 5), start=1):
-        expected = GAMMA ** n  # h0=1.0, so h_n = GAMMA^n * 1 + 0
+        expected = GAMMA**n  # h0=1.0, so h_n = GAMMA^n * 1 + 0
         assert h == pytest.approx(expected, abs=1e-9), f"window {n}: expected {expected}, got {h}"
 
 
@@ -183,9 +184,9 @@ def test_record_outcome_only_updates_specified_channel():
     # Every other channel must still be at H_INIT.
     for ch in CHANNELS:
         if ch != "pressure":
-            assert p.evaluate(ch) == pytest.approx(H_INIT), (
-                f"channel {ch!r} was unexpectedly modified"
-            )
+            assert p.evaluate(ch) == pytest.approx(
+                H_INIT
+            ), f"channel {ch!r} was unexpectedly modified"
 
 
 def test_independent_channels_do_not_interfere_over_many_windows():
@@ -198,10 +199,10 @@ def test_independent_channels_do_not_interfere_over_many_windows():
             p.record_outcome(ch, was_healthy=False)
 
     for ch, n in counts.items():
-        expected = GAMMA ** n  # h0=1.0
-        assert p.evaluate(ch) == pytest.approx(expected, abs=1e-9), (
-            f"channel {ch!r}: expected {expected:.6f}, got {p.evaluate(ch):.6f}"
-        )
+        expected = GAMMA**n  # h0=1.0
+        assert p.evaluate(ch) == pytest.approx(
+            expected, abs=1e-9
+        ), f"channel {ch!r}: expected {expected:.6f}, got {p.evaluate(ch):.6f}"
 
 
 # ---------------------------------------------------------------------------
@@ -227,9 +228,9 @@ def test_bool_maps_to_correct_outcome(was_healthy, expected_outcome):
 def test_satisfies_signal_provider_protocol():
     """HReliabilityProvider must be recognised as a SignalProvider at runtime."""
     p = HReliabilityProvider()
-    assert isinstance(p, SignalProvider), (
-        "HReliabilityProvider does not satisfy the SignalProvider runtime-checkable protocol"
-    )
+    assert isinstance(
+        p, SignalProvider
+    ), "HReliabilityProvider does not satisfy the SignalProvider runtime-checkable protocol"
 
 
 def test_evaluate_signature_returns_float():
