@@ -23,19 +23,39 @@ DEVICE = "pump-01"
 
 # --- deterministic stubs (TEST ONLY — no real detection/physics/signals) ----
 class ConstantSignalProvider:
+    """Test stub: always returns a constant score; record_window/outcome are no-ops."""
+
     def __init__(self, score: float) -> None:
         self.score = score
 
     def evaluate(self, channel: str) -> float:
         return self.score
 
+    def record_window(self, window) -> None:
+        """No-op for testing."""
+        pass
+
+    def record_outcome(self, channel: str, was_healthy: bool) -> None:
+        """No-op for testing."""
+        pass
+
 
 class MappingSignalProvider:
+    """Test stub: returns pre-mapped channel scores; record_window/outcome are no-ops."""
+
     def __init__(self, scores: dict[str, float]) -> None:
         self.scores = scores
 
     def evaluate(self, channel: str) -> float:
         return self.scores[channel]
+
+    def record_window(self, window) -> None:
+        """No-op for testing."""
+        pass
+
+    def record_outcome(self, channel: str, was_healthy: bool) -> None:
+        """No-op for testing."""
+        pass
 
 
 class StubPhysicsRule:
@@ -181,3 +201,124 @@ def test_stub_flag_policy_satisfies_protocol():
 
 def test_channels_helper_matches_frozen_set():
     assert P2Pipeline.channels() == CHANNELS
+
+
+# --- Provider wiring integration tests ---
+# (Prove that real c/h/k providers are actually updated by the pipeline)
+
+
+def test_pipeline_calls_record_window_on_c_provider():
+    """Prove that pipeline calls c.record_window(window) before update_from_providers()."""
+    from edge.trust.c_consistency import ConsistencyProvider
+
+    # Create a real ConsistencyProvider
+    c = ConsistencyProvider()
+
+    # Create a simple training window
+    pp = Preprocessor(median_kernel=1, low_pass_alpha=1.0, window_size=4)
+    training_stream = _stream(4)
+    training_windows = pp.process(training_stream)
+
+    # Fit the provider
+    c.fit(training_windows)
+
+    # Before processing, c should be at initial 0.5
+    assert c.evaluate("temperature") == 0.5
+
+    # Create pipeline with real c provider
+    pipe = _pipeline(window_size=4, c=c)
+
+    # Process a stream
+    _ = pipe.process(_stream(4))
+
+    # After processing, c should have been updated (no longer 0.5)
+    # It will be 1.0 or some value based on the test stream matching training
+    temp_c = c.evaluate("temperature")
+    assert temp_c != 0.5, "c provider was not updated by pipeline"
+    assert 0.0 <= temp_c <= 1.0
+
+
+def test_pipeline_calls_record_outcome_on_h_provider():
+    """Prove that pipeline calls h.record_outcome(channel, was_healthy)."""
+    from edge.trust.h_reliability import HReliabilityProvider
+
+    h = HReliabilityProvider()
+
+    # Before processing, h should be at initial 1.0
+    assert h.evaluate("temperature") == 1.0
+
+    # Create pipeline with real h provider and a flags policy that marks all channels unhealthy
+    pipe = _pipeline(
+        window_size=4,
+        h=h,
+        policy=FixedFlagPolicy(flagged=("temperature", "vibration"))  # Mark some unhealthy
+    )
+
+    # Process a stream (1 window)
+    _ = pipe.process(_stream(4))
+
+    # After processing with flags, h should have decayed for flagged channels
+    temp_h = h.evaluate("temperature")
+    assert temp_h < 1.0, "h provider was not updated by pipeline for flagged channel"
+    assert temp_h > 0.0, "h should not go to zero after one unhealthy outcome"
+
+    # Non-flagged channel should stay at 1.0
+    pressure_h = h.evaluate("pressure")
+    assert pressure_h == 1.0, "h should not decay for non-flagged channels"
+
+
+def test_pipeline_calls_record_window_on_k_provider():
+    """Prove that pipeline calls k.record_window(window) before update_from_providers()."""
+    from edge.trust.k_correlation import CorrelationProvider
+
+    k = CorrelationProvider()
+
+    # Before processing, k should be at initial 0.5
+    assert k.evaluate("current") == 0.5
+
+    # Create pipeline with real k provider
+    pipe = _pipeline(window_size=4, k=k)
+
+    # Process a stream
+    _ = pipe.process(_stream(4))
+
+    # After processing, k should have been updated (no longer 0.5)
+    # For the constant stream, both current and vibration rise together, so k=1.0
+    current_k = k.evaluate("current")
+    assert current_k != 0.5, "k provider was not updated by pipeline"
+    assert 0.0 <= current_k <= 1.0
+
+
+def test_pipeline_c_h_k_wiring_together():
+    """Full integration: all three real providers wired together."""
+    from edge.trust.c_consistency import ConsistencyProvider
+    from edge.trust.h_reliability import HReliabilityProvider
+    from edge.trust.k_correlation import CorrelationProvider
+
+    c = ConsistencyProvider()
+    h = HReliabilityProvider()
+    k = CorrelationProvider()
+
+    # Fit c on training data
+    pp = Preprocessor(median_kernel=1, low_pass_alpha=1.0, window_size=4)
+    training_windows = pp.process(_stream(4))
+    c.fit(training_windows)
+
+    # Create pipeline with real providers
+    pipe = _pipeline(window_size=4, c=c, h=h, k=k)
+
+    # Process stream
+    outcomes = pipe.process(_stream(6))
+
+    # Verify all three were updated
+    assert c.evaluate("temperature") != 0.5, "c not updated"
+    assert h.evaluate("temperature") == 1.0, "h should stay 1.0 when not flagged"
+    assert k.evaluate("current") != 0.5, "k not updated"
+
+    # Verify trust was computed (should use c, k, h values)
+    assert len(outcomes) == 3  # 3 windows of size 4 from stream of 6
+    for outcome in outcomes:
+        assert len(outcome.trust) == 6  # 6 channels
+        for ch in CHANNELS:
+            trust = outcome.trust[ch].trust
+            assert 0.0 <= trust <= 1.0, f"trust out of range for {ch}"

@@ -87,13 +87,37 @@ class P2Pipeline:
 
         The trust engine is stateful: each window applies one Beta update per
         channel, so trust evolves across windows while channels stay
-        independent."""
+        independent.
+
+        Call sequence per window:
+          1. Preprocess frames → Window
+          2. Detect anomaly (AnomalyResult with flag + severity)
+          3. Get per-channel flags from ChannelFlagPolicy
+          4. Record window state in c and k providers
+          5. Record channel outcomes in h provider (was_healthy = not flagged)
+          6. Update trust via all three providers
+          7. Run attribution on per-channel flags
+        """
         outcomes: list[WindowOutcome] = []
         for window in self._pre.process(frames):
             anomaly = detect(self._detector, window)
             flags = dict(self._flag_policy.flags(window, anomaly))
+
+            # Record window state for c and k providers before trust update
+            self._c.record_window(window)
+            self._k.record_window(window)
+
+            # Record channel outcomes for h provider: was_healthy iff not flagged
+            for ch in CHANNELS:
+                was_healthy = not flags[ch]
+                self._h.record_outcome(ch, was_healthy)
+
+            # Update trust using all three providers
             trust = self._trust.update_from_providers(self._c, self._k, self._h)
+
+            # Attribute anomalies to channels
             attribution = self._attribution.attribute(flags, window)
+
             outcomes.append(
                 WindowOutcome(
                     window=window,
