@@ -169,6 +169,14 @@ class _Const:
     def evaluate(self, channel: str) -> float:
         return self.s
 
+    def record_window(self, window) -> None:
+        """No-op for testing."""
+        pass
+
+    def record_outcome(self, channel: str, was_healthy: bool) -> None:
+        """No-op for testing."""
+        pass
+
 
 def _ts(i: int) -> str:
     return f"2026-08-10T00:00:{i:02d}.000Z"
