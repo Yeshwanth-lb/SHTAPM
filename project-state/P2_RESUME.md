@@ -12,6 +12,11 @@
 > to `origin/main` (now identical at `9e7e6e7`), and Decision A was approved —
 > a SWaT-only iTrust access request was submitted externally by the user. Still
 > documentation-only; no code/architecture/tests changed.
+>
+> **Further updated 2026-08-24 (same day, fourth pass):** `main` and `origin/main`
+> are now identical at `4d8a281`, which also fixed the CI dependency gap (see §9)
+> — GitHub Actions is GREEN on this commit. Still no code/architecture/tests
+> changed by this documentation pass; D010/D011 untouched.
 
 ---
 
@@ -45,12 +50,11 @@
   (held as the pre-approved fallback per D011); no dataset has been downloaded.
 - **Hardware availability:** NO Raspberry Pi, NO bench rig attached. All P2 work
   is hardware-free; physical gates (P0/P1/P3/P6) remain blocked.
-- **Safe to resume from this checkpoint?** **Yes.** Working tree clean; `main` is
-  1 commit ahead of `origin/main` (`8ca3570`, a formatting-only Black fix — see
-  §9), not yet pushed; deferrals
-  explicit; no half-finished edit. **Do NOT treat P2 as complete** — resume at the
-  first unresolved item (§7): waiting on iTrust's response to the submitted SWaT
-  access request.
+- **Safe to resume from this checkpoint?** **Yes.** Working tree clean; `main` and
+  `origin/main` are identical at `4d8a281` (everything pushed, GitHub Actions
+  GREEN on both jobs — see §9); deferrals explicit; no half-finished edit.
+  **Do NOT treat P2 as complete** — resume at the first unresolved item (§7):
+  waiting on iTrust's response to the submitted SWaT access request.
 
 **Foundation/plumbing complete ≠ validation/acceptance complete.** Every seam
 in the P2 pipeline is now filled with a real, working, provisional implementation;
@@ -245,9 +249,21 @@ approval, not an assumption from a delay.
 ## 9. Git checkpoint
 
 - **Branch:** `main`.
-- **Working tree (as of this update):** clean. `main` is 1 commit ahead of
-  `origin/main`, which was last synchronized with `main` at `9e7e6e7`.
+- **Working tree (as of this update):** clean. `main` and `origin/main` are
+  identical at `4d8a281` — nothing uncommitted, nothing unpushed.
+- **CI status:** GitHub Actions is **GREEN** on `4d8a281` — both `Python lint +
+  test` and `Frontend typecheck + test + build` jobs passed. `4d8a281` fixed a
+  pre-existing CI dependency gap: `edge/requirements.txt` now declares
+  `scikit-learn==1.4.*` (the already-documented TRD §02.2 pin, now activated),
+  and `.github/workflows/ci.yml` now installs `-r edge/requirements.txt` in the
+  Python job. This resolved a `ModuleNotFoundError: No module named 'numpy'`
+  that had been silently breaking `pytest -q` in CI (masked earlier by an
+  unrelated Black-formatting failure that stopped the job before pytest ran).
+  **This was a dependency-declaration/CI-install-path fix only — no
+  application logic changed.**
 - **Latest relevant commits (newest first):**
+  - `4d8a281` fix: install edge dependencies in CI
+  - `c40221c` docs: update P2 resume checkpoint after SWaT request
   - `8ca3570` style: apply black formatting to P2 provider tests (NOT YET PUSHED)
   - `9e7e6e7` docs: freeze SWaT P2 validation methodology
   - `642c47b` docs: refresh P2 checkpoint and U02/U07 decisions
@@ -271,12 +287,13 @@ approval, not an assumption from a delay.
   - `f75b9dc` P2: anomaly-detection foundation
   - `ee730fe` P2: synthetic injection framework
   - `26de8c2` P2: Beta trust foundation
-- **Push status:** `main` is 1 commit ahead of `origin/main` — `8ca3570` (the
-  Black-formatting-only fix for the 7 CI-flagged P2 provider/test files) exists
-  locally and has **not been pushed**. `main` and `origin/main` were previously
-  synchronized at `9e7e6e7` (verified 2026-08-24, before `8ca3570` was made).
+- **Push status:** **All commits pushed.** `main` and `origin/main` both point
+  to `4d8a281` (verified 2026-08-24).
 - **External state (not tracked by git):** a SWaT-only iTrust dataset-access
   request was submitted externally by the user on 2026-08-24, directly via the
   iTrust request form (outside this repo/session — no request/reference ID was
   captured here). Status: **awaiting iTrust's response.** No dataset has been
   downloaded. WADI has NOT been requested (remains the pre-approved fallback).
+  TEP remains a separate, undecided alternative — it must NOT be silently
+  substituted for SWaT if the response is slow or unfavorable; that would need
+  its own explicit decision.
