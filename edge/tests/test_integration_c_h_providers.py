@@ -114,9 +114,9 @@ def _create_diverse_clean_training_windows() -> list:
         # Take first 4 windows from each stream
         training_windows.extend(windows[:4])
 
-    assert len(training_windows) >= 10, (
-        f"Expected at least 10 training windows, got {len(training_windows)}"
-    )
+    assert (
+        len(training_windows) >= 10
+    ), f"Expected at least 10 training windows, got {len(training_windows)}"
     return training_windows
 
 
@@ -171,9 +171,9 @@ def test_multiple_clean_baseline_windows_for_fit():
     """
     # Create diverse training windows
     training_windows = _create_diverse_clean_training_windows()
-    assert len(training_windows) >= 10, (
-        f"Expected at least 10 training windows, got {len(training_windows)}"
-    )
+    assert (
+        len(training_windows) >= 10
+    ), f"Expected at least 10 training windows, got {len(training_windows)}"
 
     # Fit on first 10 windows
     c_provider = ConsistencyProvider()
@@ -290,9 +290,9 @@ def test_anomalous_window_c_drops_h_decays():
     # (Only window [0, 30) should be here; it processes before any anomalies)
     assert len(clean_baseline_results) > 0, "No clean baseline windows found"
     for r in clean_baseline_results:
-        assert r["h"]["temperature"] > 0.99, (
-            f"baseline h_temp={r['h']['temperature']} should be ~1.0 (no anomalies yet)"
-        )
+        assert (
+            r["h"]["temperature"] > 0.99
+        ), f"baseline h_temp={r['h']['temperature']} should be ~1.0 (no anomalies yet)"
         assert r["h"]["pressure"] > 0.99, "baseline h_pressure should be ~1.0"
 
     # Verify anomaly region: h_temp decays, c values vary
@@ -419,6 +419,4 @@ def test_per_channel_independence():
         assert h_values[ch] >= 0.99, f"h_{ch} should stay at 1.0; got {h_values[ch]}"
 
     # Verify c values are in valid range (pattern change detection)
-    assert all(0.0 <= c <= 1.0 for c in c_values.values()), (
-        "All c values should be in [0,1]"
-    )
+    assert all(0.0 <= c <= 1.0 for c in c_values.values()), "All c values should be in [0,1]"

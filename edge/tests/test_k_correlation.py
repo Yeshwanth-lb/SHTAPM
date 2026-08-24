@@ -62,7 +62,7 @@ def _make_correlated_rising_window() -> Window:
     return _build_window(
         0,
         {
-            "current": _make_current_ramp(0.2, 0.01),      # 0.2 → 0.49
+            "current": _make_current_ramp(0.2, 0.01),  # 0.2 → 0.49
             "vibration": _make_vibration_ramp(0.1, 0.01),  # 0.1 → 0.39
             "temperature": _make_flat_channel(0.5),
             "pressure": _make_flat_channel(0.5),
@@ -77,8 +77,8 @@ def _make_anticorrelated_window() -> Window:
     return _build_window(
         0,
         {
-            "current": _make_current_ramp(0.2, 0.01),        # rising
-            "vibration": _make_vibration_ramp(0.9, -0.01),   # falling
+            "current": _make_current_ramp(0.2, 0.01),  # rising
+            "vibration": _make_vibration_ramp(0.9, -0.01),  # falling
             "temperature": _make_flat_channel(0.5),
             "pressure": _make_flat_channel(0.5),
             "humidity": _make_flat_channel(0.5),
@@ -108,7 +108,7 @@ def _make_current_rising_vibration_flat_window() -> Window:
         0,
         {
             "current": _make_current_ramp(0.2, 0.01),  # rising
-            "vibration": _make_flat_channel(0.5),     # flat (trend=0)
+            "vibration": _make_flat_channel(0.5),  # flat (trend=0)
             "temperature": _make_flat_channel(0.5),
             "pressure": _make_flat_channel(0.5),
             "humidity": _make_flat_channel(0.5),
@@ -122,7 +122,7 @@ def _make_correlated_falling_window() -> Window:
     return _build_window(
         0,
         {
-            "current": _make_current_ramp(0.9, -0.01),    # 0.9 → 0.61
+            "current": _make_current_ramp(0.9, -0.01),  # 0.9 → 0.61
             "vibration": _make_vibration_ramp(0.8, -0.01),  # 0.8 → 0.51
             "temperature": _make_flat_channel(0.5),
             "pressure": _make_flat_channel(0.5),
@@ -196,9 +196,7 @@ def test_anticorrelated_gives_k_0_0():
     p.record_window(window)
 
     # Both channels suspect (we can't tell which is lying)
-    assert (
-        p.evaluate("current") == 0.0
-    ), "rising current vs. falling vibration violates rule"
+    assert p.evaluate("current") == 0.0, "rising current vs. falling vibration violates rule"
     assert p.evaluate("vibration") == 0.0, "falling vibration vs. rising current violates rule"
 
     # Others not involved

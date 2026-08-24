@@ -116,9 +116,7 @@ def test_fit_on_single_window():
 def test_fit_on_multiple_windows():
     """fit() aggregates statistics across multiple training windows."""
     p = ConsistencyProvider()
-    windows = [
-        _normal_window(10.0, 1.0, seed=i) for i in range(10)
-    ]
+    windows = [_normal_window(10.0, 1.0, seed=i) for i in range(10)]
     p.fit(windows)
     assert p.fitted
     for ch in CHANNELS:

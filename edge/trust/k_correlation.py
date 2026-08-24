@@ -212,9 +212,7 @@ class CorrelationProvider:
             ValueError: if channel is unknown.
         """
         if channel not in CHANNELS:
-            raise ValueError(
-                f"unknown channel {channel!r}; must be one of {CHANNELS}"
-            )
+            raise ValueError(f"unknown channel {channel!r}; must be one of {CHANNELS}")
         return self._k[channel]
 
     # ------------------------------------------------------------------

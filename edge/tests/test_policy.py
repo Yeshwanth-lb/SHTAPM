@@ -21,9 +21,7 @@ from edge.anomaly.policy import SeverityThresholdFlagPolicy
 from edge.anomaly.preprocess import Window
 
 
-def _build_window(
-    start_index: int, channels_dict: dict[str, tuple[float, ...]]
-) -> Window:
+def _build_window(start_index: int, channels_dict: dict[str, tuple[float, ...]]) -> Window:
     """Construct a Window from per-channel tuples."""
     return Window(
         start_index=start_index,

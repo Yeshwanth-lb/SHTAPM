@@ -251,7 +251,7 @@ def test_pipeline_calls_record_outcome_on_h_provider():
     pipe = _pipeline(
         window_size=4,
         h=h,
-        policy=FixedFlagPolicy(flagged=("temperature", "vibration"))  # Mark some unhealthy
+        policy=FixedFlagPolicy(flagged=("temperature", "vibration")),  # Mark some unhealthy
     )
 
     # Process a stream (1 window)
