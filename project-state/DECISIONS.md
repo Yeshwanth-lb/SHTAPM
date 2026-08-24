@@ -89,13 +89,56 @@
   lambda=0.7 (PENDING explicit approval); `c` signal definition (UNDECIDED).
 - **Does NOT resolve:** U02 (`k`/physics), `ChannelFlagPolicy`, IF tuning, normalization (U07).
 
+### D010 — `k` (cross-sensor correlation) signal: provisional current↔vibration heuristic
+- **Date:** 2026-08-24
+- **Decision:** `k` is implemented against the **current↔vibration** channel pair, not
+  current↔pressure (the pair literally named in the PRD/demo script). Rule: compare each
+  channel's early-half vs. late-half window mean (split at `window.size // 2`, not a
+  hardcoded index) to get a trend sign in `{-1, 0, +1}`; `k_current = k_vibration = 1.0`
+  if the two trend signs multiply to `>= 0` (same direction, or either/both flat), else
+  `0.0`. Non-involved channels (temperature, pressure, humidity, gas) always get `k=1.0`
+  (no rule defined for them — this is not a health claim, `c`/`h` cover those channels).
+  On disagreement both current and vibration receive `k=0.0` (indeterminate which channel
+  lies; `AttributionEngine` refines later). No tunable threshold/epsilon. Implemented as
+  `CorrelationProvider` in `edge/trust/k_correlation.py`, satisfying `SignalProvider`.
+- **Reason:**
+  - **Why not current↔pressure:** the bench `BMP180` reads **atmospheric** pressure, not
+    water-line/discharge pressure — the PRD's implied physics (pump running → discharge
+    pressure rises with current) cannot be realized on the current bench hardware (TRD
+    proxy constraint C6). Confirmed unavailable on SWaT/WADI too (neither dataset exposes
+    a continuous motor-current channel; see U07 report §5).
+  - **Why current↔vibration:** both `INA219` (current) and `ADXL335` (vibration) are
+    direct measurements of actual pump mechanical state (load → bearing stress), so the
+    pair is realizable on the bench today without new hardware.
+  - **Why a parameter-free heuristic, not a learned/expert-constant model:** the simulator
+    generates all channels as independent Gaussians (no real correlation to fit or
+    validate against), and defining a numeric physics tolerance without real data would
+    be inventing a spec — explicitly disallowed. A sign-only trend comparison needs no
+    tunable constant, so it can ship now and be replaced once real data exists.
+  - **Why both channels penalized on disagreement:** the rule only detects that the pair
+    is inconsistent, not which member is lying; assigning blame requires attribution
+    logic that doesn't yet exist. This avoids inventing an attribution rule prematurely.
+- **Affects:** `edge/trust/k_correlation.py` (new), `edge/anomaly/pipeline.py` (wires
+  `record_window`), `edge/trust/engine.py` (consumes via `SignalProvider`).
+- **Partially resolves U02:** channel pair and heuristic approach are now decided and
+  implemented. **Still open:** whether current↔vibration trending is a real physical
+  relationship at bench scale, what tolerance (if any) is needed beyond pure sign
+  comparison, and whether the "one rising + one flat passes" limitation needs fixing —
+  all require real pump data (bench or a labeled dataset) and are explicitly deferred to
+  U07/domain review, not resolved here.
+- **Does NOT resolve:** `ChannelFlagPolicy` real-data validation, IF tuning, normalization
+  (U07), O3 bench-scenario attribution accuracy.
+
 ---
 
 ## UNDECIDED (must not be silently resolved — see CURRENT_STATE blockers)
 - U01 — Beta-reputation trust-update formula + recovery dynamics (P2). **Partial:** `h` resolved
   (D009). **Still open:** lambda=0.7 forgetting factor (PENDING approval); `c` consistency signal
   definition (UNDECIDED).
-- U02 — Fault-vs-attack physics/correlation attribution rules + thresholds (P2).
+- U02 — Fault-vs-attack physics/correlation attribution rules + thresholds (P2). **Partial:**
+  channel pair (current↔vibration) + heuristic approach resolved (D010), implemented in
+  `k_correlation.py`. **Still open:** real physics validation (does the correlation hold on
+  real data; what tolerance beyond sign comparison) — requires bench data or a dataset (U07).
 - U03 — LSTM: one shared model or two (prognosis vs digital-twin) (P3); edge stores single `lstm.pt`.
 - U04 — Digital-twin training-data source: bench-collected vs synthetic (P3).
 - U05 — `divergence_threshold` + substitution uncertainty-cap values (P3).
