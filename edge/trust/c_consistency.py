@@ -38,8 +38,8 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 import numpy as np
-
 from app.schemas.contracts import CHANNELS
+
 from edge.anomaly.preprocess import Window
 
 

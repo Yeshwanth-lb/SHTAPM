@@ -17,13 +17,10 @@ Pending items deliberately NOT tested here:
 
 import numpy as np
 import pytest
-
 from app.schemas.contracts import CHANNELS
-from app.schemas.build import build_telemetry
 
-from edge.anomaly.preprocess import Preprocessor, Window
+from edge.anomaly.preprocess import Window
 from edge.trust.c_consistency import ConsistencyProvider
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -343,8 +340,6 @@ def test_recovery_after_anomalous_window():
 
 def test_implements_signal_provider_protocol():
     """ConsistencyProvider has evaluate(channel) -> float."""
-    from edge.trust.engine import SignalProvider
-
     p = ConsistencyProvider()
     p.fit([_normal_window(10.0, 1.0, seed=42)])
     p.record_window(_normal_window(10.0, 1.0, seed=999))
