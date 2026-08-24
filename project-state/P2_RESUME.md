@@ -7,6 +7,11 @@
 > pipeline wiring landed since the original write-up, and U07 dataset-feasibility
 > research completed; see §9 for the commit list). No production code, architecture,
 > or tests were changed by this update.
+>
+> **Further updated 2026-08-24 (same day, third pass):** all local commits pushed
+> to `origin/main` (now identical at `9e7e6e7`), and Decision A was approved —
+> a SWaT-only iTrust access request was submitted externally by the user. Still
+> documentation-only; no code/architecture/tests changed.
 
 ---
 
@@ -30,19 +35,22 @@
   heuristic; no dataset eval has run; no P2 acceptance test is satisfied. Diagnostics
   run (see §3) are probes, not acceptance.
 - **U07 dataset feasibility (SWaT vs. WADI):** Research **COMPLETE** (2026-08-24,
-  see `project-state/U07_DATASET_FEASIBILITY_REPORT.md`). Conclusion: **SWaT
-  primary, WADI fallback**, usable only to validate P2 *architecture/methodology*
-  (IF behavior on real non-stationary data, the deferred normalization decision,
-  O10) — **neither dataset contains our six bench channels**, neither has a
-  motor-current+vibration pair, and neither can satisfy O3 (PRD-scoped to bench
-  scenarios). **No iTrust/SWaT access has been requested** — that step is explicitly
-  awaiting separate approval, not yet given.
+  `U07_DATASET_FEASIBILITY_REPORT.md`); validation methodology **FROZEN**
+  (`DECISIONS.md` D011). Conclusion: **SWaT primary, WADI fallback**, usable only
+  to validate P2 *architecture/methodology* — **neither dataset contains our six
+  bench channels**, neither has a motor-current+vibration pair, neither can
+  satisfy O3. **SWaT/iTrust access was REQUESTED** (Decision A approved
+  2026-08-24; a SWaT-only request was submitted externally by the user via the
+  iTrust request form) — **awaiting iTrust's response.** WADI was NOT requested
+  (held as the pre-approved fallback per D011); no dataset has been downloaded.
 - **Hardware availability:** NO Raspberry Pi, NO bench rig attached. All P2 work
   is hardware-free; physical gates (P0/P1/P3/P6) remain blocked.
-- **Safe to resume from this checkpoint?** **Yes.** Working tree clean; foundations
-  (including c/k/h + ChannelFlagPolicy + wiring) committed through `b0f0272`;
-  deferrals explicit; no half-finished edit. **Do NOT treat P2 as complete** —
-  resume at the first unresolved item (§7): the U07 access decision.
+- **Safe to resume from this checkpoint?** **Yes.** Working tree clean; `main` is
+  1 commit ahead of `origin/main` (`8ca3570`, a formatting-only Black fix — see
+  §9), not yet pushed; deferrals
+  explicit; no half-finished edit. **Do NOT treat P2 as complete** — resume at the
+  first unresolved item (§7): waiting on iTrust's response to the submitted SWaT
+  access request.
 
 **Foundation/plumbing complete ≠ validation/acceptance complete.** Every seam
 in the P2 pipeline is now filled with a real, working, provisional implementation;
@@ -157,7 +165,7 @@ tests pass.** Each below stays open until the stated input exists.
 | ChannelFlagPolicy (window→per-channel) | **RESOLVED (provisional)** — variance-threshold heuristic: flag channels whose in-window variance exceeds a `variance_factor`-scaled range (`edge/anomaly/policy.py`, `57d434d`; design notes in `project-state/CHANNELFLAGPOLICY_DESIGN_ANALYSIS.md`) | Implemented and wired; NOT derived from IF internals, NOT validated on real data | `variance_factor` (default 0.5) tuning on real labeled attacks (U07) |
 | IF hyperparameters + flag threshold | UNTUNED (sklearn defaults; threshold required, unset) | No documented values; simulator can't calibrate cross-sensor behaviour | Tune on real clean baseline to a real FP/detection target |
 | Normalization choice | per-window min-max (current); DEFERRED | Diagnostic favours train-fit on the simulator, but simulator is stationary/physics-free and structurally favours global | Decide on real SWaT/WADI/TEP (stationarity + operating-point drift) |
-| U07: SWaT/WADI access + TEP fallback | **Feasibility research COMPLETE** (2026-08-24, `U07_DATASET_FEASIBILITY_REPORT.md`) — recommends SWaT primary / WADI fallback, for architecture/methodology validation only. **Validation methodology now FROZEN** (2026-08-24, `DECISIONS.md` D011: contract-preserving proxy channel mapping; `k` excluded from validation evidence; `AttributionEngine`/O3 deferred as BLOCKED; WADI localization check rejected; strict temporal train/eval split required). **Access NOT requested** — awaiting separate explicit approval | Recommendation made and methodology frozen; the access-request step itself has not been authorized | User decision: request SWaT (iTrust) access, hold, or choose the TEP substitute |
+| U07: SWaT/WADI access + TEP fallback | **Feasibility research COMPLETE**, methodology **FROZEN** (`DECISIONS.md` D011: proxy channel mapping; `k` excluded from evidence; `AttributionEngine`/O3 deferred/BLOCKED; WADI localization check rejected; strict temporal split required). **Access REQUESTED** (Decision A approved 2026-08-24; SWaT-only request submitted externally by the user; WADI NOT requested, held as fallback) — **awaiting iTrust's response.** No dataset downloaded | Methodology frozen and request submitted; iTrust's response timing/outcome is unknown | Wait for iTrust. On grant: obtain the tag dictionary, proceed per §7. On denial/excessive delay: WADI (pre-approved fallback) or TEP (separate, undecided) |
 | Realistic injection magnitudes/durations | FIXTURES only | §12.4 specifies none; couples to the (undecided) detector threshold | Set against real data / detector calibration; never as project specs invented here |
 | P2 acceptance validation | NOT started | Depends on all of the above + a dataset | Run P2-ANOM-*/P2-TRUST-* + O3/O10 on real data and report honestly |
 
@@ -182,14 +190,16 @@ Do NOT let any of these be described as finished:
 Steps 2–6 of the original sequence (`h`, `c`, `k`, `ChannelFlagPolicy`, pipeline
 wiring) are **DONE** — see §2/§5 and commits `c56cb4d`, `d1e6d48`, `691847f`,
 `57d434d`, `b0f0272`. U07 feasibility research (step 7's prerequisite) is also
-**DONE** (`U07_DATASET_FEASIBILITY_REPORT.md`). What remains:
+**DONE** (`U07_DATASET_FEASIBILITY_REPORT.md`), and **Decision A is also DONE**
+— approved 2026-08-24; a SWaT-only iTrust access request was submitted
+externally by the user the same day. What remains:
 
-1. **Decide whether to request SWaT (iTrust) access** per the U07 report's
-   recommendation (primary: SWaT; fallback: WADI) — **explicit user approval
-   required; not yet given.** Alternative: hold, or commit to the documented TEP
-   substitute instead. (Methodology for this step is pre-agreed — see
-   `DECISIONS.md` D011 — but the access decision itself remains separately
-   gated.)
+1. **Wait for iTrust's response** to the submitted SWaT access request. No
+   further action is possible on this item until a response (grant, denial, or
+   delay) arrives. Do NOT request WADI or TEP preemptively — WADI is the
+   pre-approved fallback (D011) for if SWaT is denied/delayed; TEP remains a
+   separate, undecided path. Do NOT choose the six SWaT tags (D011 B) until
+   access is actually granted and the tag dictionary is in hand.
 2. Once a dataset (or TEP substitute) is in hand: **tune IF** hyperparameters +
    flag threshold on **real clean** data.
 3. **Revisit normalization** (per-window vs. train-fit/global vs. z-score) using
@@ -203,9 +213,9 @@ wiring) are **DONE** — see §2/§5 and commits `c56cb4d`, `d1e6d48`, `691847f`
    report §11).
 6. **Only then** update P2 status toward completion.
 
-Do NOT add new/random architecture before these steps. Do NOT request SWaT/iTrust
-access without separate explicit approval (step 1 above is a decision, not an
-authorization).
+Do NOT add new/random architecture before these steps. Do NOT request WADI or
+TEP access while the SWaT request is pending — that would need its own separate
+approval, not an assumption from a delay.
 
 ## 8. Resume instructions for Claude Code
 
@@ -220,8 +230,10 @@ authorization).
   seams.
 - **Do NOT redo** the corpus/U01/U02/U07 investigations unless the underlying
   `docs/` changed.
-- **Continue from the first unresolved item** in §7 (start with the U07
-  access decision — do NOT request access without explicit approval).
+- **Continue from the first unresolved item** in §7 (start by checking whether
+  iTrust has responded to the already-submitted SWaT access request — do NOT
+  re-request SWaT, do NOT request WADI/TEP preemptively, and do NOT choose the
+  six-tag SWaT mapping until access is actually granted).
 - **Preserve all deferred decisions** (normalization deferral, λ pending,
   U02 real-physics validation, U07 access-request approval) — do not silently
   resolve them.
@@ -233,12 +245,12 @@ authorization).
 ## 9. Git checkpoint
 
 - **Branch:** `main`.
-- **Working tree (as of this 2026-08-24 update):** clean except for the
-  documentation changes described here (this file, `DECISIONS.md`) and the
-  already-committed `U07_DATASET_FEASIBILITY_REPORT.md` staged for commit
-  alongside them; deletion of 6 redundant/obsolete checkpoint drafts and one
-  now-absorbed design-report draft (see git status at time of this update).
+- **Working tree (as of this update):** clean. `main` is 1 commit ahead of
+  `origin/main`, which was last synchronized with `main` at `9e7e6e7`.
 - **Latest relevant commits (newest first):**
+  - `8ca3570` style: apply black formatting to P2 provider tests (NOT YET PUSHED)
+  - `9e7e6e7` docs: freeze SWaT P2 validation methodology
+  - `642c47b` docs: refresh P2 checkpoint and U02/U07 decisions
   - `b0f0272` P2: wire c/k/h providers into pipeline
   - `57d434d` P2: implement ChannelFlagPolicy with variance-threshold heuristic
   - `691847f` P2: implement cross-sensor correlation signal provider (k)
@@ -259,7 +271,12 @@ authorization).
   - `f75b9dc` P2: anomaly-detection foundation
   - `ee730fe` P2: synthetic injection framework
   - `26de8c2` P2: Beta trust foundation
-- **Push status:** `main` is ahead of `origin/main` (P2 work through `b0f0272`
-  has not been pushed by this session). This documentation update (this file,
-  `DECISIONS.md`, `U07_DATASET_FEASIBILITY_REPORT.md`, and the 7 deletions) is
-  **not committed and not pushed** — commit only on approval; do NOT push.
+- **Push status:** `main` is 1 commit ahead of `origin/main` — `8ca3570` (the
+  Black-formatting-only fix for the 7 CI-flagged P2 provider/test files) exists
+  locally and has **not been pushed**. `main` and `origin/main` were previously
+  synchronized at `9e7e6e7` (verified 2026-08-24, before `8ca3570` was made).
+- **External state (not tracked by git):** a SWaT-only iTrust dataset-access
+  request was submitted externally by the user on 2026-08-24, directly via the
+  iTrust request form (outside this repo/session — no request/reference ID was
+  captured here). Status: **awaiting iTrust's response.** No dataset has been
+  downloaded. WADI has NOT been requested (remains the pre-approved fallback).
