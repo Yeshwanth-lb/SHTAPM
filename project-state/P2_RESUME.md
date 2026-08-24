@@ -157,7 +157,7 @@ tests pass.** Each below stays open until the stated input exists.
 | ChannelFlagPolicy (window→per-channel) | **RESOLVED (provisional)** — variance-threshold heuristic: flag channels whose in-window variance exceeds a `variance_factor`-scaled range (`edge/anomaly/policy.py`, `57d434d`; design notes in `project-state/CHANNELFLAGPOLICY_DESIGN_ANALYSIS.md`) | Implemented and wired; NOT derived from IF internals, NOT validated on real data | `variance_factor` (default 0.5) tuning on real labeled attacks (U07) |
 | IF hyperparameters + flag threshold | UNTUNED (sklearn defaults; threshold required, unset) | No documented values; simulator can't calibrate cross-sensor behaviour | Tune on real clean baseline to a real FP/detection target |
 | Normalization choice | per-window min-max (current); DEFERRED | Diagnostic favours train-fit on the simulator, but simulator is stationary/physics-free and structurally favours global | Decide on real SWaT/WADI/TEP (stationarity + operating-point drift) |
-| U07: SWaT/WADI access + TEP fallback | **Feasibility research COMPLETE** (2026-08-24, `U07_DATASET_FEASIBILITY_REPORT.md`) — recommends SWaT primary / WADI fallback, for architecture/methodology validation only. **Access NOT requested** — awaiting separate explicit approval | Recommendation made; the access-request step itself has not been authorized | User decision: request SWaT (iTrust) access, hold, or choose the TEP substitute |
+| U07: SWaT/WADI access + TEP fallback | **Feasibility research COMPLETE** (2026-08-24, `U07_DATASET_FEASIBILITY_REPORT.md`) — recommends SWaT primary / WADI fallback, for architecture/methodology validation only. **Validation methodology now FROZEN** (2026-08-24, `DECISIONS.md` D011: contract-preserving proxy channel mapping; `k` excluded from validation evidence; `AttributionEngine`/O3 deferred as BLOCKED; WADI localization check rejected; strict temporal train/eval split required). **Access NOT requested** — awaiting separate explicit approval | Recommendation made and methodology frozen; the access-request step itself has not been authorized | User decision: request SWaT (iTrust) access, hold, or choose the TEP substitute |
 | Realistic injection magnitudes/durations | FIXTURES only | §12.4 specifies none; couples to the (undecided) detector threshold | Set against real data / detector calibration; never as project specs invented here |
 | P2 acceptance validation | NOT started | Depends on all of the above + a dataset | Run P2-ANOM-*/P2-TRUST-* + O3/O10 on real data and report honestly |
 
@@ -187,7 +187,9 @@ wiring) are **DONE** — see §2/§5 and commits `c56cb4d`, `d1e6d48`, `691847f`
 1. **Decide whether to request SWaT (iTrust) access** per the U07 report's
    recommendation (primary: SWaT; fallback: WADI) — **explicit user approval
    required; not yet given.** Alternative: hold, or commit to the documented TEP
-   substitute instead.
+   substitute instead. (Methodology for this step is pre-agreed — see
+   `DECISIONS.md` D011 — but the access decision itself remains separately
+   gated.)
 2. Once a dataset (or TEP substitute) is in hand: **tune IF** hyperparameters +
    flag threshold on **real clean** data.
 3. **Revisit normalization** (per-window vs. train-fit/global vs. z-score) using

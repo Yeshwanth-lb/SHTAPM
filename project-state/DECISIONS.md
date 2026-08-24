@@ -129,6 +129,57 @@
 - **Does NOT resolve:** `ChannelFlagPolicy` real-data validation, IF tuning, normalization
   (U07), O3 bench-scenario attribution accuracy.
 
+### D011 — SWaT-based P2 validation methodology: frozen scope (dataset access NOT yet approved)
+- **Date:** 2026-08-24
+- **Decision:** The following methodology is approved for a future SWaT-based P2
+  validation pass, **once dataset access is separately authorized**:
+  - **Channel mapping (B):** reuse the existing frozen contract unmodified.
+    Relabel six SWaT tags onto our six channel field names
+    (temperature/vibration/pressure/humidity/gas/current) purely as a
+    plumbing/proxy substitution — explicitly NOT a claim that any SWaT tag is
+    physically equivalent to the bench channel it's relabeled onto. The
+    specific six tags are NOT chosen yet and will not be chosen until SWaT's
+    own tag dictionary (`readme.docx`, bundled with the dataset — see U07
+    report §2) is in hand.
+  - **`k` (correlation signal) (C):** may run mechanically if the pipeline
+    requires it, but is **excluded from validation evidence** — no `k` metric
+    is to be reported, no claim of `k` validation is to be made, and any
+    report must label `k` as physically unvalidated/meaningless on SWaT
+    (current/vibration are confirmed absent from both SWaT and WADI, D010,
+    U07 report §5). `k`'s formula is NOT to be redesigned or adapted for SWaT.
+  - **`AttributionEngine` / O3 (D):** deferred entirely for this phase. No
+    `PhysicsRule` is to be designed or implemented now. `AttributionEngine`
+    is BLOCKED (no concrete `PhysicsRule` implementation exists anywhere in
+    the codebase — verified by direct inspection 2026-08-24). No O3 claim may
+    be drawn from SWaT results.
+  - **WADI 6-of-15 tag-localization check (E):** REJECTED from the main
+    validation plan — sample size (n≈6) judged too small to provide
+    meaningful validation value. May be revisited separately later, not as
+    part of this methodology.
+  - **Temporal train/eval separation (F):** hard requirement. Any fitting of
+    IF, `c`, normalization parameters, thresholds, or other
+    learned/statistical parameters must use only data preceding the
+    evaluation period; no leakage from attack/evaluation windows into
+    fitting. Must be documented explicitly in the eventual evaluation
+    harness (e.g. `edge/eval/swat_eval.py`, not yet created).
+- **Reason:** Freezes the validation *shape* independent of whether/when
+  dataset access is granted, so that decision (a separate approval, see
+  below) doesn't also require re-deriving methodology under time pressure.
+  Each sub-decision follows directly from the U07 feasibility findings
+  (`U07_DATASET_FEASIBILITY_REPORT.md`) and D010's confirmed absence of
+  current/vibration in both datasets.
+- **Affects:** a future `edge/eval/swat_eval.py` (not yet created), the
+  eventual SWaT-tag-mapping decision, any future O10 write-up.
+- **Partially resolves U07:** validation *methodology* is now frozen and
+  ready to execute once a dataset is available. **Does NOT resolve access:**
+  whether to request SWaT/iTrust access at all remains a separate, explicit,
+  NOT YET APPROVED decision — do not conflate methodology approval with an
+  access authorization.
+- **Does NOT resolve:** `k` real-physics validation (still impossible on
+  SWaT/WADI), `AttributionEngine`/O3 (blocked on a `PhysicsRule` that doesn't
+  exist), the six-tag selection itself (blocked on the tag dictionary), and
+  the WADI localization check (explicitly out of scope by E).
+
 ---
 
 ## UNDECIDED (must not be silently resolved — see CURRENT_STATE blockers)
@@ -143,7 +194,9 @@
 - U04 — Digital-twin training-data source: bench-collected vs synthetic (P3).
 - U05 — `divergence_threshold` + substitution uncertainty-cap values (P3).
 - U06 — RL reward shaping + acceptable false-isolation rate (P3).
-- U07 — SWaT/WADI dataset access vs TEP+bench substitute (P2/P7).
+- U07 — SWaT/WADI dataset access vs TEP+bench substitute (P2/P7). **Partial:**
+  validation methodology frozen (D011) once access exists. **Still open:**
+  the access-request decision itself — NOT YET APPROVED.
 - U08 — Backend host for demo: on-Pi vs laptop (P0/P6).
 - U09 — Pump model + rated current (sizes INA219 shunt/relay) (P1 hardware).
 - U10 — Demo role/user count; MQTT credential/TLS scope for localhost demo (P4).
