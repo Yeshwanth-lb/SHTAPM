@@ -243,6 +243,113 @@
   C/D), or the still-open normalization-choice question the flatness
   findings above illustrate but don't settle.
 
+### D013 — ChannelFlagPolicy redesign (Candidate B) + minimal provisional PhysicsRule; first formal P2 acceptance suite run
+- **Date:** 2026-08-25
+- **Decision:**
+  1. **ChannelFlagPolicy's per-channel localization heuristic is redesigned
+     ("Candidate B").** The original same-window, cross-channel
+     highest-variance rule is replaced with a per-channel, own-baseline,
+     two-sided empirical-CDF test: `fit()` learns each channel's OWN
+     baseline distribution of window-variance from clean-baseline windows
+     (same discipline as IF/`c`), and `flags()` flags a channel if its
+     CURRENT window-variance is an outlier — high or low — relative to
+     THAT channel's own historical distribution, never relative to other
+     channels in the same window. Constructor parameter renamed
+     `variance_factor` → `tail_fraction` (default 0.1; still arbitrary,
+     provisional, U07-gated — not derived from real data).
+  2. **A minimal, provisional `PhysicsRule` is implemented**
+     (`TrendSignPhysicsRule`, `edge/anomaly/physics_rule.py`), reusing
+     D010's current↔vibration trend-sign heuristic verbatim (no new
+     physics, no new channel pair, no new tolerance) solely to unblock
+     `AttributionEngine`'s wiring path. Before this, NO concrete
+     `PhysicsRule` existed anywhere (D011 D), so `attribution=attack` was
+     structurally unreachable in every case, everywhere. Scope is
+     deliberately narrow: only ever names `current`/`vibration` as
+     suspect (ties broken by which deviates further from its own fitted
+     baseline); inherits `k`'s documented flat-trend blind spot (a
+     zero-trend channel always "agrees", so a pure constant value can
+     never trigger a violation).
+  3. **The first-ever formal P2 acceptance-test suite**
+     (`edge/tests/test_p2_acceptance.py`) was written and run against the
+     PRD's literal Doc06 P2-ANOM-\*/P2-TRUST-\* table, using real
+     (non-stub) components end-to-end on hardware-free simulator streams.
+     10 of the 14 documented scenarios were attempted (P2-ANOM-S1 excluded
+     — no adaptive/stealth injection type exists).
+- **Reason:** Root-cause analysis (design-analysis-only pass, before any
+  code changed) traced P2-ANOM-H2/H3 and part of P2-TRUST-H2's failures to
+  one mechanism: per-window min-max normalization always rescales each
+  channel to fill `[0,1]`, so a single-sample spike compresses the *other*
+  29 samples toward one end (LOWERING that channel's own measured variance,
+  the opposite of what the original "flag highest variance" rule expected),
+  and a fully-inside constant-spoof window is exactly variance=0.0 — the
+  most extreme possible low value. Reversing the rule's direction alone was
+  analyzed and rejected: drift/ramp-shaped anomalies produce a variance
+  signature close to ordinary noise, so a flipped rule would then prefer an
+  unrelated, quieter channel over the genuinely drifting one. `AttributionEngine`
+  was separately and completely blocked by the total absence of any
+  `PhysicsRule` implementation, independent of ChannelFlagPolicy.
+- **Evidence** (this session's own diagnostic → implementation → regression
+  chain, not external literature):
+  - Targeted regression (`test_policy.py`, `test_p2_acceptance.py`,
+    `test_pipeline.py`, `test_swat_eval.py`, `test_physics_rule.py`, plus a
+    full `pytest edge/` run): **327 passed, 4 failed, 2 skipped** — the 4
+    failures are exactly the four pre-existing, unrelated ones (see status
+    matrix in `P2_RESUME.md` §1); zero new regressions anywhere.
+  - **P2-ANOM-H2 (spike): FAIL → PASS.** Confirmed mechanism: the spiked
+    channel is now correctly identified as a low-variance outlier relative
+    to its own baseline, instead of every *other* channel being flagged
+    instead (as the original rule did).
+  - **P2-TRUST-H2:** `gas`'s `channel_flags` true-rate rose from 13.3%
+    (20/150 post-onset windows) to 68% (102/150) — a >5x improvement — but
+    final trust still doesn't cross <0.4 within 3 windows. Root cause is
+    now understood to have shifted: it is `h`'s own EMA speed (D009,
+    GAMMA=0.95, ~13-window half-life) that caps how fast trust can fall,
+    independent of ChannelFlagPolicy. This is a genuine tension between two
+    separately-approved decisions (D009's deliberate slowness for
+    collusion-resistance vs. this scenario's 3-window budget), not a defect
+    in either — D009/GAMMA is explicitly UNCHANGED by this decision.
+  - **P2-ANOM-H3 / P2-ANOM-E2: now runnable and PASS at their committed
+    fixture seeds** — genuinely new capability (previously both were fully
+    blocked, not just failing). Verified via explicit multi-seed sensitivity
+    checks (not committed as separate tests) to be reliability-limited, not
+    validated: H3 ≈4/8 seeds attack-attributed (~50%, driven by the onset
+    transition window's spike-like shape interacting with the *other*
+    paired channel's unrelated noise — the flat-trend blind spot only
+    applies to fully-steady-state windows, not the transition into one);
+    E2 ≈3/5 seeds attack-attributed (more reliable than H3 due to the
+    deliberately-opposed-trend construction, still not deterministic). Both
+    limitations are documented directly in the test file's own docstrings
+    and assertion messages, not smoothed over.
+  - **SWaT track: untouched.** `DECISIONS.md` D011/D012 and
+    `edge/eval/swat_eval.py` are unmodified; `_NullPhysicsRule` remains
+    exactly as before there, per D011 D (AttributionEngine explicitly
+    blocked for the SWaT validation track — this decision does not
+    reopen that). No SWaT experiment was run as part of D013.
+- **Affects:** `edge/anomaly/policy.py` (rewritten), `edge/anomaly/physics_rule.py`
+  (new), `edge/tests/{test_policy,test_physics_rule,test_p2_acceptance}.py`,
+  `edge/eval/swat_eval.py` (plumbing only — threads the now-fittable
+  `flag_policy` through `fit_baseline`/`build_pipeline`; no change to what
+  it reports or how it's used).
+- **Partially resolves U02:** a `PhysicsRule` now exists, even if minimal
+  and narrow — `attribution=attack` is structurally reachable for the
+  current/vibration pair where before it was unreachable everywhere.
+  ChannelFlagPolicy's own long-standing "needs multivariate per-feature
+  attribution, UNDECIDED" status (`CURRENT_STATE.md`/`TODO.md`, pre-D013) is
+  now RESOLVED (provisional) — Candidate B is a genuine non-cross-channel
+  redesign, though still heuristic and untuned.
+- **Does NOT resolve:** real physics/accuracy validation for either
+  `tail_fraction` or the trend-sign heuristic (both remain U07-gated); O3
+  (≥85% attribution accuracy) — still structurally unreachable for 4 of 6
+  channels (no rule defined for them) and only chance-level (~50–60%) for
+  current/vibration; P2-ANOM-H1/E1 (IF/threshold/normalization clean-FP and
+  oscillation — a separate, untouched root cause); P2-TRUST-H1 (`c`'s
+  rank-based noise); P2-TRUST-H2's remaining gap (now identified as `h`'s
+  GAMMA/window-budget tension, D009 — explicitly not touched by D013);
+  P2-ANOM-S1 (no adaptive/stealth injection type exists).
+- **Status:** implemented and tested (see Evidence); lint/format clean;
+  **uncommitted** as of this entry — commit pending explicit approval, per
+  the established implement → test → report → commit-on-approval sequence.
+
 ---
 
 ## UNDECIDED (must not be silently resolved — see CURRENT_STATE blockers)
@@ -251,8 +358,12 @@
   definition (UNDECIDED).
 - U02 — Fault-vs-attack physics/correlation attribution rules + thresholds (P2). **Partial:**
   channel pair (current↔vibration) + heuristic approach resolved (D010), implemented in
-  `k_correlation.py`. **Still open:** real physics validation (does the correlation hold on
-  real data; what tolerance beyond sign comparison) — requires bench data or a dataset (U07).
+  `k_correlation.py`; a minimal provisional `PhysicsRule` reusing that same heuristic now
+  exists and is wired into `AttributionEngine` (D013), unblocking `attribution=attack` for
+  that pair only. **Still open:** real physics validation (does the correlation hold on
+  real data; what tolerance beyond sign comparison) — requires bench data or a dataset (U07);
+  no rule exists for the other four channels; even for current/vibration, D013's own
+  multi-seed testing found only ~50–60% attribution reliability — not a validated capability.
 - U03 — LSTM: one shared model or two (prognosis vs digital-twin) (P3); edge stores single `lstm.pt`.
 - U04 — Digital-twin training-data source: bench-collected vs synthetic (P3).
 - U05 — `divergence_threshold` + substitution uncertainty-cap values (P3).

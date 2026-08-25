@@ -56,31 +56,53 @@
 - [ ] **Physical acquisition gate** (needs Pi/rig — DO NOT fake): <1% dropped over 10 min on real sensors; **INA219 pump-current resolved**; **physical relay safe-stop** clicks pump OFF before damage; watchdog defaults pump OFF on real process death  🔒 hardware-blocked
 
 ## P2 — Anomaly Detection + Attribution + Trust  ⚠ (no Doc06 phase; from PRD P2)
-> Hardware-free **FOUNDATIONS complete** (commits 26de8c2 … 5a1af31); actual P2 **VALIDATION NOT done**.
-> `[x]` here = scaffolding/plumbing implemented + unit/interface-tested — NOT a detection/trust/attribution accuracy claim.
+> Hardware-free **FOUNDATIONS complete** (commits 26de8c2 … 5a1af31, plus D013
+> uncommitted). Formal P2 **acceptance suite now exists and has been run** —
+> see `P2_RESUME.md` §1a for the full status matrix (6 PASS / 4 FAIL / 1 not
+> attempted). `[x]` = implemented + tested; a checked accuracy/acceptance item
+> still carries whatever caveat is written next to it — read before citing.
 
 ### Foundations (hardware-free, done)
 - [x] Preprocess: median/low-pass filter, min-max normalize, 30-sample window — `edge/anomaly/preprocess.py` (f75b9dc). Filter kernel/alpha are REQUIRED caller args (no spec value); window_size default 30 (documented).
-- [x] Multivariate Isolation Forest detector — `edge/anomaly/iforest.py` (5a1af31): single IF over flattened 180-dim 30×6 window (D-A); empirical-CDF/rank severity (D-B); `flag_threshold` a REQUIRED config param (no baked value); hyperparameters optional passthroughs. **NOT tuned/validated on real data** (dataset-gated, U07). Tests SKIP in CI until scikit-learn added to CI deps (follow-up).
-- [x] Beta-reputation trust core + per-channel engine + banding (0.7/0.4) — `edge/trust/beta.py` (26de8c2) + `edge/trust/engine.py` (9479968). λ=0.7 **PENDING U01 approval**; signal-agnostic (c/k/h supplied, not defined).
-- [x] Attribution-engine shell (none/fault/attack branch logic) + `PhysicsRule` seam — `edge/anomaly/attribution.py` (cbd7527); reuses frozen `Attribution` enum (contract unchanged); real physics rule NOT implemented (U02).
+- [x] Multivariate Isolation Forest detector — `edge/anomaly/iforest.py` (5a1af31): single IF over flattened 180-dim 30×6 window (D-A); empirical-CDF/rank severity (D-B); `flag_threshold` a REQUIRED config param (no baked value); hyperparameters optional passthroughs. **NOT tuned/validated on real data** (dataset-gated, U07; SWaT diagnostics found further tuning has limited upside — see below).
+- [x] Beta-reputation trust core + per-channel engine + banding (0.7/0.4) — `edge/trust/beta.py` (26de8c2) + `edge/trust/engine.py` (9479968). λ=0.7 **PENDING U01 approval**, UNCHANGED by D013.
+- [x] `c`/`k`/`h` signal providers — `edge/trust/{c_consistency,k_correlation,h_reliability}.py` (D009/D010; `d1e6d48`/`691847f`/`c56cb4d`). Provisional, unvalidated; `c`'s rank-based noise and `h`'s GAMMA=0.95 speed are now precisely implicated in P2-TRUST-H1/H2's failures (see below) — neither touched by D013.
+- [x] Attribution-engine shell (none/fault/attack branch logic) — `edge/anomaly/attribution.py` (cbd7527); reuses frozen `Attribution` enum (contract unchanged).
+- [x] **Minimal, provisional `PhysicsRule`** — `edge/anomaly/physics_rule.py` (new, D013, **uncommitted**): `TrendSignPhysicsRule` reuses D010's current↔vibration heuristic verbatim to unblock the `AttributionEngine` wiring path (previously fully non-functional — no rule existed at all). Narrow scope: only ever names current/vibration; empirically ~50–60% attribution reliability even there (verified via multi-seed testing, not a single lucky run).
 - [x] Synthetic §12.4 injection framework (7 hardware-free injections) — `edge/injection/` (ee730fe); magnitudes/durations REQUIRED args (no spec values); dry-run excluded (physical). Test/eval labels only, not wire.
 - [x] Hardware-free P2 pipeline orchestrator — `edge/anomaly/pipeline.py` (d1ec0da): frames→preprocess→detector→ChannelFlagPolicy→trust→attribution; internal `WindowOutcome` (no wire contract).
+- [x] **`ChannelFlagPolicy` redesigned ("Candidate B")** — `edge/anomaly/policy.py` (rewritten, D013, **uncommitted**): per-channel, own-baseline, two-sided empirical-CDF test (`fit()` on clean windows, flag if current variance is an outlier vs. that channel's own history), replacing the original same-window cross-channel high-variance rule that misdirected on spikes/constant-spoofs. Fixes P2-ANOM-H2; improves P2-TRUST-H2's flag rate 5x (13%→68%) but doesn't fully resolve it (see below).
 
-### P2 diagnostics (hardware-free, done — probes, NOT acceptance)
-- [x] IF behaviour probe on the simulator + §12.4 injections — `edge/eval/if_eval.py` (d17942f). Finding: **~21.6% clean-vs-clean FP** at the eval-fixture threshold; constant-spoof "detection" under per-window min-max is a normalization flatness artifact, not cross-sensor detection.
-- [x] Preprocessing comparison (per-window min-max vs train-fit global min-max vs z-score) — `edge/eval/preproc_experiment.py` (d17942f). Clean FP 0.216 / 0.035 / 0.041; per-window min-max washes out additive bias; global/z-score preserve it but assume stationarity.
-- [ ] **Normalization decision DEFERRED to real SWaT/WADI/TEP evaluation** (U07) — no production preprocessing change approved; FR-P1 "min-max" doesn't mandate per-window vs global.
+### P2 SWaT diagnostics (hardware-free, DIAGNOSTICALLY COMPLETE — probes, NOT acceptance)
+- [x] SWaT.A1 evaluation harness — `edge/eval/swat_eval.py` (`60a4dbe`), per D011/D012.
+- [x] Full untuned evaluation + 3-variant normalization study + 17-point threshold sweep + 4-hypothesis root-cause screen + targeted step=1/D012-signal diagnostics + IF hyperparameter grid — see `P2_RESUME.md` §3a for the complete campaign and decisive finding (**D012 signal coverage is the dominant demonstrated limitation**, not normalization/threshold/ChannelFlagPolicy/IF config).
+- [x] **Normalization decision: RESOLVED** — per-window min-max (current default) confirmed better-aligned with the PRD's own ≤3-window criteria than train-fit alternatives; not changed.
+- [x] **SWaT track declared diagnostically complete.** No further SWaT experiments/tuning planned unless explicitly requested.
 
-### P2 validation + decisions — NOT done
-- [ ] c/k/h signal definitions (consistency / cross-sensor correlation / historical reliability)  *(blocked: U01/U02)*
-- [ ] `ChannelFlagPolicy` per-channel localization from the window-level IF result  *(undecided; needs multivariate per-feature attribution — not from IF internals)*
-- [ ] Real cross-sensor physics/correlation attribution rule + tolerances + reason tag  *(blocked: U02; bench pressure = atmospheric proxy → dataset-gated)*
-- [ ] IF hyperparameter tuning + flag threshold + real clean-baseline fit  *(dataset-gated: U07; simulator validates plumbing/marginal faults only, NOT cross-sensor spoof)*
-- [ ] Add `scikit-learn` to CI deps so the IF test module runs in CI  *(follow-up)*
+### P2 formal acceptance suite (D013, first time ever run — `edge/tests/test_p2_acceptance.py`, uncommitted)
+10 of 14 Doc06 scenarios attempted (P2-ANOM-S1 excluded, see below); full matrix in `P2_RESUME.md` §1a.
+- [x] P2-ANOM-H2, P2-TRUST-E1, P2-TRUST-E2, P2-TRUST-S1 — **PASS**.
+- [x] P2-ANOM-H3, P2-ANOM-E2 — **PASS at committed seeds**, but verified only ~50–60% reliable across other seeds (documented in-test, not claimed as validated).
+- [ ] P2-ANOM-H1, P2-ANOM-E1 — **FAIL** (IF/threshold/normalization clean-FP + oscillation; U07-gated validation limitation, not missing code).
+- [ ] P2-TRUST-H1 — **FAIL** (`c`'s rank-based noise; validation limitation).
+- [ ] P2-TRUST-H2 — **FAIL** (mechanism fixed by Candidate B; remaining gap is `h`'s GAMMA/window-budget tension with D009, untouched).
+
+### P2 remaining work — split by kind (see `P2_RESUME.md` §7a for full reasoning)
+**Mandatory implementation blockers (missing code, not tuning):**
+- [ ] A broader `PhysicsRule` — current one can only ever name current/vibration; O3 (≥85%) is structurally unreachable as implemented, on any data.
+- [ ] P2-ANOM-S1 adaptive/stealth injection type — does not exist in `edge/injection/` at all.
+- [ ] Real bench hardware (Pi + rig) — pre-existing, blocks literal O2/O3/O4 regardless of any software work.
+
+**Documented validation limitations (implementation exists, accuracy/tuning is the open question):**
+- [ ] P2-ANOM-H1/E1 — IF + threshold + normalization retuning against real clean-baseline data (U07-gated).
+- [ ] P2-TRUST-H1 — `c`'s empirical-CDF-vs-own-training-distribution definition (U01, provisional) may need reconsidering, not new code.
+- [ ] P2-TRUST-H2 — `h`'s GAMMA=0.95 (D009) vs. this scenario's 3-window budget; a parameter/design-tension decision, explicitly deferred, not touched by D013.
+- [ ] P2-ANOM-H3/E2 reliability — inherent to the minimal rule's scope; closing this for real is the "broader PhysicsRule" mandatory item above, not a parameter tweak.
+
+**Unrelated to D013, still open:**
 - [ ] Authenticated scenario-injection hook (FR-A4)  *(command payload blocked: U14)*
-- [ ] Dataset evaluation on SWaT/WADI (or TEP substitute)  *(blocked: U07)*
-- [ ] Gate: no false anomaly on clean 5-min baseline; spoof trust <0.4 in ≤3 windows; attribution ≥85% (O3); O10 confusion matrix  *(NOT validated — needs U01/U02 + dataset)*
+- [ ] O10 confusion matrix / ablations on a real dataset — blocked on hardware (SWaT/WADI structurally cannot satisfy this, D011).
+- [ ] **Commit D013's code** — `edge/anomaly/{policy,physics_rule}.py`, `edge/tests/{test_policy,test_physics_rule,test_p2_acceptance}.py`, `edge/eval/swat_eval.py` plumbing update — implemented, tested, uncommitted, pending explicit approval.
 
 ## P3 — Prognosis + RL + Self-Healing + Safety  ⚠ (no Doc06 phase; from PRD P3)
 - [ ] LSTM health (Healthy/Warning/Critical) + failure-ETA on trust-weighted windows  *(blocked: U03/U04)*

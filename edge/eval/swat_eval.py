@@ -96,7 +96,7 @@ WINDOW_SIZE = 30  # documented default (Doc05 thresholds)
 STEP = WINDOW_SIZE  # non-overlapping: tractable runtime + avoids pseudo-replication
 FLAG_THRESHOLD_FIXTURE = 0.95  # eval-only; NOT a project threshold (matches if_eval.py)
 IF_RANDOM_STATE = 0  # determinism only
-VARIANCE_FACTOR_FIXTURE = 0.5  # ChannelFlagPolicy default; untuned (U07-gated)
+FLAG_POLICY_TAIL_FRACTION_FIXTURE = 0.1  # ChannelFlagPolicy default; untuned (U07-gated)
 
 # D012 — frozen six-tag plumbing/proxy mapping. Single source of truth; do not
 # duplicate this mapping elsewhere. See DECISIONS.md D012 for the evidence.
@@ -228,8 +228,11 @@ def _preprocessor() -> Preprocessor:
 
 def fit_baseline(
     normal_frames: list[TelemetryMessage],
-) -> tuple[IsolationForestDetector, ConsistencyProvider]:
-    """Fit IF + c on Normal_v1-only windows. D011 F: no Attack_v0 data here."""
+) -> tuple[IsolationForestDetector, ConsistencyProvider, SeverityThresholdFlagPolicy]:
+    """Fit IF + c + flag_policy on Normal_v1-only windows. D011 F: no
+    Attack_v0 data here. ``flag_policy`` gained its own fit() step under the
+    Candidate B ChannelFlagPolicy redesign (see edge/anomaly/policy.py) —
+    fit on the same clean-baseline windows as IF/c, same discipline."""
     fit_windows = _preprocessor().process(normal_frames)
     detector = IsolationForestDetector(
         flag_threshold=FLAG_THRESHOLD_FIXTURE, random_state=IF_RANDOM_STATE
@@ -237,11 +240,15 @@ def fit_baseline(
     detector.fit(fit_windows)
     c_provider = ConsistencyProvider()
     c_provider.fit(fit_windows)
-    return detector, c_provider
+    flag_policy = SeverityThresholdFlagPolicy(tail_fraction=FLAG_POLICY_TAIL_FRACTION_FIXTURE)
+    flag_policy.fit(fit_windows)
+    return detector, c_provider, flag_policy
 
 
 def build_pipeline(
-    detector: IsolationForestDetector, c_provider: ConsistencyProvider
+    detector: IsolationForestDetector,
+    c_provider: ConsistencyProvider,
+    flag_policy: SeverityThresholdFlagPolicy,
 ) -> P2Pipeline:
     return P2Pipeline(
         preprocessor=_preprocessor(),
@@ -251,7 +258,7 @@ def build_pipeline(
         c_provider=c_provider,
         k_provider=CorrelationProvider(),  # runs mechanically; NEVER reported (D011 C)
         h_provider=HReliabilityProvider(),
-        flag_policy=SeverityThresholdFlagPolicy(variance_factor=VARIANCE_FACTOR_FIXTURE),
+        flag_policy=flag_policy,
     )
 
 
@@ -413,10 +420,10 @@ def run_eval(data_dir: Path = DEFAULT_DATA_DIR, limit: int | None = None) -> Swa
     normal = load_swat_file(data_dir / NORMAL_FILENAME, "Normal.csv", limit=limit)
     attack = load_swat_file(data_dir / ATTACK_FILENAME, "Combined Data", limit=limit)
 
-    detector, c_provider = fit_baseline(normal.frames)
+    detector, c_provider, flag_policy = fit_baseline(normal.frames)
     fit_window_count = len(_preprocessor().process(normal.frames))
 
-    pipeline = build_pipeline(detector, c_provider)
+    pipeline = build_pipeline(detector, c_provider, flag_policy)
     combined_frames = normal.frames + attack.frames
     combined_labels = normal.labels + attack.labels
     eval_boundary = len(normal.frames)
@@ -482,7 +489,8 @@ def format_report(r: SwatEvalReport) -> str:
     lines.append("=== SWaT.A1 P2 evaluation harness (DIAGNOSTIC, NOT P2 acceptance) ===")
     lines.append(
         f"FIXTURES: window={WINDOW_SIZE} step={STEP} threshold(EVAL)={FLAG_THRESHOLD_FIXTURE} "
-        f"if_random_state={IF_RANDOM_STATE} variance_factor={VARIANCE_FACTOR_FIXTURE}"
+        f"if_random_state={IF_RANDOM_STATE} "
+        f"flag_policy_tail_fraction={FLAG_POLICY_TAIL_FRACTION_FIXTURE}"
     )
     lines.append(f"D012 mapping: {TAG_MAP}")
     lines.append("")
