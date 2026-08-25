@@ -26,6 +26,10 @@ edge/models/*.onnx
 # Recorded/replay session data (generated; can be large)
 data/replay/
 
+# Downloaded third-party datasets (e.g. SWaT.A1) — access-restricted per
+# iTrust Terms of Usage (no redistribution); never committed.
+datasets/
+
 # Broker runtime state
 infra/mosquitto/data/
 infra/mosquitto/log/
