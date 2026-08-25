@@ -44,10 +44,14 @@
   (`DECISIONS.md` D011). Conclusion: **SWaT primary, WADI fallback**, usable only
   to validate P2 *architecture/methodology* — **neither dataset contains our six
   bench channels**, neither has a motor-current+vibration pair, neither can
-  satisfy O3. **SWaT/iTrust access was REQUESTED** (Decision A approved
-  2026-08-24; a SWaT-only request was submitted externally by the user via the
-  iTrust request form) — **awaiting iTrust's response.** WADI was NOT requested
-  (held as the pre-approved fallback per D011); no dataset has been downloaded.
+  satisfy O3. **SWaT.A1 access GRANTED** (Decision A approved 2026-08-24;
+  request submitted externally by the user; response received 2026-08-25).
+  WADI was NOT requested (held as the pre-approved fallback per D011). **The
+  six-tag mapping is now SELECTED** (`DECISIONS.md` D012:
+  `LIT101→temperature, AIT203→vibration, DPIT301→pressure, LIT401→humidity,
+  AIT402→gas, PIT501→current`) — plumbing/proxy substitution only, no
+  physical-equivalence claim; `AIT402` is aqueous ORP, never to be described
+  as an ambient-gas reading. **No adapter/harness has been built yet.**
 - **Hardware availability:** NO Raspberry Pi, NO bench rig attached. All P2 work
   is hardware-free; physical gates (P0/P1/P3/P6) remain blocked.
 - **Safe to resume from this checkpoint?** **Yes.** Working tree clean; `main` and
@@ -169,7 +173,7 @@ tests pass.** Each below stays open until the stated input exists.
 | ChannelFlagPolicy (window→per-channel) | **RESOLVED (provisional)** — variance-threshold heuristic: flag channels whose in-window variance exceeds a `variance_factor`-scaled range (`edge/anomaly/policy.py`, `57d434d`; design notes in `project-state/CHANNELFLAGPOLICY_DESIGN_ANALYSIS.md`) | Implemented and wired; NOT derived from IF internals, NOT validated on real data | `variance_factor` (default 0.5) tuning on real labeled attacks (U07) |
 | IF hyperparameters + flag threshold | UNTUNED (sklearn defaults; threshold required, unset) | No documented values; simulator can't calibrate cross-sensor behaviour | Tune on real clean baseline to a real FP/detection target |
 | Normalization choice | per-window min-max (current); DEFERRED | Diagnostic favours train-fit on the simulator, but simulator is stationary/physics-free and structurally favours global | Decide on real SWaT/WADI/TEP (stationarity + operating-point drift) |
-| U07: SWaT/WADI access + TEP fallback | **Feasibility research COMPLETE**, methodology **FROZEN** (`DECISIONS.md` D011: proxy channel mapping; `k` excluded from evidence; `AttributionEngine`/O3 deferred/BLOCKED; WADI localization check rejected; strict temporal split required). **Access REQUESTED** (Decision A approved 2026-08-24; SWaT-only request submitted externally by the user; WADI NOT requested, held as fallback) — **awaiting iTrust's response.** No dataset downloaded | Methodology frozen and request submitted; iTrust's response timing/outcome is unknown | Wait for iTrust. On grant: obtain the tag dictionary, proceed per §7. On denial/excessive delay: WADI (pre-approved fallback) or TEP (separate, undecided) |
+| U07: SWaT/WADI access + TEP fallback | **Feasibility research COMPLETE**, methodology **FROZEN** (`DECISIONS.md` D011). **Access GRANTED** (SWaT.A1 obtained 2026-08-25; WADI NOT requested, held as fallback). **Six-tag mapping SELECTED** (`DECISIONS.md` D012 — see above). Adapter/harness NOT yet built | Mapping decided on empirical validation of the real files (correlation, flat-run/attack-overlap, in-attack variance); `PIT502` rejected, `AIT402` chosen over `AIT502` | Build `edge/eval/swat_eval.py` per D011 F (strict temporal split), then tune IF, revisit normalization, run acceptance tests |
 | Realistic injection magnitudes/durations | FIXTURES only | §12.4 specifies none; couples to the (undecided) detector threshold | Set against real data / detector calibration; never as project specs invented here |
 | P2 acceptance validation | NOT started | Depends on all of the above + a dataset | Run P2-ANOM-*/P2-TRUST-* + O3/O10 on real data and report honestly |
 
@@ -195,15 +199,13 @@ Steps 2–6 of the original sequence (`h`, `c`, `k`, `ChannelFlagPolicy`, pipeli
 wiring) are **DONE** — see §2/§5 and commits `c56cb4d`, `d1e6d48`, `691847f`,
 `57d434d`, `b0f0272`. U07 feasibility research (step 7's prerequisite) is also
 **DONE** (`U07_DATASET_FEASIBILITY_REPORT.md`), and **Decision A is also DONE**
-— approved 2026-08-24; a SWaT-only iTrust access request was submitted
-externally by the user the same day. What remains:
+— approved 2026-08-24, SWaT.A1 access granted 2026-08-25, and the six-tag
+mapping is now selected (`DECISIONS.md` D012). What remains:
 
-1. **Wait for iTrust's response** to the submitted SWaT access request. No
-   further action is possible on this item until a response (grant, denial, or
-   delay) arrives. Do NOT request WADI or TEP preemptively — WADI is the
-   pre-approved fallback (D011) for if SWaT is denied/delayed; TEP remains a
-   separate, undecided path. Do NOT choose the six SWaT tags (D011 B) until
-   access is actually granted and the tag dictionary is in hand.
+1. **Build `edge/eval/swat_eval.py`** implementing the six-tag relabeling
+   (D012) with the strict temporal train/eval split mandated by D011 F
+   (`Normal_v1` for fitting, `Attack_v0` for evaluation only) — not yet
+   started; requires its own explicit approval before writing code.
 2. Once a dataset (or TEP substitute) is in hand: **tune IF** hyperparameters +
    flag threshold on **real clean** data.
 3. **Revisit normalization** (per-window vs. train-fit/global vs. z-score) using

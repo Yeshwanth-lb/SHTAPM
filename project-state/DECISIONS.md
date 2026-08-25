@@ -180,6 +180,69 @@
   exist), the six-tag selection itself (blocked on the tag dictionary), and
   the WADI localization check (explicitly out of scope by E).
 
+### D012 — SWaT.A1 six-tag mapping selected for the D011-B plumbing/proxy substitution
+- **Date:** 2026-08-25
+- **Decision:** The six SWaT.A1 tags relabeled onto the frozen six channel
+  field names (D011 B) are:
+  - `LIT101` → `temperature`
+  - `AIT203` → `vibration`
+  - `DPIT301` → `pressure`
+  - `LIT401` → `humidity`
+  - `AIT402` → `gas`
+  - `PIT501` → `current`
+
+  This is **exclusively** the plumbing/proxy substitution already defined by
+  D011 B — **no claim of physical equivalence is made for any of these six
+  pairings.** In particular: **`AIT402` measures aqueous
+  Oxidation-Reduction-Potential (ORP) of the RO feed water — a dissolved
+  water-chemistry property. It is NOT an ambient-gas or air-quality sensor,
+  and must never be described as one in any report, log, or write-up.** The
+  `gas` field name is a fixed software interface slot only.
+- **Reason/evidence** (empirical, from the actual downloaded
+  `SWaT_Dataset_Normal_v1.xlsx`/`SWaT_Dataset_Attack_v0.xlsx` files, not
+  external literature):
+  - All six tags: zero null/non-numeric/negative values in both files;
+    confirmed present in both; strict temporal separation confirmed
+    (`Normal_v1` ends 2015-12-28 09:59:59, `Attack_v0` begins 2015-12-28
+    10:00:00, zero overlapping timestamps).
+  - Pairwise correlation among the six selected tags (`Normal_v1`) stays
+    below 0.5 for every pair; the closest is `LIT401`↔`PIT501` at +0.450.
+  - `PIT502` was evaluated as a `gas`-slot candidate and **rejected**: a
+    single 32,038-row exact-constant run in `Attack_v0` (7.12% of the file)
+    overlaps 58.53% of all Attack-labeled rows — a blocking data-quality
+    issue under the existing per-window min-max preprocessing (matches the
+    flatness-artifact failure mode already recorded in `P2_RESUME.md` §3).
+  - `AIT402` was chosen over runner-up `AIT502` (mutually correlated at
+    0.98): `AIT402` shows a stronger empirical attack-shift score (17.8 vs.
+    10.8), roughly double the in-attack-period variance (std 85.3 vs. 41.9
+    within Attack-labeled rows) and mean separation (101.1 vs. 46.4), and
+    remains highly dynamic (99.2% of its full value range) during the exact
+    multi-hour shutdown window that disqualified
+    `PIT502`/`FIT101`/`FIT201`/`FIT401` — none of which affects `AIT402`.
+    Both correlate only moderately with fixed `AIT203` (0.606/0.563) and are
+    otherwise clean against the other four fixed tags.
+  - Both `AIT402` and `AIT502` show substantial "near-flat" 30-sample-window
+    behavior under a tolerance-based (not exact-equality) flatness test
+    (~91% and ~74% of `Attack_v0` respectively) — this reflects the
+    slow-responding nature of chemical analyzer signals, not a
+    frozen/pinned sensor, and is a concrete instance of the
+    normalization-choice question `P2_RESUME.md` §3/§5 already defers to
+    real-data evaluation (U07) — not a new, AIT402-specific defect, and not
+    resolved by this decision; must be carried into the eventual harness
+    documentation.
+- **Affects:** the eventual `edge/eval/swat_eval.py` (not yet created — no
+  adapter has been built as part of this decision).
+- **Partially resolves D011 B:** the six-tag selection itself — the one item
+  D011 explicitly listed as outstanding — is now resolved. **D011's own
+  text is unchanged and remains fully authoritative** for every other
+  point: proxy-only framing, `k` excluded from validation evidence,
+  `AttributionEngine`/O3 deferred/blocked, WADI localization check rejected,
+  strict temporal train/eval separation mandatory.
+- **Does NOT resolve:** building the adapter/harness, running any
+  evaluation, `k`/`AttributionEngine`/O3 validation (still blocked per D011
+  C/D), or the still-open normalization-choice question the flatness
+  findings above illustrate but don't settle.
+
 ---
 
 ## UNDECIDED (must not be silently resolved — see CURRENT_STATE blockers)
@@ -195,8 +258,9 @@
 - U05 — `divergence_threshold` + substitution uncertainty-cap values (P3).
 - U06 — RL reward shaping + acceptable false-isolation rate (P3).
 - U07 — SWaT/WADI dataset access vs TEP+bench substitute (P2/P7). **Partial:**
-  validation methodology frozen (D011) once access exists. **Still open:**
-  the access-request decision itself — NOT YET APPROVED.
+  validation methodology frozen (D011); SWaT.A1 access obtained and the
+  six-tag mapping selected (D012). **Still open:** building/running the
+  evaluation harness itself.
 - U08 — Backend host for demo: on-Pi vs laptop (P0/P6).
 - U09 — Pump model + rated current (sizes INA219 shunt/relay) (P1 hardware).
 - U10 — Demo role/user count; MQTT credential/TLS scope for localhost demo (P4).
