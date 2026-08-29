@@ -102,6 +102,33 @@
 > fixed. P2-TRUST-S1's collusion resistance (the reason D009's GAMMA is
 > slow) is fully preserved. **P2-TRUST-H2 remains FAIL; O4/AC2 is NOT
 > claimed satisfied.** See §1a/§6/§7/§7a for the updated references.
+>
+> **Further updated 2026-08-30 (ninth pass — documentation-only,
+> end-of-day handoff):** P2-TRUST-H1 and P2-ANOM-H1/E1 were analyzed
+> together via read-only diagnostic replay (not committed): both share the
+> identical empirical-CDF/rank-against-fit-distribution scoring
+> architecture. `c` (TRUST-H1) behaves approximately as that architecture
+> predicts on clean data and has **no fit-corpus-size fix**. IF's severity
+> (ANOM-H1/E1) has a measurable fit-corpus-size calibration component, but
+> the rank-based design still retains a nonzero false-positive floor at any
+> threshold below 1.0 — the literal zero-false-positive wording stays
+> unachievable regardless. No code, tests, or numeric parameters were
+> changed; no new decision was created. Committed as `d28de0b` and pushed.
+> **`main`/`origin/main` are identical at `d28de0b` — this is today's clean
+> baseline.** See §1a/§7a for the updated table/bullets.
+>
+> A **P3 implementation-readiness analysis** was then performed
+> (conversation-only, nothing committed): P3 is the PRD's next phase but is
+> **not implementation-ready** — LSTM scope/data source (U03/U04), RL
+> reward shaping (U06), and divergence/uncertainty values (U05) are all
+> open; a synthetic dry-run signature would need its own new specification;
+> the deterministic RL fallback (FR-RL4) is only partially independent,
+> since the PRD's own state vector includes `health`/`failure_eta`, which
+> only the (undecided) LSTM produces. Reusable infrastructure already
+> exists: the frozen `DecisionMessage`/`RLAction` wire contract
+> (`backend/app/schemas/contracts.py`) and `RelayController.safe_off()`
+> (`edge/actuation/relay.py`, P1). **No P3 file was touched and no P3 work
+> was started.** See §10 for the full handoff and recommended order.
 
 ---
 
@@ -565,26 +592,22 @@ data or a parameter choice, not missing code:
 ## 9. Git checkpoint
 
 - **Branch:** `main`.
-- **`main` and `origin/main` are identical at `5612a2a`** ("docs: record
-  D014 physics rule scoping decision"). Verified via `git log -1 HEAD` and
-  `git log -1 origin/main`. D013 (`1c784e5`), the D013-uncommitted
-  documentation correction (`ea437c6`), the P2-ANOM-S1 feature (`b82f935`),
-  and the D014 documentation commit (`5612a2a`) are all committed and
-  pushed.
-- **Working tree (as of this update): DIRTY** — the D015 P2-TRUST-H2
-  scoping decision, documentation-only, not yet committed (pending explicit
-  approval). Expected `git status --short` for this pass:
-  ```
-   M project-state/CURRENT_STATE.md
-   M project-state/DECISIONS.md
-   M project-state/P2_RESUME.md
-   M project-state/TODO.md
-  ```
-  No `edge/` files are touched by this pass — D015 added no code.
+- **`main` and `origin/main` were identical at `d28de0b`** ("docs: clarify
+  H1 E1 rank-based validation limits") **as of the end of the 2026-08-30
+  session — this is the clean baseline for the next session to resume
+  from.** D013 (`1c784e5`), the D013-uncommitted documentation correction
+  (`ea437c6`), the P2-ANOM-S1 feature (`b82f935`), the D014 documentation
+  commit (`5612a2a`), the D015 documentation commit (`3a1be08`), and the
+  H1/E1 documentation commit (`d28de0b`) are all committed and pushed.
+  **This end-of-day handoff pass (§10) is documentation-only and, once
+  written, will itself be the next thing pending commit/push approval** —
+  check `git status`/`git log -1 origin/main` before assuming which of the
+  two is current.
 - **CI status:** last known green at `4d8a281` (pre-SWaT-harness); not
-  independently re-verified against `5612a2a` or the current uncommitted
-  diff in this session.
-- **Latest commits on `main` (newest first):**
+  independently re-verified against `d28de0b` or this handoff diff.
+- **Latest commits on `main` (newest first, before this handoff pass):**
+  - `d28de0b` docs: clarify H1 E1 rank-based validation limits
+  - `3a1be08` docs: record D015 trust H2 structural limitation
   - `5612a2a` docs: record D014 physics rule scoping decision
   - `b82f935` feat: add AdaptiveStealthFDI injection (P2-ANOM-S1)
   - `ea437c6` docs: correct D013 project state documentation
@@ -617,10 +640,11 @@ data or a parameter choice, not missing code:
   - `f75b9dc` P2: anomaly-detection foundation
   - `ee730fe` P2: synthetic injection framework
   - `26de8c2` P2: Beta trust foundation
-- **Push status:** **All commits through `5612a2a` are pushed** — `main` and
-  `origin/main` both point to `5612a2a` (verified 2026-08-30). The D015
-  documentation diff above is local-only and uncommitted; do not push it
-  without explicit approval.
+- **Push status:** **All commits through `d28de0b` are pushed** — `main` and
+  `origin/main` both point to `d28de0b` (verified 2026-08-30, end of
+  session). This end-of-day handoff pass (§10) is local-only and
+  uncommitted as of writing it; do not commit or push it without explicit
+  approval.
 - **External state (not tracked by git):** a SWaT-only iTrust dataset-access
   request was submitted externally by the user on 2026-08-24, directly via the
   iTrust request form (outside this repo/session — no request/reference ID was
@@ -629,3 +653,58 @@ data or a parameter choice, not missing code:
   TEP remains a separate, undecided alternative — it must NOT be silently
   substituted for SWaT if the response is slow or unfavorable; that would need
   its own explicit decision.
+
+## 10. End-of-day handoff (2026-08-30) — P2 hardware-free complete; P3 analyzed, NOT started
+
+**Read this section first if resuming after today.**
+
+**P2 status:** Hardware-free P2 has **no remaining mandatory software
+implementation** — confirmed against `P2_RESUME.md` §7a's own "Mandatory
+implementation blockers" list, which now contains exactly one entry: real
+bench hardware. This is **not** a claim that P2 is fully hardware-validated
+or that every PRD acceptance criterion is met. Remaining P2 gaps are each
+one of: hardware/data-blocked (O2/O3/O4/O10, real bench validation),
+decision-required (λ=0.7 sign-off, `c`'s redefinition, FR-A4's payload),
+optional (the unimplemented ANOM-H1/E1 fit-corpus-size improvement), or a
+documented limitation (P2-TRUST-H1/H2, P2-ANOM-H1/E1/H3/E2) — never an
+ordinary bug awaiting more coding. Full detail: §1a, §6, §7, §7a.
+
+**Baseline:** `d28de0b` — `main` and `origin/main` identical, working tree
+clean, as of the end of this session (see §9).
+
+**P3:** A read-only implementation-readiness analysis was performed this
+session (conversation-only; nothing committed, no files touched). Findings:
+- P3 (Prognosis/RL/Self-Healing/Safety) is the PRD's next phase (§23 build
+  order) but is **not implementation-ready as a whole**.
+- Open decisions block most of it: **U03/U04** (LSTM: one model or two;
+  bench vs. synthetic training data), **U06** (RL reward shaping), **U05**
+  (`divergence_threshold` + substitution uncertainty-cap — a real Doc05
+  schema column with no default). A synthetic dry-run signature (for
+  FR-R2) would need an entirely new specification, not yet scoped.
+- The deterministic RL fallback (FR-RL4) is **only partially independent**:
+  its decision logic could be drafted hardware-free now, but the PRD's own
+  FR-RL1 state vector includes `health`/`failure_eta`, which only the
+  (undecided) LSTM produces — so a PRD-faithful, fully-tested fallback
+  still depends on the LSTM task.
+- Reusable infrastructure already exists and needs no new work: the frozen
+  `DecisionMessage`/`RLAction` wire contract
+  (`backend/app/schemas/contracts.py`) already defines P3's exact output
+  shape (`health`, `failure_eta`, `rl_action`, `isolated`, `substituted`),
+  and `RelayController.safe_off()` (`edge/actuation/relay.py`, P1) is a
+  working, hardware-free-testable Safe-Stop action any P3 decision layer
+  can call.
+- Recommended eventual order, **not authorization to start**: (1) resolve
+  U03/U04, (2) scope the rule-fallback decision logic if authorized, (3)
+  implement LSTM, (4) wire self-heal/isolation, (5) resolve U06 and
+  implement DQN + integrate the fallback, (6) resolve U05 and implement
+  substitution/divergence, (7) scope the synthetic dry-run signature, (8)
+  hardware-gated validation last.
+- **No P3 file was created or modified. No P3 code exists in this repo.**
+
+**Next session's first action should NOT be assumed to be coding.** Read
+`P2_RESUME.md`, `CURRENT_STATE.md`, `TODO.md`, `DECISIONS.md` first, then
+ask the user explicitly whether to: formally enter P3 (starting with
+U03/U04), resolve one of the standing P2 decision-required items (λ, `c`,
+FR-A4), or do something else. Do not default to P3 implementation, and do
+not create a new decision (D016+) without the same explicit
+propose-then-approve sequence used for D014/D015.

@@ -56,19 +56,23 @@
 - [ ] **Physical acquisition gate** (needs Pi/rig — DO NOT fake): <1% dropped over 10 min on real sensors; **INA219 pump-current resolved**; **physical relay safe-stop** clicks pump OFF before damage; watchdog defaults pump OFF on real process death  🔒 hardware-blocked
 
 ## P2 — Anomaly Detection + Attribution + Trust  ⚠ (no Doc06 phase; from PRD P2)
-> Hardware-free **FOUNDATIONS complete** (commits 26de8c2 … 5a1af31, D013 at
-> `1c784e5`, and the P2-ANOM-S1 `AdaptiveStealthFDI` addition at `b82f935` —
-> all **committed and pushed**, verified 2026-08-30; `main`/`origin/main` are
-> identical at `b82f935`). Formal P2 **acceptance suite now exists and has
-> been run** — see `P2_RESUME.md` §1a for the full status matrix (7 PASS /
-> 4 FAIL, 11/14 Doc06 scenarios attempted). The broader-`PhysicsRule` scoping
-> decision is recorded as **`DECISIONS.md` D014** (2026-08-30, documentation-
-> only): no new channel coverage added. The P2-TRUST-H2 root cause is
-> recorded as **`DECISIONS.md` D015** (2026-08-30, documentation-only): a
-> joint D009/D010 structural limitation, both left unchanged, H2 still FAIL.
-> See the P2 remaining-work section below. `[x]` = implemented + tested; a
-> checked accuracy/acceptance item
-> still carries whatever caveat is written next to it — read before citing.
+> **Hardware-free P2 has NO remaining mandatory software implementation**
+> as of `d28de0b` (2026-08-30, end-of-day baseline — `main`/`origin/main`
+> identical, working tree clean; see `P2_RESUME.md` §10 for the full
+> handoff). Foundations complete (commits 26de8c2 … 5a1af31, D013 at
+> `1c784e5`, P2-ANOM-S1 `AdaptiveStealthFDI` at `b82f935`). Formal P2
+> **acceptance suite exists and has been run** — see `P2_RESUME.md` §1a for
+> the full status matrix (7 PASS / 4 FAIL, 11/14 Doc06 scenarios attempted).
+> The broader-`PhysicsRule` scoping decision is **`DECISIONS.md` D014**: no
+> new channel coverage added. P2-TRUST-H2's root cause is **`DECISIONS.md`
+> D015**: a joint D009/D010 structural limitation, both left unchanged, H2
+> still FAIL. P2-TRUST-H1/P2-ANOM-H1/E1 share one rank-based-scoring root
+> cause (documented `d28de0b`, no D016 created) — see `P2_RESUME.md` §7a.
+> All 4 remaining FAILs are hardware/data-blocked or decision-required
+> documented limitations, not missing code. See the P2 remaining-work
+> section below. `[x]` = implemented + tested; a checked accuracy/acceptance
+> item still carries whatever caveat is written next to it — read before
+> citing.
 
 ### Foundations (hardware-free, done)
 - [x] Preprocess: median/low-pass filter, min-max normalize, 30-sample window — `edge/anomaly/preprocess.py` (f75b9dc). Filter kernel/alpha are REQUIRED caller args (no spec value); window_size default 30 (documented).
@@ -120,6 +124,16 @@ the committed fixture seed/parameters only, not multi-seed stress-tested.
 - [ ] O10 confusion matrix / ablations on a real dataset — blocked on hardware (SWaT/WADI structurally cannot satisfy this, D011).
 
 ## P3 — Prognosis + RL + Self-Healing + Safety  ⚠ (no Doc06 phase; from PRD P3)
+> **Readiness analysis performed 2026-08-30 (conversation-only, no files
+> touched, no P3 work started)** — see `P2_RESUME.md` §10. P3 is next per
+> the PRD build order but is NOT implementation-ready as a whole: LSTM
+> (U03/U04), RL reward shaping (U06), and divergence/uncertainty (U05) are
+> all open decisions; a synthetic dry-run signature needs its own new
+> spec; the rule-based fallback is only partially independent (its PRD
+> state vector needs LSTM's `health`/`failure_eta`). Reusable now: the
+> frozen `DecisionMessage`/`RLAction` contract and
+> `RelayController.safe_off()` (P1). **Do not start P3 without explicit
+> direction.**
 - [ ] LSTM health (Healthy/Warning/Critical) + failure-ETA on trust-weighted windows  *(blocked: U03/U04)*
 - [ ] DQN over state `[health, anomaly_flag, T1..T6, failure_eta]` + reward  *(blocked: U06)*
 - [ ] Deterministic rule-based RL fallback (fail-safe)

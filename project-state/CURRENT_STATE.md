@@ -4,14 +4,19 @@
 > `DECISIONS.md`, `TODO.md`, `IMPLEMENTATION_LOG.md`. Authoritative product spec
 > lives in `../CLAUDE.md` and `../docs/` — not duplicated here.
 
-**Last updated:** 2026-08-30 (P2 sections refreshed: the P2-ANOM-S1
-`AdaptiveStealthFDI` addition is now committed and pushed — `main`/
-`origin/main` are identical at `b82f935` — the broader-`PhysicsRule`
-scoping decision is recorded as `DECISIONS.md` D014, and the P2-TRUST-H2
-root-cause scoping decision is recorded as `DECISIONS.md` D015, both
-documentation-only, no new code. See `DECISIONS.md` D013/D014/D015 and
-`P2_RESUME.md` §1a/§3a/§7a/§9 for full detail; this file gives the short
-version. P0/P1 sections below are unchanged and still accurate as of
+**Last updated:** 2026-08-30, end of session — **`d28de0b` is the clean
+baseline** (`main`/`origin/main` identical, working tree clean). Today's
+work: P2-ANOM-S1 (`b82f935`), the broader-`PhysicsRule` scoping decision
+(`DECISIONS.md` D014, `5612a2a`), the P2-TRUST-H2 structural-limitation
+decision (`DECISIONS.md` D015, `3a1be08`), and the P2-TRUST-H1/P2-ANOM-H1/E1
+shared-root-cause documentation (`d28de0b`, no new decision created) —
+**hardware-free P2 has no remaining mandatory software implementation** as
+a result (see `P2_RESUME.md` §10 for the full handoff). A P3
+implementation-readiness analysis was also performed (conversation-only,
+nothing committed, **P3 work has NOT started**) — see `P2_RESUME.md` §10
+and `TODO.md`'s P3 section. See `DECISIONS.md` D013/D014/D015 and
+`P2_RESUME.md` §1a/§3a/§7a/§9/§10 for full detail; this file gives the
+short version. P0/P1 sections below are unchanged and still accurate as of
 2026-08-10.)
 
 ---
@@ -190,15 +195,21 @@ Diagnostic-only tooling under `edge/eval/` (not on pytest `testpaths`, not in th
   (P2-ANOM-H1/E1) — see `P2_RESUME.md` §7a.
 
 ## Next
-- Decide, per `P2_RESUME.md` §7a, whether to address the remaining `c`/IF
-  validation limitations (P2-TRUST-H1, P2-ANOM-H1/E1) — each still needs
-  its own explicit scoping/approval before further code changes, since they
-  touch already-approved decisions (U01's `c`) or U07-gated data.
-  P2-TRUST-H2 is no longer an open scoping question — D015 formally closed
-  it (documented limitation, D009/D010 unchanged). Otherwise, P2 work is
-  blocked on real bench hardware (also the only path that could unblock
-  D014's deferred current↔temperature candidate). λ=0.7 (U01) remains
-  PENDING, unrelated to D013/D014/D015.
+**Not assumed to be coding — read `P2_RESUME.md` §10 first.** Hardware-free
+P2 has no remaining mandatory software implementation (its 4 documented
+FAILs are all hardware/data-blocked or decision-required limitations, not
+missing code — none are fixable by more coding without either real bench
+data or a new specification decision touching `c`, `k`'s non-paired
+default, or GAMMA). The next session should explicitly ask the user
+whether to: (a) formally enter **P3** (start by resolving U03/U04 — see
+`TODO.md`'s P3 section and `P2_RESUME.md` §10; **P3 has NOT been started**,
+only analyzed), (b) resolve one of the standing P2 decision-required items
+(λ=0.7 sign-off/U01, `c`'s redefinition, FR-A4's payload/U14), or (c)
+something else entirely. Do not default to P3 implementation, and do not
+create a new decision (D016+) without the same propose-then-approve
+sequence used for D014/D015. P2 work otherwise remains blocked on real
+bench hardware (also the only path that could unblock D014's deferred
+current↔temperature candidate).
 
 ## Environment gates (honest — sandbox limits, not code failures)
 - **Docker image builds** (backend `pip`, frontend `npm`) fail cert-verify inside the build (gateway MITMs TLS; base images lack its CA). So the full four-service `up` can't be built here. Dockerfiles are standard/correct — no insecure workarounds added; they build on CI / a normal machine (frontend build already green in CI).
