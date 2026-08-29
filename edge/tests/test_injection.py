@@ -12,6 +12,7 @@ from app.schemas.contracts import CHANNELS
 from edge.injection import (
     ATTACK_TYPES,
     FAULT_TYPES,
+    AdaptiveStealthFDI,
     BiasFDI,
     ConstantSpoof,
     Drift,
@@ -137,6 +138,41 @@ def test_constant_spoof_flatlines_channel():
     assert got[1] != got[2]  # unchanged before the window
 
 
+def test_adaptive_stealth_fdi_ramps_then_caps():
+    frames = _stream(8, step=0.0)  # constant clean value so offsets are exact
+    rate = 2.0  # TEST FIXTURE ONLY
+    cap = 3.0  # TEST FIXTURE ONLY
+    res = AdaptiveStealthFDI(
+        channel="current", onset=1, duration=6, rate=rate, residual_cap=cap
+    ).apply(frames)
+    got = _col(res.frames, "current")
+    clean = _col(frames, "current")
+    # step 1: raw_offset = 2.0 (< cap) -> uncapped
+    assert got[1] == pytest.approx(clean[1] + 2.0)
+    # step 2: raw_offset = 4.0 (> cap) -> capped at 3.0
+    assert got[2] == pytest.approx(clean[2] + cap)
+    # remaining active steps: still capped at 3.0 (held, never exceeds the bound)
+    for i in (3, 4, 5, 6):
+        assert got[i] == pytest.approx(clean[i] + cap)
+    assert got[0] == clean[0] and got[7] == clean[7]  # outside the window: untouched
+
+
+def test_adaptive_stealth_fdi_negative_rate_caps_on_the_negative_side():
+    frames = _stream(5, step=0.0)
+    res = AdaptiveStealthFDI(
+        channel="gas", onset=0, duration=4, rate=-10.0, residual_cap=1.0
+    ).apply(frames)
+    got = _col(res.frames, "gas")
+    clean = _col(frames, "gas")
+    for i in range(4):
+        assert got[i] == pytest.approx(clean[i] - 1.0)  # capped at -residual_cap
+
+
+def test_adaptive_stealth_fdi_rejects_nonpositive_residual_cap():
+    with pytest.raises(ValueError):
+        AdaptiveStealthFDI(channel="current", onset=0, duration=1, rate=1.0, residual_cap=0.0)
+
+
 # --- cross-cutting semantics -------------------------------------------------
 
 
@@ -184,10 +220,24 @@ def test_kind_grouping_matches_taxonomy():
         InjectionType.RAMP_FDI,
         InjectionType.REPLAY,
         InjectionType.CONSTANT_SPOOF,
+        InjectionType.ADAPTIVE_STEALTH_FDI,
     }
     assert not (FAULT_TYPES & ATTACK_TYPES)
     # dry-run is intentionally absent (physical, hardware-gated)
     assert "dry_run" not in {t.value for t in InjectionType}
+
+
+def test_adaptive_stealth_fdi_labels_mark_active_window_and_kind():
+    frames = _stream(6, step=0.0)
+    res = AdaptiveStealthFDI(
+        channel="current", onset=2, duration=2, rate=1.0, residual_cap=1.0
+    ).apply(frames)
+    active = [lab.index for lab in res.labels if lab.active]
+    assert active == [2, 3]
+    for lab in res.labels:
+        assert lab.channel == "current"
+        assert lab.injection_type is InjectionType.ADAPTIVE_STEALTH_FDI
+        assert lab.kind is Kind.ATTACK
 
 
 # --- validation --------------------------------------------------------------

@@ -12,6 +12,12 @@ contract is preserved and only the targeted channel changes.
 No magnitude/duration/threshold is baked in — §12.4 specifies none, so callers
 must supply them. The fault-vs-attack grouping (``Kind``) is the documented
 §12.4 taxonomy, not a physics claim.
+
+8th injection (P2-ANOM-S1, added after the original 7): ``AdaptiveStealthFDI``,
+an attack whose bias ramps up but is capped at a caller-chosen ``residual_cap``
+instead of growing unboundedly like ``Drift``/``RampFDI`` — modelling an
+adversary who caps its own injected bias to stay under a fixed/naive per-sample
+detection threshold, rather than a specific physics/detector claim.
 """
 
 from __future__ import annotations
@@ -32,7 +38,11 @@ class Kind(str, Enum):
 
 
 class InjectionType(str, Enum):
-    """The 7 hardware-free §12.4 injection types (dry-run excluded — physical)."""
+    """The 8 hardware-free §12.4 injection types (dry-run excluded — physical).
+
+    ``ADAPTIVE_STEALTH_FDI`` (P2-ANOM-S1) was added after the original 7 to
+    cover the PRD's "adaptive stealth FDI (stays under naive residual)" test
+    case, which had no injection type at all until this addition."""
 
     DRIFT = "drift"
     SPIKE = "spike"
@@ -41,6 +51,7 @@ class InjectionType(str, Enum):
     RAMP_FDI = "ramp_fdi"
     REPLAY = "replay"
     CONSTANT_SPOOF = "constant_spoof"
+    ADAPTIVE_STEALTH_FDI = "adaptive_stealth_fdi"
 
 
 FAULT_TYPES: frozenset[InjectionType] = frozenset(
@@ -52,6 +63,7 @@ ATTACK_TYPES: frozenset[InjectionType] = frozenset(
         InjectionType.RAMP_FDI,
         InjectionType.REPLAY,
         InjectionType.CONSTANT_SPOOF,
+        InjectionType.ADAPTIVE_STEALTH_FDI,
     }
 )
 
@@ -269,3 +281,39 @@ class ConstantSpoof(Injection):
 
     def _value(self, i: int, frames: list[TelemetryMessage]) -> float:
         return self.value
+
+
+@dataclass(frozen=True)
+class AdaptiveStealthFDI(Injection):
+    """Adaptive stealth false-data-injection (attack, P2-ANOM-S1): a bias that
+    grows at ``rate`` per active sample but is capped at +/- ``residual_cap``,
+    so its per-sample deviation from the clean value never exceeds that bound
+    for the rest of the window. This models an adversary who adapts its own
+    injected bias to stay under a fixed/naive per-sample residual-threshold
+    check, unlike ``Drift``/``RampFDI`` (unbounded growth -- both eventually
+    exceed any fixed bound given enough duration) or ``BiasFDI``/
+    ``ConstantSpoof`` (an instant, uncapped jump).
+
+    Both ``rate`` (uncapped per-sample growth) and ``residual_cap`` (the
+    bound being evaded) are required caller values -- no spec default, same
+    discipline as every other injection here. Whether a real naive detector
+    would actually use this exact bound, and whether the wider pipeline still
+    catches the capped attack, are evaluation questions for the caller/tests,
+    not something this transform decides."""
+
+    injection_type: ClassVar[InjectionType] = InjectionType.ADAPTIVE_STEALTH_FDI
+    kind: ClassVar[Kind] = Kind.ATTACK
+
+    rate: float
+    residual_cap: float
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if self.residual_cap <= 0:
+            raise ValueError(f"residual_cap must be > 0, got {self.residual_cap}")
+
+    def _value(self, i: int, frames: list[TelemetryMessage]) -> float:
+        step = i - self.onset + 1  # 1-based, same convention as Drift/RampFDI
+        raw_offset = self.rate * step
+        capped_offset = max(min(raw_offset, self.residual_cap), -self.residual_cap)
+        return _channel_value(frames[i], self.channel) + capped_offset

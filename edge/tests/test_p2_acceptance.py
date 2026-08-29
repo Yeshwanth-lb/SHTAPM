@@ -5,10 +5,9 @@ SeverityThresholdFlagPolicy, ConsistencyProvider, CorrelationProvider,
 HReliabilityProvider, TrustEngine, AttributionEngine, P2Pipeline -- over
 synthetic hardware-free simulator streams built from the real
 ``edge.injection`` fixtures, and asserts DIRECTLY against the PRD's literal
-Doc06 acceptance wording for the scenarios that do not require a
-ChannelFlagPolicy change or a new injection type:
+Doc06 acceptance wording for 11 of the 14 P2-PRE/ANOM/TRUST scenarios:
 
-    P2-ANOM-H1, P2-ANOM-H2, P2-ANOM-E1, P2-ANOM-H3, P2-ANOM-E2
+    P2-ANOM-H1, P2-ANOM-H2, P2-ANOM-E1, P2-ANOM-H3, P2-ANOM-E2, P2-ANOM-S1
     P2-TRUST-H1, P2-TRUST-H2, P2-TRUST-E1, P2-TRUST-E2, P2-TRUST-S1
 
 ``ChannelFlagPolicy`` is the Candidate B redesign (edge/anomaly/policy.py):
@@ -38,15 +37,30 @@ unrelated to the spoof itself. The committed seed below happens to land on
 'attack'; this is reported honestly as a chance outcome, not a validated
 capability -- see the test's own docstring.
 
-Explicitly NOT attempted here:
-    P2-ANOM-S1  -- no adaptive/stealth injection type exists yet.
+P2-ANOM-S1 (adaptive stealth FDI) uses the new ``AdaptiveStealthFDI`` injection
+(edge/injection/injections.py): a bias that ramps up but is CAPPED at a
+caller-chosen ``residual_cap``, unlike ``Drift``/``RampFDI`` (unbounded growth)
+or ``BiasFDI``/``ConstantSpoof`` (instant jump). This exploits a genuine,
+pre-existing property of the REAL, UNMODIFIED ``ConsistencyProvider`` (``c``):
+it computes an RMS z-score against the FITTED clean-baseline mean/std over
+every sample in the window, so a small bias that is present in ALL 30 samples
+of a window pushes ``c`` hard even though the same bias is invisible to a raw
+per-sample threshold check (it is capped below it) and does not raise a
+window's internal VARIANCE (the statistic ``ChannelFlagPolicy``/the IF's
+window-level flag react to) once the ramp has settled into a held constant.
+This is the actual, load-bearing contrast behind the PRD's "stays under naive
+residual... trust/correlation still degrades" wording -- it emerges from
+``c``'s existing math, nothing new was invented for it. No production
+detection code was touched to make this true; see the test itself.
 
 No production code beyond ChannelFlagPolicy/TrendSignPhysicsRule (both
-explicitly requested) is modified. D011/D012 are untouched; this file has no
-dependency on the SWaT/D011 track at all. Normalization (per-window min-max,
-current production default) and IF hyperparameters/threshold are NOT
-changed -- the existing 0.95 flag_threshold fixture (already used in
-edge/eval/if_eval.py and edge/eval/swat_eval.py) is reused as-is.
+explicitly requested in an earlier pass) and the new AdaptiveStealthFDI
+injection type is modified. D009/D010/D011/D012/D013 are untouched; this file
+has no dependency on the SWaT/D011 track at all. Normalization (per-window
+min-max, current production default), IF hyperparameters/threshold, and
+ChannelFlagPolicy/PhysicsRule behavior are NOT changed -- the existing 0.95
+flag_threshold fixture (already used in edge/eval/if_eval.py and
+edge/eval/swat_eval.py) is reused as-is.
 
 Every injection magnitude/duration/baseline value below is a TEST FIXTURE
 ONLY -- arbitrary but reasoned, fixed before running, and never tuned
@@ -68,7 +82,14 @@ from edge.anomaly.physics_rule import TrendSignPhysicsRule
 from edge.anomaly.pipeline import P2Pipeline, WindowOutcome
 from edge.anomaly.policy import SeverityThresholdFlagPolicy
 from edge.anomaly.preprocess import Preprocessor, Window
-from edge.injection.injections import BiasFDI, ConstantSpoof, Drift, RampFDI, Spike
+from edge.injection.injections import (
+    AdaptiveStealthFDI,
+    BiasFDI,
+    ConstantSpoof,
+    Drift,
+    RampFDI,
+    Spike,
+)
 from edge.trust.beta import MALICIOUS_MAX, TRUSTED_MIN
 from edge.trust.c_consistency import ConsistencyProvider
 from edge.trust.engine import TrustEngine
@@ -436,6 +457,91 @@ def test_p2_anom_e2_simultaneous_fault_and_attack_attributed_independently():
         "the trend disagreement is still partly noise-dependent at the "
         "earliest flagged window (verified: attack-attributed in 3/5 seeds) "
         "-- not a fully deterministic guarantee of this minimal rule."
+    )
+
+
+# ===========================================================================
+# P2-ANOM-S1 -- Sad: Adaptive stealth FDI (stays under naive residual) ->
+# Trust/correlation still degrades; caught or flagged suspicious
+#
+# Uses the new AdaptiveStealthFDI injection (edge/injection/injections.py):
+# the bias ramps from 0 up to `residual_cap` over the first few active
+# samples, then HOLDS there for the rest of the injection -- it never exceeds
+# `residual_cap` in absolute deviation from the clean value, by construction.
+# `NAIVE_RESIDUAL_BOUND_FIXTURE` below is a test-local stand-in for a naive,
+# fixed-threshold residual check (NOT any real production component) chosen
+# with a safety margin above `residual_cap` + the channel's own ambient noise,
+# so the premise ("this injection is genuinely invisible to that naive check")
+# is verified directly against the actual generated samples, not assumed.
+#
+# Channel: 'humidity' -- deliberately not reused from any other P2-ANOM/TRUST
+# scenario above, and outside the current<->vibration pair (D010), so this
+# result has no dependency on TrendSignPhysicsRule/k at all; k defaults to
+# 1.0 for humidity (edge/trust/k_correlation.py) and is not exercised here in
+# any interesting way. The real, unmodified P2Pipeline is used unchanged.
+# ===========================================================================
+
+
+def test_p2_anom_s1_adaptive_stealth_fdi_evades_naive_residual_but_trust_degrades():
+    channel = "humidity"
+    onset = 60
+    duration = 150
+    residual_cap = 3 * _NOISE_AMPLITUDE[channel]  # TEST FIXTURE ONLY
+    rate = residual_cap / 10  # reaches the cap ~10 samples into the injection
+    # A naive fixed-threshold check calibrated with headroom above the cap
+    # plus the channel's own ambient noise -- TEST FIXTURE ONLY, not a
+    # production detector. Chosen with an explicit safety margin so the
+    # premise below is not a near-miss.
+    naive_residual_bound = 5 * _NOISE_AMPLITUDE[channel]
+
+    clean = _clean_stream(onset + duration + 20, seed=40)
+    result = AdaptiveStealthFDI(
+        channel=channel, onset=onset, duration=duration, rate=rate, residual_cap=residual_cap
+    ).apply(clean)
+
+    # --- Premise: the injection genuinely stays under the naive bound -------
+    active_residuals = [
+        abs(float(getattr(f.sensors, channel)) - _BASELINE[channel])
+        for f, lab in zip(result.frames, result.labels, strict=True)
+        if lab.active
+    ]
+    assert active_residuals, "test setup invalid: no active injected samples found"
+    assert max(active_residuals) <= naive_residual_bound, (
+        "Test setup invalid: the injection itself exceeds the naive residual "
+        f"bound (max observed={max(active_residuals):.4f} > "
+        f"{naive_residual_bound:.4f}) -- it would not be 'stealth' at all, "
+        "and the result below could not be interpreted as evidence of "
+        "anything."
+    )
+
+    # --- Real, unmodified pipeline ------------------------------------------
+    pipe = _build_pipeline(_BASELINE_FIT)
+    outcomes = pipe.process(result.frames)
+
+    ref = _reference_window_index(outcomes, onset)
+    trust_after = [o.trust[channel].trust for o in outcomes[ref:]]
+    min_trust = min(trust_after)
+    first_degraded = next((i for i, t in enumerate(trust_after) if t < TRUSTED_MIN), None)
+
+    assert first_degraded is not None, (
+        "P2-ANOM-S1 FAILS: trust for a channel under an adaptive-stealth FDI "
+        f"(capped at {residual_cap:.4f}, provably under the naive residual "
+        f"bound of {naive_residual_bound:.4f}) never dropped below "
+        f"{TRUSTED_MIN} across {len(trust_after)} post-onset windows "
+        f"(min observed={min_trust:.4f}). A naive per-sample residual check "
+        "would have missed this attack entirely by construction, so if "
+        "trust also never reacts, the trust engine provides no additional "
+        "protection here."
+    )
+    # Reported, not asserted on: whether the (separately fragile, U07-gated)
+    # window-level IF/ChannelFlagPolicy mechanism ever also fires. This test
+    # intentionally does not depend on that -- see module docstring for why
+    # `c` alone is expected to carry this scenario.
+    any_channel_flagged = any(o.channel_flags[channel] for o in outcomes[ref:])
+    print(
+        f"[P2-ANOM-S1 info] min_trust={min_trust:.4f} "
+        f"first_degraded_at_window={first_degraded} "
+        f"channel_flags_ever_true={any_channel_flagged}"
     )
 
 

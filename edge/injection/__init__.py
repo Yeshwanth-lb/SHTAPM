@@ -4,9 +4,11 @@ Post-generation stream transforms that stamp a labelled fault or attack onto a
 clean :class:`~app.schemas.contracts.TelemetryMessage` stream, for exercising
 the P2 anomaly/trust/attribution pipeline WITHOUT hardware or a real dataset.
 
-Scope (7 hardware-free §12.4 injections only):
+Scope (8 hardware-free §12.4 injections):
   faults  : gradual drift, sudden spike, stuck-at
-  attacks : bias FDI, ramp FDI, replay, constant-value spoof
+  attacks : bias FDI, ramp FDI, replay, constant-value spoof,
+            adaptive stealth FDI (P2-ANOM-S1; bias capped below a caller-
+            chosen bound instead of growing unboundedly)
 
 NOT here (deliberate):
   * ``dry-run`` — §12.4 marks it physical; stays hardware/rig-gated (P3-SAFE).
@@ -22,6 +24,7 @@ is a required caller argument. The frozen telemetry wire contract is untouched
 from edge.injection.injections import (
     ATTACK_TYPES,
     FAULT_TYPES,
+    AdaptiveStealthFDI,
     BiasFDI,
     ConstantSpoof,
     Drift,
@@ -39,6 +42,7 @@ from edge.injection.injections import (
 __all__ = [
     "ATTACK_TYPES",
     "FAULT_TYPES",
+    "AdaptiveStealthFDI",
     "BiasFDI",
     "ConstantSpoof",
     "Drift",
