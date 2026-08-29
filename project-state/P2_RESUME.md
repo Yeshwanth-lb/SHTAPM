@@ -87,6 +87,21 @@
 > code was changed by D014; `TrendSignPhysicsRule` (D013) is untouched.
 > **O3 remains explicitly NOT ACHIEVABLE** — unchanged by this decision. See
 > §5/§7/§7a for the updated references.
+>
+> **Further updated 2026-08-30 (eighth pass — documentation-only, D015):**
+> P2-TRUST-H2's root cause was re-analyzed via read-only diagnostic replay
+> (not committed) and is now recorded as **`DECISIONS.md` D015**. Finding:
+> the gap is NOT primarily `h`'s GAMMA speed — `ConstantSpoof`'s flat trend
+> leaves `k=1.0` (D010's non-paired-channel default, compounded by a
+> documented flat-trend blind spot in the trend-sign rule) the whole time,
+> structurally flooring `g` at 0.3 independent of `h`. Diagnostic replay
+> confirmed a hypothetically-instant `h` collapse (GAMMA removed entirely)
+> still misses the 3-window budget (crosses 0.4 at window 5, not 3) — GAMMA
+> alone cannot close this gap. **D009 and D010 both remain unchanged
+> (Option A)**: H2 is formally documented as a structural limitation, not
+> fixed. P2-TRUST-S1's collusion resistance (the reason D009's GAMMA is
+> slow) is fully preserved. **P2-TRUST-H2 remains FAIL; O4/AC2 is NOT
+> claimed satisfied.** See §1a/§6/§7/§7a for the updated references.
 
 ---
 
@@ -136,12 +151,13 @@
   is hardware-free; physical gates (P0/P1/P3/P6) remain blocked.
 - **Safe to resume from this checkpoint?** **Partially.** D013's code
   (Candidate B `ChannelFlagPolicy`, minimal `TrendSignPhysicsRule`, the
-  original `test_p2_acceptance.py` suite) and the 2026-08-29 P2-ANOM-S1
-  addition (`AdaptiveStealthFDI` + its acceptance test) **are both committed
-  and pushed** — `main` and `origin/main` are identical at `b82f935`
-  (verified 2026-08-30). D014 (the broader-`PhysicsRule` scoping decision,
-  §7/§7a) is documentation-only and carries no code. Check `git status`
-  before any further work, since it should currently be clean.
+  original `test_p2_acceptance.py` suite), the 2026-08-29 P2-ANOM-S1
+  addition (`AdaptiveStealthFDI` + its acceptance test), and D014 (the
+  broader-`PhysicsRule` scoping decision, documentation-only) **are all
+  committed and pushed** — `main` and `origin/main` are identical at
+  `5612a2a` (verified 2026-08-30). D015 (the P2-TRUST-H2 scoping decision,
+  §1a/§6/§7/§7a) is documentation-only and carries no code. Check
+  `git status` before any further work — expect it dirty with this pass.
   **Do NOT treat P2 as complete** — resume at the first unresolved item (§7).
 
 **Foundation/plumbing complete ≠ validation/acceptance complete.** Every seam
@@ -166,7 +182,7 @@ scenarios (P2-PRE-\*) are out of this table's scope — see notes.
 | P2-ANOM-E2 | **PASS** (fixture-sensitive) | Fault side deterministic (temperature, no physics rule applies); attack side ~60% (3/5 seeds) reliable | Documented validation limitation |
 | P2-ANOM-S1 | **PASS** (verified once) | New `AdaptiveStealthFDI` injection (2026-08-29): bias ramps then holds at a capped bound, provably staying under a test-local "naive residual" check throughout; the real, unmodified `ConsistencyProvider` (`c`) still degrades trust for the channel below `TRUSTED_MIN` because it reacts to a sustained per-sample bias present in every window sample, which a window-*variance*-based check (IF/`ChannelFlagPolicy`) does not — `channel_flags` never fires in this scenario. Verified at the committed fixture seed/parameters only, not multi-seed stress-tested | Newly implemented (not a validation limitation) |
 | P2-TRUST-H1 | **FAIL** | `c`'s empirical-CDF rank against its own training distribution produces near-uniform (not near-1.0) values for genuinely clean data, occasionally dragging trust <0.7 | Documented validation limitation |
-| P2-TRUST-H2 | **FAIL** | Flagging mechanism fixed by D013 (68% vs. 13% post-onset flag rate) but `h`'s own EMA (D009, GAMMA=0.95, ~13-window half-life) cannot fall far enough in 3 windows regardless — a tension between two separately-approved decisions | Documented validation limitation (design tension, not missing code) |
+| P2-TRUST-H2 | **FAIL** | **D015 (2026-08-30):** not primarily a GAMMA/D009 gap. `ConstantSpoof`'s flat trend leaves `k=1.0` (D010's non-paired-channel default, plus a documented flat-trend blind spot in the trend-sign rule itself) the entire time, structurally flooring `g` at 0.3 regardless of `h`. Diagnostic replay confirmed even an instantly-collapsed `h` (GAMMA removed) still misses the 3-window budget (crosses 0.4 at window 5, not 3) — GAMMA is a secondary, compounding factor, not the binding constraint | Documented structural limitation (D015; joint D009+D010 interaction, not missing code) |
 | P2-TRUST-E1 | **PASS** | — | — |
 | P2-TRUST-E2 | **PASS** | — | — |
 | P2-TRUST-S1 | **PASS** | — | — |
@@ -358,7 +374,7 @@ Do NOT let any of these be described as finished:
 
 - reliable anomaly detection accuracy on clean data (P2-ANOM-H1/E1 — U07-gated)
 - consistent healthy-sensor trust ≥0.7 (P2-TRUST-H1 — `c`'s rank-noise, U07-gated)
-- P2-TRUST-H2 within-3-window collapse (mechanism understood: D009 `h` EMA speed)
+- P2-TRUST-H2 within-3-window collapse (root cause established by D015: `ConstantSpoof`'s flat trend + D010's `k=1.0` non-paired default jointly floor `g`; D009's `h` EMA speed is a secondary factor, not the binding one)
 - reliable attack attribution — P2-ANOM-H3/E2 pass at committed seeds but are
   verified only ~50–60% reliable, not validated (D013)
 - P2-ANOM-S1 — implemented and PASSES (2026-08-29, `AdaptiveStealthFDI`), but
@@ -396,12 +412,19 @@ hardware:
    candidate, gated on real bench data collection (needs the Pi/rig, not
    available here). No code changed by D014; O3 remains unachievable — see
    §7a.
-3. **Decide whether to address the documented validation limitations
-   (§7a)** — `h`'s GAMMA/window-budget tension (P2-TRUST-H2), `c`'s rank-CDF
-   noise (P2-TRUST-H1/H1-adjacent), IF's threshold/oscillation behavior
-   (P2-ANOM-H1/E1). These touch already-approved decisions (D009, U01's `c`)
-   and are validation/tuning questions, not missing capability — see §7a for
-   what each would need before touching.
+3. ~~Decide whether to address P2-TRUST-H2~~ — **DONE, resolved by
+   `DECISIONS.md` D015 (2026-08-30, Option A):** D009 and D010 both left
+   unchanged; H2 formally documented as a structural limitation (root cause:
+   `ConstantSpoof`'s flat trend + D010's `k=1.0` non-paired default jointly
+   floor `g` at 0.3, independent of `h`'s speed — GAMMA/D009 alone was
+   confirmed, by diagnostic replay, insufficient to close the gap even if
+   removed entirely). P2-TRUST-S1's collusion resistance is fully preserved.
+   Still open: **decide whether to address the remaining documented
+   validation limitations (§7a)** — `c`'s rank-CDF noise (P2-TRUST-H1), IF's
+   threshold/oscillation behavior (P2-ANOM-H1/E1). These touch
+   already-approved decisions (U01's `c`) or U07-gated data and are
+   validation/tuning questions, not missing capability — see §7a for what
+   each would need before touching.
 4. **Real bench-hardware validation** — the only way to close O2/O3/O4 and
    the full P2-ANOM-\*/P2-TRUST-\* acceptance table for real, since SWaT/WADI
    were always architecture/methodology-only (D011) and are now
@@ -444,6 +467,19 @@ amount of tuning or data closes these without new code:
   one remaining candidate, explicitly gated on real bench data that doesn't
   exist. **O3 (≥85% attribution accuracy) remains structurally unreachable**
   — D014 does not change this, and was never intended to.
+- ~~P2-TRUST-H2's within-3-window gap~~ — **root-caused and formally
+  documented, not fixed (`DECISIONS.md` D015, 2026-08-30).** Diagnostic
+  replay established the gap is NOT primarily `h`'s GAMMA speed: `D010`'s
+  `k=1.0` non-paired-channel default (compounded by a documented flat-trend
+  blind spot in the trend-sign rule, which treats `ConstantSpoof`'s
+  zero-trend shape as always "agreeing") structurally floors `g` at 0.3
+  regardless of `h`. Even a hypothetically-instant `h` collapse (GAMMA
+  removed entirely) still misses the 3-window budget (crosses 0.4 at
+  window 5, not 3). **D009 and D010 both remain unchanged** — GAMMA alone
+  cannot close this gap, and fixing it for real would require touching both
+  decisions together plus real attack-cadence data, which does not exist.
+  P2-TRUST-S1's collusion resistance (the reason D009's GAMMA is slow) is
+  fully preserved. **H2 remains FAIL; O4/AC2 is NOT claimed satisfied.**
 
 **Documented validation limitations** — the implementation exists, is wired,
 and has been tested; the open question is accuracy/reliability against real
@@ -457,12 +493,6 @@ data or a parameter choice, not missing code:
   implemented (U01 resolved, provisional); its empirical-CDF-against-own-
   training-distribution design is inherently noisy for genuinely clean data.
   A fix would mean reconsidering the definition, not writing a new component.
-- **P2-TRUST-H2** (doesn't reach <0.4 in 3 windows) — both `ChannelFlagPolicy`
-  (fixed, D013) and `h` (D009, fully implemented) work correctly; the gap is
-  a genuine, now-precisely-identified tension between two separately-approved
-  parameters (`h`'s deliberately-slow GAMMA=0.95 vs. this scenario's 3-window
-  budget) — a parameter/design-tension question, explicitly not touched by
-  D013 per instruction.
 - **P2-ANOM-H3/E2's ~50–60% reliability** — the rule exists, is wired, and
   is empirically measured; its accuracy is honestly disclosed as
   chance-influenced, not a missing capability. Widening this rule's scope was
@@ -486,28 +516,34 @@ data or a parameter choice, not missing code:
   diagnostic campaign (§3a — diagnostically complete), unless the underlying
   `docs/` changed or explicitly asked to.
 - **Continue from the first unresolved item in §7** — check `git status`
-  first: D013 and the P2-ANOM-S1 work are both committed and pushed
-  (`main`/`origin/main` at `b82f935`, verified 2026-08-30); the D014
-  documentation pass is likely still uncommitted (see §9).
-- **Preserve all deferred decisions** (λ pending, `c`'s rank-noise, `h`'s
-  GAMMA/window-budget tension, U02 real-physics validation beyond
-  current/vibration) — do not silently resolve them.
+  first: D013, P2-ANOM-S1, and D014 are all committed and pushed
+  (`main`/`origin/main` at `5612a2a` as of the D014 commit, verified
+  2026-08-30); the D015 documentation pass is likely still uncommitted
+  (see §9).
+- **Preserve all deferred decisions** (λ pending, `c`'s rank-noise, U02
+  real-physics validation beyond current/vibration) — do not silently
+  resolve them. P2-TRUST-H2 itself is no longer "deferred" — it is formally
+  documented as a structural limitation by D015; do not reopen D009/D010
+  to chase it without new bench/attack-cadence data.
 - **Ask for approval before making a genuinely new specification decision**
   (any physics relation, numeric threshold, c/k/h/PhysicsRule redefinition,
-  dataset choice) — this is exactly why D013 stopped short of touching D009's
-  GAMMA even though it's the now-identified blocker for P2-TRUST-H2.
+  dataset choice) — this is exactly why D013 stopped short of touching
+  D009's GAMMA, and why D015 formally declined to touch D009 or D010 even
+  after identifying D010's `k=1.0` floor as the actual binding constraint
+  for P2-TRUST-H2.
 - Keep the per-step discipline: implement → run pytest/ruff/black/`git diff
   --check` → STOP and report → commit only on approval → do not push unless told.
 
 ## 9. Git checkpoint
 
 - **Branch:** `main`.
-- **`main` and `origin/main` are identical at `b82f935`** ("feat: add
-  AdaptiveStealthFDI injection"). Verified 2026-08-30 via `git log -1 HEAD`
-  and `git log -1 origin/main`. D013 (`1c784e5`), the D013-uncommitted
-  documentation correction (`ea437c6`), and the P2-ANOM-S1 feature
-  (`b82f935`) are all committed and pushed.
-- **Working tree (as of this update): DIRTY** — the D014 broader-`PhysicsRule`
+- **`main` and `origin/main` are identical at `5612a2a`** ("docs: record
+  D014 physics rule scoping decision"). Verified via `git log -1 HEAD` and
+  `git log -1 origin/main`. D013 (`1c784e5`), the D013-uncommitted
+  documentation correction (`ea437c6`), the P2-ANOM-S1 feature (`b82f935`),
+  and the D014 documentation commit (`5612a2a`) are all committed and
+  pushed.
+- **Working tree (as of this update): DIRTY** — the D015 P2-TRUST-H2
   scoping decision, documentation-only, not yet committed (pending explicit
   approval). Expected `git status --short` for this pass:
   ```
@@ -516,11 +552,12 @@ data or a parameter choice, not missing code:
    M project-state/P2_RESUME.md
    M project-state/TODO.md
   ```
-  No `edge/` files are touched by this pass — D014 added no code.
+  No `edge/` files are touched by this pass — D015 added no code.
 - **CI status:** last known green at `4d8a281` (pre-SWaT-harness); not
-  independently re-verified against `b82f935` or the current uncommitted
+  independently re-verified against `5612a2a` or the current uncommitted
   diff in this session.
 - **Latest commits on `main` (newest first):**
+  - `5612a2a` docs: record D014 physics rule scoping decision
   - `b82f935` feat: add AdaptiveStealthFDI injection (P2-ANOM-S1)
   - `ea437c6` docs: correct D013 project state documentation
   - `1c784e5` feat(p2): finalize channel policy and provisional attribution (D013)
@@ -552,8 +589,8 @@ data or a parameter choice, not missing code:
   - `f75b9dc` P2: anomaly-detection foundation
   - `ee730fe` P2: synthetic injection framework
   - `26de8c2` P2: Beta trust foundation
-- **Push status:** **All commits through `b82f935` are pushed** — `main` and
-  `origin/main` both point to `b82f935` (verified 2026-08-30). The D014
+- **Push status:** **All commits through `5612a2a` are pushed** — `main` and
+  `origin/main` both point to `5612a2a` (verified 2026-08-30). The D015
   documentation diff above is local-only and uncommitted; do not push it
   without explicit approval.
 - **External state (not tracked by git):** a SWaT-only iTrust dataset-access

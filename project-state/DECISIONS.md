@@ -408,6 +408,96 @@
 - **Status:** documentation-only; no implementation performed or authorized
   by this entry.
 
+### D015 — P2-TRUST-H2 formally documented as a structural limitation; GAMMA/D009, D010, and λ left unchanged
+- **Date:** 2026-08-30
+- **Decision:** Following the D009/D010-scoping analysis of P2-TRUST-H2
+  (spoofed sensor, "trust < 0.4 within ≤3 windows"), **no code or parameter
+  is changed.** `D009` (`h`'s GAMMA=0.95, H_INIT=1.0, EMA structure) and
+  `D010` (`k`'s current↔vibration formula and its `k=1.0` default for
+  non-paired channels) both remain exactly as approved. `λ=0.7` (still
+  formally "PENDING approval" per U01, never itself a numbered decision)
+  is also left untouched. P2-TRUST-H2 is reclassified from an open,
+  GAMMA-attributed gap to a **formally documented structural limitation**.
+- **Root cause (established this pass, not previously documented at this
+  precision):** a three-way interaction, not a single-parameter gap:
+  1. The committed P2-TRUST-H2 acceptance test uses `ConstantSpoof` — a
+     constant, zero-trend injection.
+  2. `k`'s trend-sign rule (D010) treats a zero-trend channel as always
+     "agreeing" (a documented, pre-existing blind spot: *"One rising + one
+     flat trend passes... a known limitation"*, `k_correlation.py`). A flat
+     spoof therefore never drives `k` below `1.0` — true for the tested
+     non-paired channel (`gas`, where `k=1.0` is D010's permanent default
+     for `temperature`/`pressure`/`humidity`/`gas`), and would be equally
+     true for `current`/`vibration` under the same flat-value attack shape,
+     since the blind spot is in the rule itself, not the channel.
+  3. Since `g = 0.4c + 0.3k + 0.3h` and `k` stays pinned at `1.0`, `g` is
+     structurally floored at `0.3` (`= W_CORRELATION · 1.0`) regardless of
+     how low `c` or `h` fall — even in the limiting case where `c=0`
+     (confirmed to occur immediately, not gradually, for the committed
+     spoof magnitude) and `h→0`.
+  4. Diagnostic replay (this pass, read-only, imports only existing
+     unmodified `edge.trust.*` modules; not committed to the repo) confirms
+     this floor's consequence directly: with `h` hypothetically collapsed
+     to `0` instantly on window 1 — i.e. **GAMMA/D009 entirely removed
+     from the equation** — trust still does not cross `0.4` until window 5
+     after onset, not window 3. Only when `k` is *also* hypothetically
+     forced to `0` (a change D010 explicitly does not make for any
+     channel under a flat-value attack) does the trust trace reproduce
+     D009's own approval-trail arithmetic (`T_3 = λ³ = 0.343 < 0.4`,
+     `edge/trust/beta.py` docstring) at exactly window 3.
+  5. Conclusion: **D009's own justification for meeting the ≤3-window
+     criterion was implicitly valid only for an attack/channel combination
+     where `g` can reach `0`** — which a flat/constant spoof under D010's
+     current `k` rule never allows, on any channel. GAMMA is a secondary,
+     compounding factor, not the binding constraint.
+- **Why changing GAMMA alone cannot solve H2:** demonstrated directly by
+  the diagnostic above — removing GAMMA's slowness entirely (instant `h`
+  collapse) still leaves `g` floored at `0.3` by `k`, and still misses the
+  3-window budget by ~2 windows. Any fix would have to touch `k`'s
+  non-paired default or its flat-trend handling (D010) as well, and/or
+  `λ` — not GAMMA in isolation.
+- **Why D009 and D010 remain unchanged:** Both have documented,
+  deliberately-chosen rationale that this analysis does not overturn.
+  D009's slow GAMMA exists specifically to resist a collusive attacker
+  attempting to hold full trust (see next bullet). D010's `k=1.0`
+  non-paired default and its flat-trend blind spot were explicitly left
+  unfixed pending real data (*"Do not introduce an epsilon threshold to
+  'fix' this without data-backed justification"*, `k_correlation.py`) —
+  this decision does not manufacture that justification. No new bench or
+  dataset evidence has arrived since D009/D010 were approved; nothing here
+  changes the basis either was made on.
+- **Impact on P2-TRUST-S1 / collusion resistance:** **None — fully
+  preserved.** P2-TRUST-S1 continues to PASS unmodified. GAMMA's slowness
+  is the entire mechanism D009 relies on to prevent a collusive two-channel
+  attack from holding full trust; leaving it untouched keeps that guarantee
+  intact. Any future attempt to close H2 by speeding up `h`/`λ` would
+  directly erode this same protection — a real trade-off, not a free
+  improvement, and is exactly why reopening D009/D010 together was not
+  chosen.
+- **What remains open for future real-hardware validation:** whether a
+  different `GAMMA`, a faster `λ`, or a revised `k` rule (addressing the
+  flat-trend blind spot or the non-paired-channel default) could close
+  P2-TRUST-H2 without materially weakening P2-TRUST-S1 — answerable only
+  with real bench data characterizing actual attack cadence and false
+  collusion risk, none of which exists today. Also open: whether a
+  non-flat injection shape for this specific acceptance scenario would be
+  more representative of a real spoofing attack than `ConstantSpoof` — a
+  test-design question, not a production-code one, and not decided here.
+- **Affects:** `P2_RESUME.md` §1a/§7a (P2-TRUST-H2 status), `TODO.md`
+  (validation-limitations list), `CURRENT_STATE.md` (Known blockers / U01
+  line). No production code (`edge/trust/*`, `edge/anomaly/*`) or tests
+  are affected.
+- **Does NOT resolve:** U01 (`λ` remains PENDING, unrelated to this
+  decision). Does NOT claim P2-TRUST-H2 passes, and does NOT claim
+  **O4/AC2** (PRD's "<0.4 within ≤3 windows" / "attack detected, trust
+  drops <0.4 within ≤3 windows") is satisfied — both remain explicitly
+  NOT achieved for this scenario, honestly documented as a limitation, not
+  implied as passing or waived.
+- **Does NOT change:** D009, D010, D011, D012, D013, D014, `λ`, or any
+  code in `edge/trust/*` / `edge/anomaly/*`. Documentation-only.
+- **Status:** documentation-only; no implementation performed or
+  authorized by this entry.
+
 ---
 
 ## UNDECIDED (must not be silently resolved — see CURRENT_STATE blockers)

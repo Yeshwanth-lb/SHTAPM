@@ -63,8 +63,11 @@
 > been run** — see `P2_RESUME.md` §1a for the full status matrix (7 PASS /
 > 4 FAIL, 11/14 Doc06 scenarios attempted). The broader-`PhysicsRule` scoping
 > decision is recorded as **`DECISIONS.md` D014** (2026-08-30, documentation-
-> only): no new channel coverage added; see the P2 remaining-work section
-> below. `[x]` = implemented + tested; a checked accuracy/acceptance item
+> only): no new channel coverage added. The P2-TRUST-H2 root cause is
+> recorded as **`DECISIONS.md` D015** (2026-08-30, documentation-only): a
+> joint D009/D010 structural limitation, both left unchanged, H2 still FAIL.
+> See the P2 remaining-work section below. `[x]` = implemented + tested; a
+> checked accuracy/acceptance item
 > still carries whatever caveat is written next to it — read before citing.
 
 ### Foundations (hardware-free, done)
@@ -90,7 +93,7 @@
 - [x] P2-ANOM-H3, P2-ANOM-E2 — **PASS at committed seeds**, but verified only ~50–60% reliable across other seeds (documented in-test, not claimed as validated).
 - [ ] P2-ANOM-H1, P2-ANOM-E1 — **FAIL** (IF/threshold/normalization clean-FP + oscillation; U07-gated validation limitation, not missing code).
 - [ ] P2-TRUST-H1 — **FAIL** (`c`'s rank-based noise; validation limitation).
-- [ ] P2-TRUST-H2 — **FAIL** (mechanism fixed by Candidate B; remaining gap is `h`'s GAMMA/window-budget tension with D009, untouched).
+- [ ] P2-TRUST-H2 — **FAIL** (root-caused and formally documented by D015: `ConstantSpoof`'s flat trend + D010's `k=1.0` non-paired default jointly floor `g`, independent of `h`'s GAMMA speed; D009/D010 both left unchanged, not a missing-code gap).
 
 P2-ANOM-S1 (adaptive stealth FDI) uses the new `AdaptiveStealthFDI` injection
 (`edge/injection/injections.py`, 2026-08-29): a bias capped at a caller-chosen
@@ -105,11 +108,11 @@ the committed fixture seed/parameters only, not multi-seed stress-tested.
 
 **Resolved (decision, not new capability):**
 - [x] Broader `PhysicsRule` scoping — **`DECISIONS.md` D014 (2026-08-30)**: no new channel coverage added, `TrendSignPhysicsRule` (D013) unchanged. `pressure` REJECTED (would reopen D010's atmospheric-only BMP180 finding); `humidity` REJECTED (contradicts PRD's own design-integrity note requiring temperature/humidity to stay uncorrelated); `gas` REJECTED (no documented physical basis to build on). `current`↔`temperature` DEFERRED as the sole future candidate, gated on real bench data that does not exist yet. **O3 (≥85%) remains structurally unreachable** — this decision does not change that.
+- [x] P2-TRUST-H2 scoping — **`DECISIONS.md` D015 (2026-08-30)**: root cause established as `ConstantSpoof`'s flat trend + D010's `k=1.0` non-paired default jointly flooring `g` at 0.3, independent of `h`; diagnostic replay confirmed removing GAMMA entirely still misses the 3-window budget. **D009 and D010 both left unchanged** (Option A); P2-TRUST-S1's collusion resistance fully preserved. **P2-TRUST-H2 remains FAIL; O4/AC2 is NOT satisfied** — this decision does not change that.
 
 **Documented validation limitations (implementation exists, accuracy/tuning is the open question):**
 - [ ] P2-ANOM-H1/E1 — IF + threshold + normalization retuning against real clean-baseline data (U07-gated).
 - [ ] P2-TRUST-H1 — `c`'s empirical-CDF-vs-own-training-distribution definition (U01, provisional) may need reconsidering, not new code.
-- [ ] P2-TRUST-H2 — `h`'s GAMMA=0.95 (D009) vs. this scenario's 3-window budget; a parameter/design-tension decision, explicitly deferred, not touched by D013.
 - [ ] P2-ANOM-H3/E2 reliability — inherent to the minimal rule's scope; closing this for real would need the broader `PhysicsRule` D014 declined to build now, not a parameter tweak.
 
 **Unrelated to D013/P2-ANOM-S1/D014, still open:**
