@@ -35,9 +35,39 @@
 > (`TrendSignPhysicsRule`) was implemented, reusing D010's `k` heuristic
 > verbatim. **D009 (`h`/GAMMA), D010's `k` formula, D011, D012, and IF/`c`'s
 > own behavior are all explicitly UNCHANGED.** See §1a for the full P2 status
-> matrix. **All of this is implemented and tested but UNCOMMITTED** — see §9.
+> matrix.
 > (Consolidated into `DECISIONS.md` D013 and this file on 2026-08-26, the day
 > after the work itself; no additional code/tests changed during consolidation.)
+>
+> **CORRECTION (2026-08-29):** the note above and every "UNCOMMITTED" claim
+> in this file through the 2026-08-26 pass were **stale**. D013's code was in
+> fact committed and pushed as `1c784e5` ("feat(p2): finalize channel policy
+> and provisional attribution") — verified this pass: `git log -1 HEAD` and
+> `git log -1 origin/main` both resolve to `1c784e50ba8d1fb074076eed3cdf0b350d77bd22`.
+> This file simply was not updated to say so at the time. No code changed as
+> part of this correction, only this document.
+>
+> **Further updated 2026-08-29 (sixth pass — real code/test changes,
+> P2-ANOM-S1):** implemented the one remaining hardware-free P2 implementation
+> gap identified in an audit of this checkpoint: a new `AdaptiveStealthFDI`
+> injection type (`edge/injection/injections.py` — an 8th §12.4 injection,
+> bias ramps then holds at a caller-chosen `residual_cap`, unlike the
+> unbounded `Drift`/`RampFDI` or instant `BiasFDI`/`ConstantSpoof`) plus its
+> P2-ANOM-S1 acceptance scenario (`edge/tests/test_p2_acceptance.py`). The
+> scenario verifies the injection provably stays under a test-local "naive
+> residual" bound throughout, then asserts the real, UNMODIFIED pipeline's
+> trust for that channel still degrades below `TRUSTED_MIN` — which it does,
+> via the existing `ConsistencyProvider` (`c`) reacting to a sustained
+> per-sample bias that a window-variance-based check (IF/`ChannelFlagPolicy`)
+> does not. Verified at the committed fixture seed/parameters only (not
+> multi-seed stress-tested, unlike H3/E2's explicit 8-seed/5-seed checks) —
+> treat as verified-once, not robustly validated. **D009, D010, D011, D012,
+> D013, and every existing IF/preprocessing/c/k/h/ChannelFlagPolicy/
+> PhysicsRule behavior are explicitly UNCHANGED** — only a new injection type
+> and its test were added. Full `pytest edge/`: 332 passed, 4 failed (the
+> same 4 pre-existing, documented failures — H1/E1/TRUST-H1/TRUST-H2), 2
+> skipped — zero regressions. **Implemented and tested but UNCOMMITTED as of
+> this update** — see §9.
 
 ---
 
@@ -55,16 +85,16 @@
   real multivariate Isolation Forest, all three trust signal providers
   (`c`/`k`/`h`), and `ChannelFlagPolicy` (redesigned as "Candidate B" — D013)
   — all implemented and wired end-to-end into `P2Pipeline`.
-- **P2 VALIDATION (acceptance):** **PARTIALLY done, for the first time.** The
-  formal Doc06 P2-ANOM-\*/P2-TRUST-\* acceptance suite has now actually been
-  written and run (`edge/tests/test_p2_acceptance.py`, D013) — 10/14 scenarios
-  attempted, 6 PASS, 4 FAIL. See §1a for the full status matrix and which
-  failures are mandatory implementation blockers vs. documented, honestly-
-  disclosed validation limitations. IF remains untuned (U07-gated); the
-  `PhysicsRule`/`k` physics are explicitly unvalidated heuristics; no real
-  dataset eval contributes to any acceptance claim (SWaT is proxy/methodology
-  evidence only, D011, and is now diagnostically complete — no further SWaT
-  tuning planned).
+- **P2 VALIDATION (acceptance):** **PARTIALLY done.** The formal Doc06
+  P2-ANOM-\*/P2-TRUST-\* acceptance suite (`edge/tests/test_p2_acceptance.py`,
+  D013 + the 2026-08-29 P2-ANOM-S1 addition) now attempts 11/14 scenarios —
+  7 PASS, 4 FAIL. See §1a for the full status matrix and which failures are
+  mandatory implementation blockers vs. documented, honestly-disclosed
+  validation limitations. IF remains untuned (U07-gated); the `PhysicsRule`/
+  `k` physics are explicitly unvalidated heuristics; no real dataset eval
+  contributes to any acceptance claim (SWaT is proxy/methodology evidence
+  only, D011, and is now diagnostically complete — no further SWaT tuning
+  planned).
 - **U07 dataset feasibility (SWaT vs. WADI):** Research **COMPLETE**
   (`U07_DATASET_FEASIBILITY_REPORT.md`); validation methodology **FROZEN**
   (`DECISIONS.md` D011); six-tag mapping **SELECTED** (`DECISIONS.md` D012:
@@ -85,11 +115,15 @@
   further tuning.
 - **Hardware availability:** NO Raspberry Pi, NO bench rig attached. All P2 work
   is hardware-free; physical gates (P0/P1/P3/P6) remain blocked.
-- **Safe to resume from this checkpoint?** **Partially.** D013's code (Candidate
-  B `ChannelFlagPolicy`, minimal `TrendSignPhysicsRule`, the full
-  `test_p2_acceptance.py` suite) is implemented, tested, lint/format clean,
-  and documented here — but **UNCOMMITTED** (see §9). Do NOT assume it is on
-  `origin/main`; check `git status` before any further work.
+- **Safe to resume from this checkpoint?** **Partially.** D013's code
+  (Candidate B `ChannelFlagPolicy`, minimal `TrendSignPhysicsRule`, the
+  original `test_p2_acceptance.py` suite) **IS committed and pushed** —
+  `main` and `origin/main` are both at `1c784e5` (verified 2026-08-29; the
+  "UNCOMMITTED" language earlier in this file was stale, see the correction
+  note above). The 2026-08-29 P2-ANOM-S1 addition (`AdaptiveStealthFDI` +
+  its acceptance test) is implemented, tested, lint/format clean, and
+  documented here — but is **UNCOMMITTED as of this update** (see §9). Check
+  `git status` before any further work.
   **Do NOT treat P2 as complete** — resume at the first unresolved item (§7).
 
 **Foundation/plumbing complete ≠ validation/acceptance complete.** Every seam
@@ -99,11 +133,11 @@ run against it. 6 of 10 attempted scenarios pass; the other 4 have precisely
 diagnosed root causes (§1a). None of this constitutes a real-data accuracy
 validation — that remains gated on hardware (bench rig) or further dataset work.
 
-## 1a. Final P2 status matrix (as of D013, 2026-08-25)
+## 1a. Final P2 status matrix (as of the 2026-08-29 P2-ANOM-S1 addition)
 
-All 10 attempted scenarios use real (non-stub) components end-to-end on
-hardware-free simulator streams (`edge/tests/test_p2_acceptance.py`). 4 scenarios
-(P2-PRE-\*, out of this table's scope) and P2-ANOM-S1 are not included — see notes.
+All 11 attempted scenarios use real (non-stub) components end-to-end on
+hardware-free simulator streams (`edge/tests/test_p2_acceptance.py`). 4
+scenarios (P2-PRE-\*) are out of this table's scope — see notes.
 
 | ID | Result | Root cause / mechanism | Category |
 |----|--------|------------------------|----------|
@@ -112,7 +146,7 @@ hardware-free simulator streams (`edge/tests/test_p2_acceptance.py`). 4 scenario
 | P2-ANOM-H3 | **PASS** (fixture-sensitive) | Attribution=attack via the minimal `PhysicsRule`; verified ~50% (4/8 seeds) reliability — an approximately coin-flip side effect of the onset transition window's shape, not a validated capability | Documented validation limitation |
 | P2-ANOM-E1 | **FAIL** | Window-level IF flag oscillates once triggered (upstream of ChannelFlagPolicy; same root cause as H1) | Documented validation limitation (U07-gated tuning) |
 | P2-ANOM-E2 | **PASS** (fixture-sensitive) | Fault side deterministic (temperature, no physics rule applies); attack side ~60% (3/5 seeds) reliable | Documented validation limitation |
-| P2-ANOM-S1 | **NOT ATTEMPTED** | No adaptive/stealth injection type exists in `edge/injection/` | **Mandatory implementation blocker** |
+| P2-ANOM-S1 | **PASS** (verified once) | New `AdaptiveStealthFDI` injection (2026-08-29): bias ramps then holds at a capped bound, provably staying under a test-local "naive residual" check throughout; the real, unmodified `ConsistencyProvider` (`c`) still degrades trust for the channel below `TRUSTED_MIN` because it reacts to a sustained per-sample bias present in every window sample, which a window-*variance*-based check (IF/`ChannelFlagPolicy`) does not — `channel_flags` never fires in this scenario. Verified at the committed fixture seed/parameters only, not multi-seed stress-tested | Newly implemented (not a validation limitation) |
 | P2-TRUST-H1 | **FAIL** | `c`'s empirical-CDF rank against its own training distribution produces near-uniform (not near-1.0) values for genuinely clean data, occasionally dragging trust <0.7 | Documented validation limitation |
 | P2-TRUST-H2 | **FAIL** | Flagging mechanism fixed by D013 (68% vs. 13% post-onset flag rate) but `h`'s own EMA (D009, GAMMA=0.95, ~13-window half-life) cannot fall far enough in 3 windows regardless — a tension between two separately-approved decisions | Documented validation limitation (design tension, not missing code) |
 | P2-TRUST-E1 | **PASS** | — | — |
@@ -120,7 +154,7 @@ hardware-free simulator streams (`edge/tests/test_p2_acceptance.py`). 4 scenario
 | P2-TRUST-S1 | **PASS** | — | — |
 | O3 (≥85% attribution accuracy) | **NOT ACHIEVABLE with current implementation** | `PhysicsRule` only ever names current/vibration (4 of 6 channels have no rule at all) and is only ~50–60% reliable even there | **Mandatory implementation blocker** (broader rule) + data-gated (no real physics data beyond the bench current/vibration pair exists anywhere, incl. SWaT/WADI, D010/U07) |
 
-**Score: 6 PASS / 4 FAIL / 1 not attempted (S1) / O3 not achievable as implemented.**
+**Score: 7 PASS / 4 FAIL / 0 not attempted / O3 not achievable as implemented.**
 See §7a for the mandatory-blocker vs. validation-limitation breakdown and what
 each would require.
 
@@ -147,17 +181,20 @@ plumbing — NOT acceptance):
 | `ChannelFlagPolicy` — variance-threshold window→per-channel flagging (original design) | `edge/anomaly/policy.py` | `57d434d` |
 | P2Pipeline wiring: `record_window`/`record_outcome` calls to c/k/h before trust update | `edge/anomaly/pipeline.py` | `b0f0272` |
 | SWaT.A1 evaluation harness (D011/D012) | `edge/eval/swat_eval.py`, `edge/tests/test_swat_eval.py` | `60a4dbe` (+ later latency commit) |
-| **`ChannelFlagPolicy` redesign ("Candidate B" — per-channel own-baseline two-sided test, D013)** | `edge/anomaly/policy.py` | **UNCOMMITTED** |
-| **Minimal provisional `PhysicsRule` (`TrendSignPhysicsRule`, D013)** | `edge/anomaly/physics_rule.py` (new) | **UNCOMMITTED** |
-| **First formal P2 acceptance suite (D013)** | `edge/tests/test_p2_acceptance.py` (new) | **UNCOMMITTED** |
-| Unit tests for the above | `edge/tests/{test_policy,test_physics_rule}.py` | **UNCOMMITTED** |
+| `ChannelFlagPolicy` redesign ("Candidate B" — per-channel own-baseline two-sided test, D013) | `edge/anomaly/policy.py` | `1c784e5` |
+| Minimal provisional `PhysicsRule` (`TrendSignPhysicsRule`, D013) | `edge/anomaly/physics_rule.py` | `1c784e5` |
+| First formal P2 acceptance suite (D013, 10/14 scenarios) | `edge/tests/test_p2_acceptance.py` | `1c784e5` |
+| Unit tests for the above | `edge/tests/{test_policy,test_physics_rule}.py` | `1c784e5` |
+| **`AdaptiveStealthFDI` injection (8th §12.4 injection) + P2-ANOM-S1 acceptance scenario (2026-08-29)** | `edge/injection/injections.py`, `edge/injection/__init__.py`, `edge/tests/{test_injection,test_p2_acceptance}.py` | **UNCOMMITTED** |
 
-**Test totals:** full `pytest edge/` (2026-08-25, post-D013): **327 passed, 4
-failed, 2 skipped** (broker-gated integration). The 4 failures are exactly the
-4 documented validation limitations in §1a — no unexpected regressions.
+**Test totals:** full `pytest edge/` (2026-08-29, post-P2-ANOM-S1): **332
+passed, 4 failed, 2 skipped** (broker-gated integration). The 4 failures are
+exactly the 4 documented validation limitations in §1a — no unexpected
+regressions (up from 327/4/2 pre-D013; the +5 passing tests are the new
+`AdaptiveStealthFDI` shape tests and its one acceptance test).
 **Passing unit/interface tests still do NOT equal P2 acceptance** in general —
-but as of D013, a REAL acceptance suite now exists and 6/10 attempted
-scenarios genuinely pass it; see §1a for the honest, complete picture.
+but a REAL acceptance suite now exists and 7/11 attempted scenarios genuinely
+pass it; see §1a for the honest, complete picture.
 
 Key invariants held throughout: frozen contract (`backend/app/schemas/
 contracts.py`) untouched; λ=0.7 recorded as PENDING U01 approval (not a spec);
@@ -295,7 +332,7 @@ tests pass.** Each below stays open until the stated input exists.
 | Normalization choice | per-window min-max (current); confirmed **not changing** (§3a: PRD's own ≤3-window criteria favor per-window over aggregate-rate-favoring alternatives) | SWaT-based comparison complete (normalization study, §3a) — decision made, not deferred | None — resolved in favor of keeping the current default |
 | U07: SWaT/WADI access + TEP fallback | **COMPLETE.** Feasibility research, methodology (D011), six-tag mapping (D012), harness (`edge/eval/swat_eval.py`), and a full diagnostic campaign (§3a) are all done. **Diagnostically complete** — no further SWaT work planned | D012 signal coverage identified as the dominant, decisive limitation | None planned unless explicitly requested |
 | Realistic injection magnitudes/durations | FIXTURES only | §12.4 specifies none; couples to the (undecided) detector threshold | Set against real data / detector calibration; never as project specs invented here |
-| P2 acceptance validation | **PARTIALLY started (D013)** — first formal suite written and run, 6/10 attempted scenarios PASS (§1a) | Real-data accuracy validation still requires hardware (bench rig) — SWaT/WADI structurally cannot provide it (D011) | Resolve mandatory blockers (§7a) that don't need hardware; accept the rest as hardware-gated |
+| P2 acceptance validation | **PARTIALLY done** — formal suite (D013 + 2026-08-29 P2-ANOM-S1 addition), 7/11 attempted scenarios PASS (§1a) | Real-data accuracy validation still requires hardware (bench rig) — SWaT/WADI structurally cannot provide it (D011) | Resolve the remaining mandatory blocker (§7a, broader `PhysicsRule`) if wanted; accept the rest as hardware/decision-gated |
 
 ## 6. What is explicitly NOT complete
 
@@ -306,7 +343,9 @@ Do NOT let any of these be described as finished:
 - P2-TRUST-H2 within-3-window collapse (mechanism understood: D009 `h` EMA speed)
 - reliable attack attribution — P2-ANOM-H3/E2 pass at committed seeds but are
   verified only ~50–60% reliable, not validated (D013)
-- P2-ANOM-S1 (adaptive/stealth injection type does not exist — mandatory blocker)
+- P2-ANOM-S1 — implemented and PASSES (2026-08-29, `AdaptiveStealthFDI`), but
+  verified only at the committed fixture seed/parameters, not multi-seed
+  stress-tested the way H3/E2 explicitly were — treat as verified-once
 - attribution accuracy for any channel other than current/vibration (no rule exists)
 - O3 ≥85% attribution accuracy (structurally unreachable with the current minimal rule)
 - O10 confusion matrix / ablation results
@@ -321,18 +360,21 @@ Do NOT let any of these be described as finished:
 
 `h`/`c`/`k`/`ChannelFlagPolicy`/pipeline wiring, U07 feasibility+access+mapping,
 the SWaT harness + full diagnostic campaign, the first formal P2 acceptance
-suite, the `ChannelFlagPolicy` redesign, and a minimal `PhysicsRule` are all
-**DONE** — see §1a/§2/§3a/§5. What remains, in order of what's actually
-achievable without hardware:
+suite, the `ChannelFlagPolicy` redesign, a minimal `PhysicsRule` (D013), and
+the P2-ANOM-S1 `AdaptiveStealthFDI` injection (2026-08-29) are all **DONE** —
+see §1a/§2/§3a/§5. What remains, in order of what's actually achievable
+without hardware:
 
-1. **Commit D013's code** (`edge/anomaly/policy.py`, `edge/anomaly/physics_rule.py`,
-   the four touched/new test files) — currently uncommitted; needs explicit
-   approval per the established per-step discipline (see §9).
-2. **Decide on the mandatory implementation blockers (§7a)** — a broader
-   `PhysicsRule` (if O3 progress is wanted at all) and/or the P2-ANOM-S1
-   adaptive injection type. Both are genuinely new code, not tuning; each
-   needs its own explicit scoping/approval before implementation, consistent
-   with "ask before changing approved architecture."
+1. **Commit the 2026-08-29 P2-ANOM-S1 work** (`edge/injection/{injections,__init__}.py`,
+   `edge/tests/{test_injection,test_p2_acceptance}.py`, plus this
+   documentation refresh) — currently uncommitted; needs explicit approval
+   per the established per-step discipline (see §9). (D013 itself is already
+   committed at `1c784e5` — the earlier "commit D013" item here was stale.)
+2. **Decide on the one remaining mandatory implementation blocker (§7a)** —
+   a broader `PhysicsRule`, only worth doing if further O3 progress is
+   wanted. Genuinely new code, not tuning; needs its own explicit
+   scoping/approval before implementation, consistent with "ask before
+   changing approved architecture."
 3. **Decide whether to address the documented validation limitations
    (§7a)** — `h`'s GAMMA/window-budget tension (P2-TRUST-H2), `c`'s rank-CDF
    noise (P2-TRUST-H1/H1-adjacent), IF's threshold/oscillation behavior
@@ -361,11 +403,16 @@ amount of tuning or data closes these without new code:
   Closing it needs a new rule design (bigger scope than "minimal"), which is
   itself only meaningfully validatable with real bench data (current/
   vibration is the only pair with any real-hardware plan at all).
-- **P2-ANOM-S1's adaptive/stealth injection type.** No code for it exists
-  anywhere in `edge/injection/`. Cannot be attempted at all until it's built.
 - **Real bench hardware (Pi + rig).** Pre-existing, unrelated to D013 —
   blocks literal O2/O3/O4 and the full acceptance table regardless of
   anything achievable in software.
+
+**Resolved since the table above was first written:**
+
+- ~~P2-ANOM-S1's adaptive/stealth injection type~~ — **implemented
+  2026-08-29** (`AdaptiveStealthFDI`, `edge/injection/injections.py`) and its
+  acceptance scenario now PASSES (§1a). Verified at the committed fixture
+  seed/parameters only.
 
 **Documented validation limitations** — the implementation exists, is wired,
 and has been tested; the open question is accuracy/reliability against real
@@ -406,7 +453,8 @@ data or a parameter choice, not missing code:
   diagnostic campaign (§3a — diagnostically complete), unless the underlying
   `docs/` changed or explicitly asked to.
 - **Continue from the first unresolved item in §7** — check `git status`
-  first: D013's code is likely still uncommitted (see §9).
+  first: D013 is committed (`1c784e5`, verified 2026-08-29), but the
+  2026-08-29 P2-ANOM-S1 work is likely still uncommitted (see §9).
 - **Preserve all deferred decisions** (λ pending, `c`'s rank-noise, `h`'s
   GAMMA/window-budget tension, U02 real-physics validation beyond
   current/vibration) — do not silently resolve them.
@@ -420,26 +468,29 @@ data or a parameter choice, not missing code:
 ## 9. Git checkpoint
 
 - **Branch:** `main`.
-- **Working tree (as of this update): DIRTY — D013 is uncommitted.**
-  `git status --short`:
+- **`main` and `origin/main` are identical at `1c784e5`** ("feat(p2): finalize
+  channel policy and provisional attribution" — this is D013's commit).
+  Verified 2026-08-29 via `git log -1 HEAD` and `git log -1 origin/main`. All
+  of D013's code (Candidate B `ChannelFlagPolicy`, `TrendSignPhysicsRule`,
+  the original 10-scenario `test_p2_acceptance.py`) is committed and pushed —
+  the "UNCOMMITTED" language elsewhere in this file describing D013 was
+  stale as of this pass; see the correction note at the top of this file.
+- **Working tree (as of this update): DIRTY** — the 2026-08-29 P2-ANOM-S1
+  work, not yet committed (pending explicit approval). `git status --short`:
   ```
-   M edge/anomaly/policy.py
-   M edge/eval/swat_eval.py
-   M edge/tests/test_policy.py
-   M project-state/DECISIONS.md
-   M project-state/P2_RESUME.md
-  ?? edge/anomaly/physics_rule.py
-  ?? edge/tests/test_p2_acceptance.py
-  ?? edge/tests/test_physics_rule.py
+   M edge/injection/__init__.py
+   M edge/injection/injections.py
+   M edge/tests/test_injection.py
+   M edge/tests/test_p2_acceptance.py
   ```
-  (`project-state/TODO.md` and `project-state/CURRENT_STATE.md` are also
-  updated as part of this same consolidation pass — check `git status` for
-  the current full list.)
-- `main` and `origin/main` are identical at `60a4dbe` (the SWaT harness
-  commit) — everything above is layered on top, uncommitted.
+  (`project-state/P2_RESUME.md`, `TODO.md`, and `CURRENT_STATE.md` are also
+  being updated as part of this same documentation-refresh pass — check
+  `git status` for the current full list.)
 - **CI status:** last known green at `4d8a281` (pre-SWaT-harness); not
-  re-verified since, since nothing has been pushed.
+  independently re-verified against `1c784e5` or the current uncommitted
+  diff in this session.
 - **Latest commits on `main` (newest first):**
+  - `1c784e5` feat(p2): finalize channel policy and provisional attribution (D013)
   - `60a4dbe` feat: add SWaT.A1 evaluation harness
   - `4bc0c3a` docs: record SWaT A1 six-tag mapping
   - `b47a960` docs: update P2 resume checkpoint after CI fix
@@ -468,8 +519,10 @@ data or a parameter choice, not missing code:
   - `f75b9dc` P2: anomaly-detection foundation
   - `ee730fe` P2: synthetic injection framework
   - `26de8c2` P2: Beta trust foundation
-- **Push status:** **All commits pushed.** `main` and `origin/main` both point
-  to `4d8a281` (verified 2026-08-24).
+- **Push status:** **All commits through `1c784e5` are pushed** — `main` and
+  `origin/main` both point to `1c784e5` (verified 2026-08-29). The 2026-08-29
+  P2-ANOM-S1 diff above is local-only and uncommitted; do not push it without
+  explicit approval.
 - **External state (not tracked by git):** a SWaT-only iTrust dataset-access
   request was submitted externally by the user on 2026-08-24, directly via the
   iTrust request form (outside this repo/session — no request/reference ID was
