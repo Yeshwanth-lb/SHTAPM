@@ -56,14 +56,16 @@
 - [ ] **Physical acquisition gate** (needs Pi/rig — DO NOT fake): <1% dropped over 10 min on real sensors; **INA219 pump-current resolved**; **physical relay safe-stop** clicks pump OFF before damage; watchdog defaults pump OFF on real process death  🔒 hardware-blocked
 
 ## P2 — Anomaly Detection + Attribution + Trust  ⚠ (no Doc06 phase; from PRD P2)
-> Hardware-free **FOUNDATIONS complete** (commits 26de8c2 … 5a1af31, plus D013
-> at `1c784e5` — **committed and pushed**, verified 2026-08-29; the earlier
-> "D013 uncommitted" note here was stale). Formal P2 **acceptance suite now
-> exists and has been run** — see `P2_RESUME.md` §1a for the full status
-> matrix (7 PASS / 4 FAIL, 11/14 Doc06 scenarios attempted, as of the
-> 2026-08-29 P2-ANOM-S1 addition). `[x]` = implemented + tested; a checked
-> accuracy/acceptance item still carries whatever caveat is written next to
-> it — read before citing.
+> Hardware-free **FOUNDATIONS complete** (commits 26de8c2 … 5a1af31, D013 at
+> `1c784e5`, and the P2-ANOM-S1 `AdaptiveStealthFDI` addition at `b82f935` —
+> all **committed and pushed**, verified 2026-08-30; `main`/`origin/main` are
+> identical at `b82f935`). Formal P2 **acceptance suite now exists and has
+> been run** — see `P2_RESUME.md` §1a for the full status matrix (7 PASS /
+> 4 FAIL, 11/14 Doc06 scenarios attempted). The broader-`PhysicsRule` scoping
+> decision is recorded as **`DECISIONS.md` D014** (2026-08-30, documentation-
+> only): no new channel coverage added; see the P2 remaining-work section
+> below. `[x]` = implemented + tested; a checked accuracy/acceptance item
+> still carries whatever caveat is written next to it — read before citing.
 
 ### Foundations (hardware-free, done)
 - [x] Preprocess: median/low-pass filter, min-max normalize, 30-sample window — `edge/anomaly/preprocess.py` (f75b9dc). Filter kernel/alpha are REQUIRED caller args (no spec value); window_size default 30 (documented).
@@ -72,7 +74,7 @@
 - [x] `c`/`k`/`h` signal providers — `edge/trust/{c_consistency,k_correlation,h_reliability}.py` (D009/D010; `d1e6d48`/`691847f`/`c56cb4d`). Provisional, unvalidated; `c`'s rank-based noise and `h`'s GAMMA=0.95 speed are now precisely implicated in P2-TRUST-H1/H2's failures (see below) — neither touched by D013.
 - [x] Attribution-engine shell (none/fault/attack branch logic) — `edge/anomaly/attribution.py` (cbd7527); reuses frozen `Attribution` enum (contract unchanged).
 - [x] **Minimal, provisional `PhysicsRule`** — `edge/anomaly/physics_rule.py` (D013, committed `1c784e5`): `TrendSignPhysicsRule` reuses D010's current↔vibration heuristic verbatim to unblock the `AttributionEngine` wiring path (previously fully non-functional — no rule existed at all). Narrow scope: only ever names current/vibration; empirically ~50–60% attribution reliability even there (verified via multi-seed testing, not a single lucky run).
-- [x] Synthetic §12.4 injection framework (now 8 hardware-free injections) — `edge/injection/` (ee730fe; + `AdaptiveStealthFDI` added 2026-08-29, **uncommitted**); magnitudes/durations/caps REQUIRED args (no spec values); dry-run excluded (physical). Test/eval labels only, not wire.
+- [x] Synthetic §12.4 injection framework (now 8 hardware-free injections) — `edge/injection/` (ee730fe; + `AdaptiveStealthFDI` added 2026-08-29, committed `b82f935`); magnitudes/durations/caps REQUIRED args (no spec values); dry-run excluded (physical). Test/eval labels only, not wire.
 - [x] Hardware-free P2 pipeline orchestrator — `edge/anomaly/pipeline.py` (d1ec0da): frames→preprocess→detector→ChannelFlagPolicy→trust→attribution; internal `WindowOutcome` (no wire contract).
 - [x] **`ChannelFlagPolicy` redesigned ("Candidate B")** — `edge/anomaly/policy.py` (rewritten, D013, committed `1c784e5`): per-channel, own-baseline, two-sided empirical-CDF test (`fit()` on clean windows, flag if current variance is an outlier vs. that channel's own history), replacing the original same-window cross-channel high-variance rule that misdirected on spikes/constant-spoofs. Fixes P2-ANOM-H2; improves P2-TRUST-H2's flag rate 5x (13%→68%) but doesn't fully resolve it (see below).
 
@@ -82,7 +84,7 @@
 - [x] **Normalization decision: RESOLVED** — per-window min-max (current default) confirmed better-aligned with the PRD's own ≤3-window criteria than train-fit alternatives; not changed.
 - [x] **SWaT track declared diagnostically complete.** No further SWaT experiments/tuning planned unless explicitly requested.
 
-### P2 formal acceptance suite (`edge/tests/test_p2_acceptance.py`; D013 committed `1c784e5`, P2-ANOM-S1 added 2026-08-29 uncommitted)
+### P2 formal acceptance suite (`edge/tests/test_p2_acceptance.py`; D013 committed `1c784e5`, P2-ANOM-S1 committed `b82f935`)
 11 of 14 Doc06 scenarios attempted; full matrix in `P2_RESUME.md` §1a.
 - [x] P2-ANOM-H2, P2-ANOM-S1, P2-TRUST-E1, P2-TRUST-E2, P2-TRUST-S1 — **PASS**.
 - [x] P2-ANOM-H3, P2-ANOM-E2 — **PASS at committed seeds**, but verified only ~50–60% reliable across other seeds (documented in-test, not claimed as validated).
@@ -99,19 +101,20 @@ the committed fixture seed/parameters only, not multi-seed stress-tested.
 
 ### P2 remaining work — split by kind (see `P2_RESUME.md` §7a for full reasoning)
 **Mandatory implementation blockers (missing code, not tuning):**
-- [ ] A broader `PhysicsRule` — current one can only ever name current/vibration; O3 (≥85%) is structurally unreachable as implemented, on any data.
-- [ ] Real bench hardware (Pi + rig) — pre-existing, blocks literal O2/O3/O4 regardless of any software work.
+- [ ] Real bench hardware (Pi + rig) — pre-existing, blocks literal O2/O3/O4 regardless of any software work. Also the only path that could ever unblock D014's deferred current↔temperature candidate below.
+
+**Resolved (decision, not new capability):**
+- [x] Broader `PhysicsRule` scoping — **`DECISIONS.md` D014 (2026-08-30)**: no new channel coverage added, `TrendSignPhysicsRule` (D013) unchanged. `pressure` REJECTED (would reopen D010's atmospheric-only BMP180 finding); `humidity` REJECTED (contradicts PRD's own design-integrity note requiring temperature/humidity to stay uncorrelated); `gas` REJECTED (no documented physical basis to build on). `current`↔`temperature` DEFERRED as the sole future candidate, gated on real bench data that does not exist yet. **O3 (≥85%) remains structurally unreachable** — this decision does not change that.
 
 **Documented validation limitations (implementation exists, accuracy/tuning is the open question):**
 - [ ] P2-ANOM-H1/E1 — IF + threshold + normalization retuning against real clean-baseline data (U07-gated).
 - [ ] P2-TRUST-H1 — `c`'s empirical-CDF-vs-own-training-distribution definition (U01, provisional) may need reconsidering, not new code.
 - [ ] P2-TRUST-H2 — `h`'s GAMMA=0.95 (D009) vs. this scenario's 3-window budget; a parameter/design-tension decision, explicitly deferred, not touched by D013.
-- [ ] P2-ANOM-H3/E2 reliability — inherent to the minimal rule's scope; closing this for real is the "broader PhysicsRule" mandatory item above, not a parameter tweak.
+- [ ] P2-ANOM-H3/E2 reliability — inherent to the minimal rule's scope; closing this for real would need the broader `PhysicsRule` D014 declined to build now, not a parameter tweak.
 
-**Unrelated to D013/P2-ANOM-S1, still open:**
+**Unrelated to D013/P2-ANOM-S1/D014, still open:**
 - [ ] Authenticated scenario-injection hook (FR-A4)  *(command payload blocked: U14)*
 - [ ] O10 confusion matrix / ablations on a real dataset — blocked on hardware (SWaT/WADI structurally cannot satisfy this, D011).
-- [ ] **Commit the 2026-08-29 P2-ANOM-S1 work** — `edge/injection/{injections,__init__}.py`, `edge/tests/{test_injection,test_p2_acceptance}.py`, plus this documentation refresh — implemented, tested, ruff/black clean, uncommitted, pending explicit approval. (D013 itself is already committed at `1c784e5`.)
 
 ## P3 — Prognosis + RL + Self-Healing + Safety  ⚠ (no Doc06 phase; from PRD P3)
 - [ ] LSTM health (Healthy/Warning/Critical) + failure-ETA on trust-weighted windows  *(blocked: U03/U04)*

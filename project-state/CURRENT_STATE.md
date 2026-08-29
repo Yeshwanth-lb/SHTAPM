@@ -4,10 +4,11 @@
 > `DECISIONS.md`, `TODO.md`, `IMPLEMENTATION_LOG.md`. Authoritative product spec
 > lives in `../CLAUDE.md` and `../docs/` — not duplicated here.
 
-**Last updated:** 2026-08-29 (P2 sections refreshed: corrected a stale
-"D013 uncommitted" claim — D013 is in fact committed and pushed at `1c784e5`
-— and recorded the new P2-ANOM-S1 `AdaptiveStealthFDI` addition, currently
-uncommitted. See `DECISIONS.md` D013 and `P2_RESUME.md` §1a/§3a/§7a/§9 for
+**Last updated:** 2026-08-30 (P2 sections refreshed: the P2-ANOM-S1
+`AdaptiveStealthFDI` addition is now committed and pushed — `main`/
+`origin/main` are identical at `b82f935` — and the broader-`PhysicsRule`
+scoping decision is recorded as `DECISIONS.md` D014, documentation-only, no
+new code. See `DECISIONS.md` D013/D014 and `P2_RESUME.md` §1a/§3a/§7a/§9 for
 full detail; this file gives the short version. P0/P1 sections below are
 unchanged and still accurate as of 2026-08-10.)
 
@@ -15,7 +16,7 @@ unchanged and still accurate as of 2026-08-10.)
 
 ## Snapshot
 - **Current phase:** P2 — Anomaly / Trust / Attribution (hardware-free FOUNDATIONS complete, incl. c/k/h + `ChannelFlagPolicy` + a minimal `PhysicsRule`; formal P2 acceptance suite now exists and has partially passed — see below). P0 + P1 hardware-free paths complete + verified.
-- **Current milestone:** D013 (`DECISIONS.md`, committed and pushed at `1c784e5` — verified 2026-08-29) — `ChannelFlagPolicy` redesigned ("Candidate B": per-channel own-baseline two-sided test) and a minimal provisional `PhysicsRule` (`TrendSignPhysicsRule`, reusing D010's `k` heuristic) implemented to unblock `AttributionEngine`. Since then (2026-08-29), the one remaining hardware-free P2 acceptance gap was closed: a new `AdaptiveStealthFDI` injection type + its P2-ANOM-S1 scenario. The formal P2 acceptance suite (`edge/tests/test_p2_acceptance.py`) now attempts 11/14 Doc06 scenarios: **7/11 PASS** (full matrix: `P2_RESUME.md` §1a). **The 2026-08-29 P2-ANOM-S1 work is implemented, tested, lint/format clean, but UNCOMMITTED** — check `git status` before assuming it's on `origin/main`; D013 itself already is.
+- **Current milestone:** D013 (`DECISIONS.md`, committed at `1c784e5`) — `ChannelFlagPolicy` redesigned ("Candidate B": per-channel own-baseline two-sided test) and a minimal provisional `PhysicsRule` (`TrendSignPhysicsRule`, reusing D010's `k` heuristic) implemented to unblock `AttributionEngine`. Since then (2026-08-29), the one remaining hardware-free P2 acceptance gap was closed: a new `AdaptiveStealthFDI` injection type + its P2-ANOM-S1 scenario, **committed and pushed as `b82f935`** (verified 2026-08-30 — `main`/`origin/main` identical at `b82f935`). The formal P2 acceptance suite (`edge/tests/test_p2_acceptance.py`) now attempts 11/14 Doc06 scenarios: **7/11 PASS** (full matrix: `P2_RESUME.md` §1a). Most recently, the broader-`PhysicsRule` scoping decision was closed and recorded as **D014** (2026-08-30, documentation-only — no new code): no new channel coverage added; `current`↔`temperature` deferred as the sole future candidate, gated on real bench data.
 - **Overall completion:**
   - **P0 hardware-free: VERIFIED** — offline four-service stack (simulator→Mosquitto→backend→WebSocket→frontend) + E2E latency probe (p95 3–5 ms).
   - **P1 hardware-free: COMPLETE** — C1 driver abstraction, C2 sampler/ring buffer, C3 MQTT buffered-resume/LWT, C2→C3 runtime, C4 relay/watchdog. All unit + real-broker-integration verified.
@@ -115,10 +116,31 @@ See `P2_RESUME.md` §1a/§7a/§9 for full detail. Summary:
   new injection type and its test were added.
 - **Full `pytest edge/` (2026-08-29): 332 passed, 4 failed (same 4
   pre-existing, documented failures), 2 skipped** — zero regressions.
-- **UNCOMMITTED as of this update** — `edge/injection/{injections,__init__}.py`,
-  `edge/tests/{test_injection,test_p2_acceptance}.py`, plus this
-  documentation refresh. ruff/black clean. Check `git status` before
-  assuming this is on `origin/main`.
+- **Committed and pushed (2026-08-30)** — `docs: correct D013 project state
+  documentation` (`ea437c6`) and `feat: add AdaptiveStealthFDI injection`
+  (`b82f935`); `main` and `origin/main` are identical at `b82f935`.
+
+### P2 — D014 (2026-08-30): broader-`PhysicsRule` scoping decision, no expansion
+See `DECISIONS.md` D014 and `P2_RESUME.md` §5/§7/§7a for full detail. Summary:
+- Scoping review of the four channels `TrendSignPhysicsRule` (D013) doesn't
+  cover — `temperature`, `pressure`, `humidity`, `gas`. Conclusion: **no new
+  channel coverage added**; `TrendSignPhysicsRule` is unchanged.
+- `pressure` REJECTED — would reopen D010's already-recorded finding that
+  BMP180 reads atmospheric pressure only, not water-line/discharge pressure.
+- `humidity` REJECTED — the PRD's own "Design integrity note" (§12) and risk
+  R6 explicitly require temperature/humidity to stay uncorrelated in the
+  trust engine.
+- `gas` REJECTED — no documented mechanical/electrical/thermal linkage to
+  any other channel exists anywhere in the PRD/TRD.
+- `current`↔`temperature` DEFERRED as the sole future candidate — physically
+  plausible (I²R heating under load) and not PRD-forbidden, but no
+  coefficient/lag/threshold is documented anywhere and no bench data has
+  been collected. Gated on real bench hardware, not available here.
+- **D009, D010, D011, D012, D013, and `AttributionEngine`'s single-
+  `PhysicsRule` architecture are all explicitly UNCHANGED.** No code was
+  modified by this decision — documentation-only.
+- **O3 (≥85% attribution accuracy) remains structurally unreachable** — this
+  decision does not change that and was never intended to.
 
 ## P2 diagnostics (2026-08-10) — behaviour probes, NOT acceptance (commit d17942f)
 Diagnostic-only tooling under `edge/eval/` (not on pytest `testpaths`, not in the production pipeline; scikit-learn-gated tests). All magnitudes + flag threshold are EVALUATION FIXTURES, not project specs. **No P2 acceptance criterion is claimed passed.**
@@ -132,21 +154,23 @@ Diagnostic-only tooling under `edge/eval/` (not on pytest `testpaths`, not in th
 - **Reproduce:** `PYTHONPATH=backend:. python -m edge.eval.if_eval` · `… -m edge.eval.preproc_experiment`.
 
 ## In progress
-- P2: foundations, SWaT diagnostics, D013's formal acceptance pass, and the
-  2026-08-29 P2-ANOM-S1 addition are all complete. D013 is committed and
-  pushed (`1c784e5`); the P2-ANOM-S1 work is implemented/tested/lint-clean
-  but uncommitted, pending approval. Remaining work splits into one mandatory
-  implementation blocker (a broader `PhysicsRule`, if O3 progress is wanted)
-  plus real hardware, vs. documented validation limitations (IF/`c`/`h`
-  tuning questions) — see `P2_RESUME.md` §7a.
+- P2: foundations, SWaT diagnostics, D013's formal acceptance pass, the
+  2026-08-29 P2-ANOM-S1 addition, and the D014 broader-`PhysicsRule` scoping
+  decision are all complete. D013 and P2-ANOM-S1 are committed and pushed
+  (`main`/`origin/main` at `b82f935`); D014 is a documentation-only decision
+  (this pass) with no code. Remaining work is now down to one mandatory
+  implementation blocker — real bench hardware — plus the documented
+  validation limitations (IF/`c`/`h` tuning questions) — see `P2_RESUME.md`
+  §7a.
 
 ## Next
-- Commit the 2026-08-29 P2-ANOM-S1 work (pending approval). Then decide, per
-  `P2_RESUME.md` §7a: whether to scope a broader `PhysicsRule` (the one
-  remaining mandatory implementation blocker), or address the `c`/`h`/IF
-  validation limitations (P2-TRUST-H1/H2, P2-ANOM-H1/E1) — both still need
-  their own explicit scoping/approval before further code changes. λ=0.7
-  (U01) remains PENDING, unrelated to D013.
+- Decide, per `P2_RESUME.md` §7a, whether to address the `c`/`h`/IF
+  validation limitations (P2-TRUST-H1/H2, P2-ANOM-H1/E1) — each still needs
+  its own explicit scoping/approval before further code changes, since they
+  touch already-approved decisions (D009, U01's `c`). Otherwise, P2 work is
+  blocked on real bench hardware (also the only path that could unblock
+  D014's deferred current↔temperature candidate). λ=0.7 (U01) remains
+  PENDING, unrelated to D013/D014.
 
 ## Environment gates (honest — sandbox limits, not code failures)
 - **Docker image builds** (backend `pip`, frontend `npm`) fail cert-verify inside the build (gateway MITMs TLS; base images lack its CA). So the full four-service `up` can't be built here. Dockerfiles are standard/correct — no insecure workarounds added; they build on CI / a normal machine (frontend build already green in CI).
@@ -170,7 +194,7 @@ Diagnostic-only tooling under `edge/eval/` (not on pytest `testpaths`, not in th
 ## Known blockers
 Blocking questions are tracked in the roadmap discussion; the ones that gate *code* (not yet resolved — DO NOT silently assume):
 - P2: Beta math IMPLEMENTED (signal-agnostic core, 26de8c2) with λ=0.7 **pending U01 approval** (unchanged); `c`/`k`/`h` are RESOLVED (provisional, D009/D010) — `c`'s rank-based noise (P2-TRUST-H1) and `h`'s GAMMA=0.95 speed vs. a 3-window budget (P2-TRUST-H2) are now the specifically-identified open questions, not general "UNDECIDED".
-- P2: fault-vs-attack physics/correlation attribution RULE — a minimal, provisional `PhysicsRule` now exists (D013, `TrendSignPhysicsRule`), unblocking `AttributionEngine`'s wiring. Still open: it only ever names current/vibration (no rule for the other 4 channels) and is only ~50–60% reliable even there — closing this for real (O3) needs a broader rule, a mandatory implementation blocker, plus real physics data that exists nowhere yet (bench-only, dataset-gated).
+- P2: fault-vs-attack physics/correlation attribution RULE — a minimal, provisional `PhysicsRule` now exists (D013, `TrendSignPhysicsRule`), unblocking `AttributionEngine`'s wiring; still only ever names current/vibration, ~50–60% reliable even there. **Broadening scope RESOLVED (as a decision) by D014 (2026-08-30)**: `pressure`/`humidity`/`gas` REJECTED (D010 conflict / PRD design-integrity note / no documented basis); `current`↔`temperature` DEFERRED as the sole future candidate, gated on real bench data that doesn't exist yet. O3 remains structurally unreachable regardless.
 - P2: `ChannelFlagPolicy` (window-level IF → per-channel flags) RESOLVED (provisional, redesigned "Candidate B", D013) — per-channel own-baseline two-sided test, no longer cross-channel. Still U07-gated for real-data `tail_fraction` tuning.
 - P2: IF hyperparameters + flag threshold UNTUNED — dataset-gated; SWaT diagnostics (2026-08-25) now show hyperparameter changes have limited upside even where real signal exists (`P2_RESUME.md` §3a).
 - P2/P7: SWaT.A1 access GRANTED, harness built, full diagnostic campaign run and **diagnostically complete** — gates all P2 detection/attribution/trust real-data ACCEPTANCE and O3/O10 metrics regardless, since SWaT/WADI structurally cannot satisfy O3 or the literal six-channel semantics (D011). Real accuracy validation now needs bench hardware, not more dataset work.

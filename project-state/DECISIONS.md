@@ -350,6 +350,64 @@
   **uncommitted** as of this entry — commit pending explicit approval, per
   the established implement → test → report → commit-on-approval sequence.
 
+### D014 — Broader `PhysicsRule` coverage: scoping review concludes no defensible expansion now; current↔temperature is the sole future candidate, hardware-gated
+- **Date:** 2026-08-30
+- **Decision:** Following D013's identification of a broader `PhysicsRule` as
+  the one remaining mandatory implementation blocker for O3 progress
+  (`P2_RESUME.md` §7a), a scoping review was conducted for the four channels
+  `TrendSignPhysicsRule` does not cover (`temperature`, `pressure`,
+  `humidity`, `gas`). Conclusion: **no channel coverage is added.**
+  `TrendSignPhysicsRule` remains exactly as D013 defined it (current↔vibration
+  only, no new code). Per-channel findings:
+  - **`pressure`:** REJECTED. Reopening current↔pressure — the pair FR-A2
+    and the PRD demo script (§18) literally name — would require overturning
+    D010's already-recorded finding that BMP180 reads atmospheric pressure
+    only, not water-line/discharge pressure. Not revisited; D010 stands
+    unchanged.
+  - **`humidity`:** REJECTED. The PRD's own "Design integrity note" (§12)
+    and risk R6 explicitly require temperature (DS18B20) and humidity
+    (DHT22) to remain uncorrelated in the trust engine, specifically so the
+    cross-sensor correlation term cannot be trivially satisfied by two
+    related channels from the same physical process. Any humidity-based
+    physics rule would contradict a stated PRD design requirement, not
+    merely lack evidence.
+  - **`gas`:** REJECTED. No documented mechanical, electrical, or thermal
+    linkage to any other channel exists in the PRD/TRD. MQ-135 is explicitly
+    framed as an indicative air-quality proxy (VOC/CO2, not H2S), with no
+    basis for any coefficient or tolerance. Implementing a rule here would
+    be fabricated physics.
+  - **`temperature`:** DEFERRED, not rejected. Motor/bearing heat generation
+    under load (I²R losses) is a textbook-plausible physical link to
+    `current`, and nothing in the PRD forbids it (unlike humidity). However,
+    no coefficient, lag model, or threshold exists in any project document,
+    and no bench data has ever been collected to characterize it — thermal
+    response also operates on a materially different timescale than the
+    near-instantaneous mechanical coupling `k`/`TrendSignPhysicsRule` already
+    exploit. **Marked as a future candidate, gated on real bench data
+    collection** (requires the Pi/rig, not available in this environment) —
+    not to be implemented from the simulator, which generates all channels
+    as independent Gaussians with no real correlation to validate against
+    (same limitation D010 already recorded for current↔vibration).
+- **Reason:** Continues the project's established discipline (D010, D013) of
+  never inventing a physics relationship, threshold, or coefficient without
+  either explicit documentation or real data to justify it. Two of the four
+  channels are foreclosed by existing decisions/PRD text, not merely
+  under-evidenced; a third has no plausible basis at all; only one is left
+  open, and only as a future, hardware-gated candidate.
+- **Affects:** `edge/anomaly/physics_rule.py` (unchanged), `edge/anomaly/attribution.py`
+  (unchanged), O3 acceptance status (`P2_RESUME.md` §1a/§7a).
+- **Does NOT resolve:** U02 (real physics validation beyond current/vibration —
+  still open, now explicitly scoped to "current↔temperature, bench-data-gated"
+  as its only live candidate). O3 (≥85% attribution accuracy) — remains
+  **NOT ACHIEVABLE**, and this decision does not change that: even a
+  validated current↔temperature rule would cover at most 3 of 6 channels,
+  leaving pressure/humidity/gas permanently unattributable as "attack" under
+  this scope.
+- **Does NOT change:** D009, D010, D011, D012, D013, or `AttributionEngine`'s
+  single-`PhysicsRule` architecture. No code was modified by this decision.
+- **Status:** documentation-only; no implementation performed or authorized
+  by this entry.
+
 ---
 
 ## UNDECIDED (must not be silently resolved — see CURRENT_STATE blockers)
