@@ -175,13 +175,13 @@ scenarios (P2-PRE-\*) are out of this table's scope — see notes.
 
 | ID | Result | Root cause / mechanism | Category |
 |----|--------|------------------------|----------|
-| P2-ANOM-H1 | **FAIL** | IF+threshold+per-window-min-max clean-FP rate (~8% on this stream; ~22% on the original simulator diagnostic) | Documented validation limitation (U07-gated tuning) |
+| P2-ANOM-H1 | **FAIL** | IF+threshold+per-window-min-max clean-FP rate (~8% on this stream; ~22% on the original simulator diagnostic). Shares its rank-based scoring architecture with P2-TRUST-H1 (§7a); has a fit-corpus-size-fixable excess component but a nonzero floor regardless — see §7a | Documented validation limitation (U07-gated tuning) |
 | P2-ANOM-H2 | **PASS** | Fixed by D013 Candidate B (spike now correctly localized) | — |
 | P2-ANOM-H3 | **PASS** (fixture-sensitive) | Attribution=attack via the minimal `PhysicsRule`; verified ~50% (4/8 seeds) reliability — an approximately coin-flip side effect of the onset transition window's shape, not a validated capability | Documented validation limitation |
 | P2-ANOM-E1 | **FAIL** | Window-level IF flag oscillates once triggered (upstream of ChannelFlagPolicy; same root cause as H1) | Documented validation limitation (U07-gated tuning) |
 | P2-ANOM-E2 | **PASS** (fixture-sensitive) | Fault side deterministic (temperature, no physics rule applies); attack side ~60% (3/5 seeds) reliable | Documented validation limitation |
 | P2-ANOM-S1 | **PASS** (verified once) | New `AdaptiveStealthFDI` injection (2026-08-29): bias ramps then holds at a capped bound, provably staying under a test-local "naive residual" check throughout; the real, unmodified `ConsistencyProvider` (`c`) still degrades trust for the channel below `TRUSTED_MIN` because it reacts to a sustained per-sample bias present in every window sample, which a window-*variance*-based check (IF/`ChannelFlagPolicy`) does not — `channel_flags` never fires in this scenario. Verified at the committed fixture seed/parameters only, not multi-seed stress-tested | Newly implemented (not a validation limitation) |
-| P2-TRUST-H1 | **FAIL** | `c`'s empirical-CDF rank against its own training distribution produces near-uniform (not near-1.0) values for genuinely clean data, occasionally dragging trust <0.7 | Documented validation limitation |
+| P2-TRUST-H1 | **FAIL** | `c`'s empirical-CDF rank against its own training distribution produces near-uniform (not near-1.0) values for genuinely clean data, occasionally dragging trust <0.7. Shares its rank-based scoring architecture with P2-ANOM-H1/E1, but unlike them has NO fit-corpus-size-fixable component — confirmed already at its Uniform(0,1) theoretical floor — see §7a | Documented validation limitation |
 | P2-TRUST-H2 | **FAIL** | **D015 (2026-08-30):** not primarily a GAMMA/D009 gap. `ConstantSpoof`'s flat trend leaves `k=1.0` (D010's non-paired-channel default, plus a documented flat-trend blind spot in the trend-sign rule itself) the entire time, structurally flooring `g` at 0.3 regardless of `h`. Diagnostic replay confirmed even an instantly-collapsed `h` (GAMMA removed) still misses the 3-window budget (crosses 0.4 at window 5, not 3) — GAMMA is a secondary, compounding factor, not the binding constraint | Documented structural limitation (D015; joint D009+D010 interaction, not missing code) |
 | P2-TRUST-E1 | **PASS** | — | — |
 | P2-TRUST-E2 | **PASS** | — | — |
@@ -485,14 +485,42 @@ amount of tuning or data closes these without new code:
 and has been tested; the open question is accuracy/reliability against real
 data or a parameter choice, not missing code:
 
-- **P2-ANOM-H1/E1** (clean false-positive rate; oscillation once flagged) —
-  IF + threshold + per-window-min-max normalization all exist and work;
-  their accuracy on this specific combination is U07-gated (needs real
-  clean-baseline data to retune against, not new code).
-- **P2-TRUST-H1** (`c`'s rank-based noise) — `ConsistencyProvider` is fully
-  implemented (U01 resolved, provisional); its empirical-CDF-against-own-
-  training-distribution design is inherently noisy for genuinely clean data.
-  A fix would mean reconsidering the definition, not writing a new component.
+- **P2-ANOM-H1/E1 and P2-TRUST-H1 share one underlying mechanism (analyzed
+  2026-08-30, documentation-only, no code/tests changed):** both
+  `IsolationForestDetector.score()` and `ConsistencyProvider`'s `c` compute
+  an **empirical-CDF rank of a per-window statistic against a stored
+  fit-time distribution of that same statistic** — the identical scoring
+  architecture applied to two different upstream statistics. This
+  architecture is, by construction, diffuse on genuinely clean held-out
+  data rather than concentrated near an "obviously healthy" value —
+  confirmed by a read-only diagnostic replay (not committed) over ~2000
+  genuinely clean held-out windows against the committed, unmodified fit.
+  - **P2-ANOM-H1/E1** (clean false-positive rate; oscillation once
+    flagged) — IF + threshold + per-window-min-max normalization all exist
+    and work. The diagnostic found the observed excess false-positive rate
+    (above the theoretical rank-based floor) has a measurable **fit-corpus-
+    size** component: enlarging the (purely simulator-generated, no new
+    invented values) fit corpus from 600 to 6,000+ frames reduced the
+    observed false-positive rate from ~9% toward the ~5–6% theoretical
+    floor. **This is NOT being implemented now** — it is simulator-only
+    optimization, and even at the floor a rank-based score at any threshold
+    below 1.0 retains a nonzero false-positive rate by construction, so the
+    literal zero-false-positive acceptance wording remains unachievable
+    regardless. E1's oscillation is the same score/threshold-boundary
+    behavior manifesting as intermittent flag/unflag flips near 0.95.
+    Per-window normalization remains the evidence-reviewed default (§3a)
+    and is not being reconsidered here. Real retuning of `flag_threshold`
+    or normalization still needs real clean-baseline data (U07-gated), not
+    new code.
+  - **P2-TRUST-H1** (`c`'s rank-based noise) — `ConsistencyProvider` is
+    fully implemented (U01 resolved, provisional) and is **not an
+    implementation bug**: the same diagnostic found `c`'s distribution on
+    clean data is *already* at its Uniform(0,1) theoretical prediction even
+    at the committed fit size, and **enlarging the fit corpus does not
+    change this** (unlike ANOM-H1/E1, there is no data-volume component to
+    recover). No evidence-backed fix exists without redefining `c`'s
+    formula itself, which would be a new specification decision, not a
+    tuning step.
 - **P2-ANOM-H3/E2's ~50–60% reliability** — the rule exists, is wired, and
   is empirically measured; its accuracy is honestly disclosed as
   chance-influenced, not a missing capability. Widening this rule's scope was

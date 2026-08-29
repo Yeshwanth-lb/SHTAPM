@@ -91,8 +91,8 @@
 11 of 14 Doc06 scenarios attempted; full matrix in `P2_RESUME.md` §1a.
 - [x] P2-ANOM-H2, P2-ANOM-S1, P2-TRUST-E1, P2-TRUST-E2, P2-TRUST-S1 — **PASS**.
 - [x] P2-ANOM-H3, P2-ANOM-E2 — **PASS at committed seeds**, but verified only ~50–60% reliable across other seeds (documented in-test, not claimed as validated).
-- [ ] P2-ANOM-H1, P2-ANOM-E1 — **FAIL** (IF/threshold/normalization clean-FP + oscillation; U07-gated validation limitation, not missing code).
-- [ ] P2-TRUST-H1 — **FAIL** (`c`'s rank-based noise; validation limitation).
+- [ ] P2-ANOM-H1, P2-ANOM-E1 — **FAIL** (IF/threshold/normalization clean-FP + oscillation; U07-gated validation limitation, not missing code). Shares its rank-based-scoring root cause with P2-TRUST-H1 (analyzed 2026-08-30, see `P2_RESUME.md` §7a); has a fit-corpus-size-fixable excess but a nonzero floor regardless, not implemented.
+- [ ] P2-TRUST-H1 — **FAIL** (`c`'s rank-based noise; validation limitation). Same rank-CDF architecture as P2-ANOM-H1/E1, but confirmed to have NO fit-corpus-size-fixable component (see `P2_RESUME.md` §7a) — no fix without redefining `c`.
 - [ ] P2-TRUST-H2 — **FAIL** (root-caused and formally documented by D015: `ConstantSpoof`'s flat trend + D010's `k=1.0` non-paired default jointly floor `g`, independent of `h`'s GAMMA speed; D009/D010 both left unchanged, not a missing-code gap).
 
 P2-ANOM-S1 (adaptive stealth FDI) uses the new `AdaptiveStealthFDI` injection
@@ -111,8 +111,8 @@ the committed fixture seed/parameters only, not multi-seed stress-tested.
 - [x] P2-TRUST-H2 scoping — **`DECISIONS.md` D015 (2026-08-30)**: root cause established as `ConstantSpoof`'s flat trend + D010's `k=1.0` non-paired default jointly flooring `g` at 0.3, independent of `h`; diagnostic replay confirmed removing GAMMA entirely still misses the 3-window budget. **D009 and D010 both left unchanged** (Option A); P2-TRUST-S1's collusion resistance fully preserved. **P2-TRUST-H2 remains FAIL; O4/AC2 is NOT satisfied** — this decision does not change that.
 
 **Documented validation limitations (implementation exists, accuracy/tuning is the open question):**
-- [ ] P2-ANOM-H1/E1 — IF + threshold + normalization retuning against real clean-baseline data (U07-gated).
-- [ ] P2-TRUST-H1 — `c`'s empirical-CDF-vs-own-training-distribution definition (U01, provisional) may need reconsidering, not new code.
+- [ ] P2-ANOM-H1/E1 — IF + threshold + normalization retuning against real clean-baseline data (U07-gated). A fit-corpus-size improvement exists (simulator-only, analyzed 2026-08-30, `P2_RESUME.md` §7a) but is not implemented — doesn't resolve the literal zero-FP criterion.
+- [ ] P2-TRUST-H1 — `c`'s empirical-CDF-vs-own-training-distribution definition (U01, provisional) may need reconsidering, not new code. Confirmed (2026-08-30, `P2_RESUME.md` §7a) to have no fit-corpus-size fix, unlike P2-ANOM-H1/E1.
 - [ ] P2-ANOM-H3/E2 reliability — inherent to the minimal rule's scope; closing this for real would need the broader `PhysicsRule` D014 declined to build now, not a parameter tweak.
 
 **Unrelated to D013/P2-ANOM-S1/D014, still open:**
