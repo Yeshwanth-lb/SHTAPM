@@ -224,3 +224,145 @@ Diagnostic-only tooling under `edge/eval/` — NOT production, NOT a P2 acceptan
 - **P2 VALIDATION: NOT done** — c/k/h, ChannelFlagPolicy localization, real physics rule, IF tuning, dataset eval, spoof/trust acceptance tests, O3/O10 metrics all pending (U01/U02/U07). scikit-learn CI dep = open follow-up.
 - **Outstanding = hardware-only (P0/P1):** physical sensor reads, INA219 current, on-Pi LSTM+IF <500 ms, physical relay safe-stop, physical sensor→DOM/under-load latency. Neither P0 nor P1 is *fully* closed until a Pi/rig is available.
 - Local branch is ahead of origin by the P1 + P2 commits (earlier P0 commits already on origin). Not pushed.
+
+---
+
+> **Note on the gap below:** entries from this point were reconstructed from
+> `DECISIONS.md`, `TODO.md`, `CURRENT_STATE.md`, and git history rather than
+> written contemporaneously — this log fell behind the other project-state
+> files during the P2 validation → P3 work spanning 2026-08-23 through
+> 2026-08-31. Dates below are the actual git commit dates
+> (`git log --format=%ad`), which may differ slightly from a decision's own
+> recorded date in `DECISIONS.md` where the two are not identical.
+
+## 2026-08-23 — P2: `h` (historical-reliability) trust signal (D009)
+- `edge/trust/h_reliability.py` — `HReliabilityProvider`: per-channel slow EMA of binary healthy/unhealthy window outcomes (`GAMMA=0.95` approved, ~13-window half-life, deliberately slower than `lambda=0.7`'s ~2-window half-life for collusion resistance per FR-T2/P2-TRUST-S1); `H_INIT=1.0`. Satisfies the existing `SignalProvider` protocol.
+- Commits: `c56cb4d` (implement), `a50d599` (test import-order fix), `eb93f1a` (formatting).
+- **IMPLEMENTED.** Partially resolves U01 (`h` definition + memory length decided). **Still open (unchanged):** `lambda=0.7` pending explicit approval; `c` signal definition undecided at this point.
+
+## 2026-08-24 — P2: `c`/`k` trust signals + `ChannelFlagPolicy` wiring (D010)
+- `edge/trust/c_consistency.py` — `ConsistencyProvider` (`c` signal implementation).
+- `edge/trust/k_correlation.py` — `CorrelationProvider`: **D010** provisional current↔vibration trend-sign heuristic (early-half vs. late-half window-mean trend comparison; `k=1.0` if signs agree or either is flat, else `k=0.0` for both channels — parameter-free, no tunable tolerance). Chosen over the PRD's literal current↔pressure pairing because the bench `BMP180` reads atmospheric pressure only (TRD proxy constraint C6), confirmed via D010's own reasoning, not re-verified in this pass.
+- Original `ChannelFlagPolicy` variance-threshold heuristic implemented and wired into `edge/anomaly/pipeline.py`.
+- Commits: `d1e6d48`, `76ff900` (lint fix), `06031d7` (c/h integration tests), `691847f`, `57d434d`, `b0f0272`.
+- **IMPLEMENTED (provisional/unvalidated).** Partially resolves U02 (channel pair + heuristic decided). **Still open:** whether current↔vibration trending reflects a real physical relationship at bench scale — requires real pump data, not resolved by this work.
+
+## 2026-08-24 — P2: SWaT validation methodology frozen, dataset access NOT yet approved (D011)
+- Methodology-only decision: six-tag channel relabeling (proxy substitution, no physical-equivalence claim), `k` excluded from validation evidence on SWaT (current/vibration confirmed absent from SWaT/WADI), `AttributionEngine`/O3 deferred (no `PhysicsRule` existed yet at this point), WADI 6-of-15 localization check rejected (n≈6 too small), strict temporal train/eval separation mandated.
+- Commits: `642c47b`, `9e7e6e7`, `8ca3570`, `c40221c`, `4d8a281` (CI dependency fix), `b47a960`.
+- **DEFERRED/BLOCKED (by design).** Methodology frozen; dataset-access authorization remains a separate, explicit, not-yet-approved decision at this point.
+
+## 2026-08-25 — P2: SWaT.A1 six-tag mapping + evaluation harness (D012)
+- Six SWaT.A1 tags selected for the D011 proxy substitution (`LIT101`→temperature, `AIT203`→vibration, `DPIT301`→pressure, `LIT401`→humidity, `AIT402`→gas, `PIT501`→current), justified by empirical checks on the actual downloaded SWaT files (null/range checks, pairwise correlation <0.5, flatness/attack-shift comparisons against rejected candidates `PIT502`/`AIT502`). Explicit non-claim: `AIT402` is an aqueous ORP sensor, not an air-quality sensor — the `gas` field name is a software-interface slot only.
+- `edge/eval/swat_eval.py` — evaluation harness implementing the D011/D012 methodology.
+- Commits: `4bc0c3a`, `60a4dbe`.
+- **IMPLEMENTED (harness) / EXPERIMENTAL (results).** Resolves D011's one outstanding item (tag selection). Building/running the harness against the full campaign happens in later, not-yet-logged work referenced by `TODO.md`/`CURRENT_STATE.md`; not re-verified in this pass.
+
+## 2026-08-26 — P2: `ChannelFlagPolicy` redesign, provisional `PhysicsRule`, first formal acceptance suite (D013)
+- `ChannelFlagPolicy` redesigned ("Candidate B"): same-window cross-channel highest-variance rule replaced with a per-channel, own-baseline, two-sided empirical-CDF test (`fit()` learns each channel's own clean-baseline variance distribution; flags on either high or low outliers vs. that channel's own history, never vs. other channels). Root cause of the old rule's failures: per-window min-max normalization inverts the expected variance signature for spikes and floors constant-spoof windows at exactly variance=0.0.
+- `edge/anomaly/physics_rule.py` — `TrendSignPhysicsRule`: minimal, provisional `PhysicsRule` reusing D010's current↔vibration heuristic verbatim, solely to unblock `AttributionEngine` (previously `attribution=attack` was structurally unreachable everywhere — no `PhysicsRule` implementation existed at all).
+- `edge/tests/test_p2_acceptance.py` — first formal P2 acceptance suite written and run against the PRD/Doc06 P2-ANOM-*/P2-TRUST-* scenario table (10 of 14 attempted; P2-ANOM-S1 excluded, no stealth-injection type existed yet).
+- **Verified (per `DECISIONS.md` D013's own recorded evidence):** targeted regression + full `pytest edge/` → **327 passed, 4 failed, 2 skipped** (the 4 failures pre-existing and unrelated, zero new regressions). P2-ANOM-H2 FAIL→PASS. P2-TRUST-H2's `gas` channel-flag true-rate rose 13.3%→68% (>5x) but final trust still didn't cross <0.4 within 3 windows — root cause reattributed to `h`'s own EMA speed (D009 GAMMA=0.95), a genuine tension between two separately-approved decisions, not a defect in either. P2-ANOM-H3/E2 became runnable and PASS at committed fixture seeds (reliability-limited across other seeds, per multi-seed checks not committed as separate tests).
+- Commit: `1c784e5`.
+- **IMPLEMENTED + PARTIALLY VALIDATED.** `PhysicsRule` scope deliberately narrow (current/vibration only); P2-TRUST-H2 remains FAIL at this point (root-caused, not yet formally accepted as a limitation — that comes with D015).
+
+## 2026-08-29 — P2: `AdaptiveStealthFDI` injection (P2-ANOM-S1) + D013 documentation correction
+- `edge/injection/injections.py` — `AdaptiveStealthFDI`: a bias capped at a caller-chosen bound (not growing unboundedly), enabling the previously-excluded P2-ANOM-S1 scenario. Provably evades a test-local "naive residual" check throughout, while the real, unmodified `ConsistencyProvider` still degrades trust below `TRUSTED_MIN` — verified at the committed fixture seed/parameters only, not multi-seed stress-tested.
+- Commits: `b82f935` (feature), `ea437c6` (docs correction to D013's project-state documentation).
+- **IMPLEMENTED.**
+
+## 2026-08-30 — P2: `PhysicsRule` scoping review (D014), P2-TRUST-H2 structural limitation (D015), rank-scoring validation limits clarified
+- **D014:** Reviewed expanding `PhysicsRule` beyond current/vibration. Concluded no defensible expansion now: `pressure` rejected (would reopen D010's atmospheric-only BMP180 finding), `humidity` rejected (would contradict the PRD's own design-integrity note requiring temperature/humidity to stay uncorrelated), `gas` rejected (no documented physical basis). `current`↔`temperature` deferred as the sole future candidate, gated on real bench data. Explicit consequence recorded: **O3 (≥85% attribution accuracy) remains structurally unreachable** — this decision does not change that.
+- **D015:** P2-TRUST-H2 formally root-caused and accepted as a **structural limitation**, not a missing-code gap: `ConstantSpoof`'s flat trend combined with D010's `k=1.0` non-paired default jointly floor `g` at 0.3 independent of `h`'s speed; a diagnostic replay confirmed removing `GAMMA` entirely still misses the 3-window budget. D009 and D010 both explicitly left unchanged (Option A — P2-TRUST-S1's collusion resistance fully preserved). **P2-TRUST-H2 remains FAIL; O4/AC2 is NOT satisfied** by this decision.
+- P2-ANOM-H1/E1 and P2-TRUST-H1 clarified as sharing one rank-based-scoring root cause (documented, no new decision record created for this specific clarification).
+- Commits: `5612a2a` (D014), `3a1be08` (D015), `d28de0b` (rank-based clarification), `81eb549` (end-of-day handoff checkpoint).
+- **DECISION RECORDED — formally accepted limitation, not fixed.** Per `TODO.md`'s own P2 status matrix (read in this audit): as of this point, P2's hardware-free scope has **7 of 14 acceptance scenarios PASS, 4 FAIL** (all traced to documented, decision-backed causes — U07/dataset-tuning-gated or structural). 11 of 14 total scenarios have now been attempted (D013's original 10 plus P2-ANOM-S1, enabled by `AdaptiveStealthFDI`); 3 of 14 remain unattempted. All 4 FAILs require either real bench/dataset data (U07) or a redefinition of `c`/`k` — none is a missing-code gap.
+
+## 2026-08-31 — P3 scoping: U03/U04 resolved (D016/D017), divergence/substitution design (D018), uncertainty-estimation method (D019)
+- **D016 (U03):** prognosis and digital-twin are separate models; the twin is a single channel-agnostic model (no architecture/hyperparameter detail specified by this decision).
+- **D017 (U04):** synthetic simulator data approved for **initial hardware-free digital-twin development/testing only** — explicitly not claimed sufficient for real-world reconstruction accuracy; prognosis training remained blocked at this point (no degradation-trajectory data source existed yet).
+- **D018:** divergence measured against the isolated sensor's own continuing raw reading (explicit backstop, NOT proof — PRD's own R3 circularity risk carried forward, not resolved), fit-time z-score magnitude form; recovery reuses `TRUSTED_MIN=0.7`; 60s expiry without recovery escalates to Safe Pump-Stop; uncertainty stays edge-internal (frozen `DecisionMessage` not modified); P2 runs before P3 each cycle.
+- **D019:** uncertainty-estimation method is a deterministic elapsed-substitution-time proxy (non-decreasing, bounded relative to the same 60s bound, resets per episode) — explicit safety/confidence proxy, NOT a statistically calibrated error estimate; single-signal (no divergence or reconstruction-stability input).
+- Commits: `b68262d`, `7fc12c6`, `f1c3718`.
+- **DECISIONS RECORDED.** No code implemented by these entries themselves.
+
+## 2026-08-31 — P3: hardware-free self-healing plumbing + P2→P3 cycle wiring
+- `edge/models/twin.py` — `TwinReconstructor` Protocol seam (Protocol-only, no production implementation authorized by D016 at this point).
+- `edge/pipeline/divergence.py` — `DivergenceScorer` implementing D018 pt.1's fit-time z-score form.
+- `edge/pipeline/uncertainty.py` — `ElapsedTimeUncertaintyProxy` implementing D019's method (scaling formula still a required, never-defaulted injected seam at this point).
+- `edge/pipeline/self_heal.py` — `SelfHealOrchestrator` wiring the above to the existing `RelayController.safe_off()` (D018 pts. 2/3/5).
+- `edge/pipeline/cycle.py` — `process_isolated_channels`: P2→P3 adapter taking `isolated_channels`/`raw_values` as REQUIRED, caller-supplied inputs (never derived from trust/band), validate-all-upfront.
+- **Verified:** 38 new tests pass hardware-free (per `TODO.md`'s own record); `divergence_threshold`, `uncertainty_cap`, and the scaling formula remained required parameters/injectable seams — no values chosen yet at this point (U05 unchanged).
+- Commits: `8cc5564`, `fe4042e`, `0cc4d31`.
+- **IMPLEMENTED (hardware-free plumbing).** No `DecisionMessage`/simulator/P2 change; no real-world reconstruction-accuracy or divergence-threshold validation claimed.
+
+## 2026-08-31 — P3: concrete LSTM digital twin + integration
+- `edge/models/lstm_twin.py` — `LSTMTwinReconstructor`/`_LSTMTwinNet`: single-layer unidirectional LSTM → final hidden state → Linear → scalar; `hidden_size` REQUIRED, no default; masked-channel input (never reads the true value) + one-hot indicator; satisfies the unmodified `TwinReconstructor` Protocol.
+- `edge/eval/twin_training.py` — diagnostic-only self-supervised training harness using only the existing simulator + `Preprocessor`. **No meaningful reconstruction accuracy or real-world validation claimed** — the simulator's clean baseline has no cross-channel/temporal structure beyond each channel's own fitted mean, a limitation the module documents about itself.
+- Integration tests proved the real `LSTMTwinReconstructor` (not a fixture stub) flows end-to-end through `SelfHealOrchestrator`/`process_isolated_channels`.
+- **Verified:** the cumulative P3 test count reached 68 hardware-free tests at this point (per `TODO.md`'s own record, cited in the self-healing orchestration bullet — the cumulative total across self-heal + divergence + twin + cycle wiring combined, not a digital-twin-specific test count).
+- Commits: `43e114d`, `66f790e`, `2e04e20` (docs), `854440d` (additional P3 integration/acceptance coverage).
+- **IMPLEMENTED (hardware-free) — EXPERIMENTAL, not VALIDATED.** No claim of trained reconstruction quality or real-world applicability.
+
+## 2026-08-31 — D020: uncertainty-cap value + scaling formula (policy, not data-gated)
+- `uncertainty_cap = 0.8` and the elapsed-time→uncertainty scaling formula = **linear** (`f(x)=x`, output domain [0,1]) resolved as explicit **policy decisions** — D019's proxy was never a calibrated error estimate, so no bench data would have resolved either value; not data-gated. `uncertainty_cap` remains a REQUIRED constructor argument in code — no default was added.
+- U05 narrowed to exactly one remaining open item after this decision: `divergence_threshold`'s numeric value, still fully data-gated.
+- Commits: `bbd0c5b` (decision), `2f423bc` (refactor propagating the policy through existing code — no new capability added).
+- **DECISION RECORDED + PROPAGATED.** `divergence_threshold` remains BLOCKED (U05).
+
+## 2026-08-31 — P3: untrained LSTM prognosis architecture skeleton
+- `edge/models/lstm_prognosis.py` — `LSTMPrognosisPredictor`/`_LSTMPrognosisNet`: single-layer unidirectional LSTM → final hidden state → two independent heads (`health`: `Linear(hidden_size,3)`, `failure_eta`: `Linear(hidden_size,1)`); `hidden_size` REQUIRED, no default; trust-weighted input reuses the existing P2 `Window`/`TrustReading` structures. No `Protocol` seam (no current consumer to type against, unlike the digital twin). No training, dataset, loss, optimizer, or pipeline integration.
+- Commit: `9f802df`.
+- **IMPLEMENTED (architecture only) — UNTRAINED.** No accuracy or calibration claim of any kind.
+
+## 2026-08-31 — PRONOSTIA adopted as methodology-validation dataset (D021), input-representation mechanics resolved (D022)
+- **D021:** PRONOSTIA/FEMTO (IEEE PHM 2012 bearing run-to-failure dataset, NASA PCoE-hosted) adopted as the initial external prognosis training/methodology dataset — vibration + temperature ONLY, as a same-failure-mode-class proxy for pump-bearing degradation. Explicitly NOT evidence of pump validation; pressure/humidity/gas/current remain unvalidated; real pump/bench validation still required.
+- Dataset acquired and inspected read-only (verified download, byte-exact + zip-integrity checked, extracted only to session scratchpad — never committed to the repo): confirmed 6 training + 11 test bearing experiments; real, measured degradation-to-failure signatures (vibration amplitude ~20–30x rise; temperature rise ~70→164°C in `Bearing1_1`).
+- **D022:** three narrow input-representation-mechanics choices — temperature 10Hz→1Hz via 1-second block mean; vibration burst → one RMS-of-Euclidean-magnitude scalar per real burst, no interpolation; explicit per-timestep `vibration_observed` indicator. Widens the eventual prognosis input contract from `len(CHANNELS)` to `len(CHANNELS)+1`, without redesigning the LSTM itself.
+- Commit: `9fee8f6` (decisions recorded; no dataset/code/loader change by the decision entries themselves at this point).
+- **DECISIONS RECORDED (D021/D022).** No implementation yet at this point.
+
+## 2026-08-31 — PRONOSTIA: prognosis input widened to 11 columns (D022/D024 implementation)
+- `edge/models/lstm_prognosis.py` widened: `build_trust_weighted_input` renamed to `build_prognosis_input`, now REQUIRES an `availability` argument (no default); `PROGNOSIS_INPUT_WIDTH_D024 = 11` (6 trust-weighted `CHANNELS` + 5 per-timestep 0.0/1.0 availability indicators: `vibration_observed` per D022, then `pressure_observed`/`humidity_observed`/`gas_observed`/`current_observed` per D024 — see note below on D024's own text having been recorded later in `DECISIONS.md`, though this implementation already assumed and matched it). `_LSTMPrognosisNet.input_size` updated accordingly.
+- Commit: `8b7aa6c`.
+- **IMPLEMENTED.** Existing test suite updated in the same commit (`edge/tests/test_lstm_prognosis.py`) to cover the 11-column contract.
+
+## 2026-08-31 — PRONOSTIA: preprocessing loader + prognosis-input glue (D022/D023 implementation)
+- `edge/eval/pronostia_prep.py` — `load_bearing_run`/`PronostiaRunSequence`: converts PRONOSTIA's raw on-disk CSVs into the D022-approved 1Hz temperature-clocked representation with sparse, honestly-flagged vibration observations. Implements the three D023 subtractive data-quality treatments (exclude 5 zero-temperature bearings; discard leading-edge vibration bursts before temperature coverage begins; discard `Bearing1_1`'s 2 named corrupted-timestamp files) — no fabrication, interpolation, or reconstruction of any kind.
+- `edge/eval/pronostia_prognosis_input.py` — `pronostia_sequence_to_prognosis_input`: maps a `PronostiaRunSequence` into `build_prognosis_input`'s arguments (temperature/vibration passthrough; 4 zero-filled placeholder channels for pressure/humidity/gas/current per D024). No tensor-construction logic duplicated.
+- Commit: `c425de0`.
+- **IMPLEMENTED + tested against real downloaded data** (loader-level tests sanity-checked against the acquired dataset; committed tests use small synthetic fixtures, never the real ~1.1GB dataset). Real-data full audit found 12/17 bearings usable after the D023 treatments (4 training + 8 test), matching the treatments' design intent.
+
+## 2026-08-31 — PRONOSTIA: RUL/HealthState target generation (D025/D026 implementation)
+- `edge/eval/pronostia_prognosis_targets.py` — `compute_prognosis_targets`/`PronostiaPrognosisTargets`: `RUL(t) = final_recorded_timestep − t` in seconds for exactly the 4 D025-authorized training bearings (`Bearing1_1, 1_2, 2_1, 3_1`); `TRAINING_BEARINGS_D025` constant; validates a sequence's own `bearing_id` (not the caller-supplied `split` label) before computing anything. HealthState classified via D026's proportional bands (`WARNING_PROPORTION_D026=0.20`, `CRITICAL_PROPORTION_D026=0.05`) — explicit modeling-policy values, not empirically derived, not PRONOSTIA ground truth.
+- Commit: `d7ab366`.
+- **IMPLEMENTED.** Test-split bearings and `Validation_Set`/`Full_Test_Set` structurally refused (raise `ValueError`), never processed.
+
+## 2026-08-31 — PRONOSTIA: prognosis training harness
+- `edge/eval/pronostia_prognosis_training.py` — sliding-window training-example construction (30-sample windows, stride=1, matching P2's own documented window-size precedent; target = each window's final-timestep RUL/HealthState, the only interpretation compatible with `_LSTMPrognosisNet`'s existing final-hidden-state forward path); leave-one-bearing-out cross-validation across the 4 D025 training bearings (fresh network per fold, zero sample-level overlap); `CrossEntropyLoss` + per-bearing-normalized-RUL `MSELoss` multi-task loss; full HealthState/RUL evaluation metrics (accuracy, macro F1, per-class precision/recall, confusion matrix, RUL RMSE/MAE/MAPE/bias).
+- Commit: `68addbb883a4489654a6a33586a9c2a6ba9984dd`.
+- **IMPLEMENTED + tested** (synthetic fixtures only in the committed test suite — never the real dataset). Window size/stride/loss/optimizer-interface documented in-module as implementation-level choices, not `DECISIONS.md` entries.
+
+## 2026-08-31 — PRONOSTIA: real-data experiment — collapse found, root-caused, fixed
+- The training harness was run against the real, already-downloaded PRONOSTIA dataset (session scratchpad; not committed to the repo, not reproducible from repository contents alone). This run and its results are **EXPERIMENTAL** — not part of the committed/reproducible test suite.
+- **First run** (unweighted `CrossEntropyLoss`, 3 epochs, `hidden_size=16`): HealthState classification collapsed to always predicting the majority ("Healthy") class in every leave-one-bearing-out fold (macro F1 ~0.30; 0.0 recall on Warning and Critical in every fold). RUL regression showed large error with a consistent negative bias (systematic under-prediction) in every fold.
+- Increasing epochs/hidden_size alone (15 epochs, `hidden_size=32`, class-weighted loss) did not resolve the collapse — predictions were numerically identical regardless of training configuration, ruling out "needs more training" and pointing to a structural cause.
+- **Root cause** (confirmed via a forward-pass-only diagnostic, no training involved): raw, unnormalized input channel values (e.g. `Bearing1_1` temperature spans ~70→164°C over its lifetime) were saturating the LSTM's gates so severely that even a **freshly initialized, untrained** network's output barely varied across windows spanning the bearing's entire lifetime.
+- **Fix:** `compute_channel_stats()`/`normalize_examples()` (per-raw-channel z-score standardization, fit from training-split examples only per fold — the D022/D024 availability indicator columns are never normalized) and `class_weights()` (inverse-frequency `CrossEntropyLoss` weighting for D026's real ~80/15/5 class split), both fit training-only per fold (same leakage discipline as D025). Wired into `run_leave_one_bearing_out` as opt-out defaults.
+- **Re-running (class-weighted + normalized, 15 epochs, `hidden_size=32`) confirmed the collapse is gone** — all three HealthState classes are genuinely predicted in every fold. **Cross-bearing generalization remains inconsistent**: 1 of 4 folds (`Bearing1_2` held out) reached macro F1 ~0.59 with strong Healthy/Critical recall; the other 3 folds were weak (macro F1 0.30–0.38), and Warning recall was 0.0 in 2 of 4 folds. This is consistent with this session's earlier finding that `Bearing1_1`/`Bearing1_2` (same nominal operating condition) have substantially different degradation trajectories — a genuine small-sample (n=4) limitation, not an identified remaining code defect.
+- Commit: `983eb04` (code fix + 19 new tests; the real-data run itself was not committed/is not reproducible from the repo alone).
+- **EXPERIMENTAL RESULT, code fix IMPLEMENTED + tested.** **No claim of a validated or production-ready prognosis model is made.** This run's purpose was to prove the pipeline (windowing → training → LOBO → metrics) works correctly end-to-end on real data, which it now does; it does not constitute pump validation (D021's scope is unchanged) and did not use `Validation_Set`/`Full_Test_Set` or any test-split bearing.
+
+## 2026-08-31 — Documentation sync: D023–D026 committed, P3 status updated
+- `DECISIONS.md` D023 (PRONOSTIA data-quality treatments), D024 (four-channel availability-indicator representation), D025 (RUL/HealthState target methodology), and D026 (HealthState numeric proportions: 20% Warning / 5% Critical, explicit policy) — all previously approved earlier in the session but not yet committed to `DECISIONS.md` until this point, despite code implementing them (`8b7aa6c`, `c425de0`, `d7ab366`) having already landed.
+- `TODO.md`/`CURRENT_STATE.md` updated to reflect the training harness, the real-data experiment, and the honest current status (no trained/validated model; cross-bearing generalization inconsistent given n=4).
+- Commit: `6787299`.
+- **DOCUMENTATION ONLY.** No code, label, or dataset file created or modified by this commit.
+
+## Status (as of `6787299`, superseded the 2026-08-10 status above)
+- **P0/P1 hardware-free: unchanged from above (COMPLETE)** — still blocked on the same physical hardware gates (sensor reads, INA219, physical relay safe-stop, watchdog-on-real-death), not re-verified in this pass.
+- **P2 hardware-free foundations + diagnostics: COMPLETE.** **P2 formal acceptance (per `test_p2_acceptance.py`, `TODO.md`'s own status matrix): 7 of 14 scenarios PASS** (2 of those PASS-at-committed-seed-only, ~50–60% reliability across seeds per D013's multi-seed checks), **4 FAIL** (P2-ANOM-H1/E1, P2-TRUST-H1/H2 — each root-caused and either formally accepted as a structural limitation (D015) or explicitly gated on real data (U01/U07), not a missing-code gap), remaining scenarios not attempted under the original D013 run. **P2 VALIDATION on real hardware/dataset: NOT done.**
+- **P3: self-healing, divergence detection, digital twin — IMPLEMENTED hardware-free, EXPERIMENTAL** (no real-world reconstruction-accuracy or divergence-threshold validation; `divergence_threshold` remains BLOCKED, U05). **Prognosis: architecture + PRONOSTIA methodology + target generation + training harness IMPLEMENTED and tested; one real-data experiment run (EXPERIMENTAL, not reproducible from repo contents alone) found and fixed a training-collapse bug; no trained/validated model exists or is claimed.** RL agent: MISSING, blocked on U06 (reward shaping, undecided). Dry-run detection: deliberately excluded from the hardware-free injection framework (physical, hardware-gated) — not started.
+- **P4 (backend DB/auth/REST/ledger), P5 (Aurora dashboard), P6 (demo hardening), P7 (quantitative SWaT/WADI evaluation): NOT STARTED.** No claim of completion for any of these phases.
+- **Outstanding = hardware-only (P0/P1/P2/P3 shared):** physical sensor reads, INA219 current, physical relay safe-stop, watchdog-on-real-death, real clean-baseline data for IF/threshold retuning (U07), real bench data for `divergence_threshold` (U05), real pump data for prognosis/dry-run validation. None of this is faked anywhere in the codebase.
+- Local branch was ahead of `origin/main` by 10 commits as of `6787299`; verified directly (`git status -sb`) that these have since been pushed.
