@@ -17,11 +17,14 @@ hardening pass (`0cc4d31`), then a digital-twin architecture scoping pass
 and its implementation: a concrete **LSTM digital twin**
 (`LSTMTwinReconstructor`, `43e114d`) plus integration tests proving it
 flows end-to-end through the existing orchestration (`66f790e`) — see the
-new P3 sections below for full detail. `divergence_threshold`,
-`uncertainty_cap`, and the elapsed-time→uncertainty scaling formula remain
-required parameters/injectable seams — **no values chosen, U05
-unchanged**; **no meaningful reconstruction accuracy or real-world
-validation is claimed anywhere in this slice**. **Hardware-free P2 still
+new P3 sections below for full detail. **Since then, `DECISIONS.md` D020
+(2026-08-31, documentation-only) resolved `uncertainty_cap` (0.8) and the
+elapsed-time→uncertainty scaling formula (linear, output domain [0,1]) as
+policy decisions — both remain required, never-defaulted constructor
+arguments in code, no default added.** `divergence_threshold` remains the
+sole open U05 numeric value, still data-gated; **no meaningful
+reconstruction accuracy or real-world validation is claimed anywhere in
+this slice**. **Hardware-free P2 still
 has no remaining mandatory software implementation** (unchanged from the
 prior session — see `P2_RESUME.md` §10 for that handoff). See
 `DECISIONS.md` D013–D019 and `P2_RESUME.md` §1a/§3a/§7a/§9/§10/§14 for
@@ -390,33 +393,35 @@ implemented and integration-tested: `DivergenceScorer`,
 `process_isolated_channels` P2→P3 adapter, and a concrete
 `LSTMTwinReconstructor` satisfying the unmodified `TwinReconstructor`
 Protocol — see the P3 sections above for full detail.
-**Immediate housekeeping: `43e114d` and `66f790e` are committed but NOT
-pushed** — `origin/main` still ends at `0cc4d31`; pushing them (once
-approved) is the smallest pending action, not new work. Beyond that,
-**U05 is still narrowed to just its two numeric values**
-(`divergence_threshold` data-gated; `uncertainty_cap` noted as
-policy-decidable but still unchosen); the time→uncertainty scaling formula
-and U06 remain open; **no meaningful reconstruction accuracy has been
-validated** — the simulator's clean baseline structurally cannot supply
-the cross-channel/temporal signal needed, so no amount of further
-hardware-free training changes that. Nothing in this repo yet decides
-*which* channels are isolated for real — FR-RL2 makes that an RL-agent
-action, and both the agent and its deterministic fallback (FR-RL4) remain
-unbuilt; `process_isolated_channels` is exercised only with test-fixture
-isolated sets. Prognosis training is still blocked on an unspecified
-degradation-data source. The next session should explicitly ask the user
-whether to: (a) push `43e114d`/`66f790e`, (b) choose the `uncertainty_cap`
-value (flagged as policy-decidable, not data-gated) or the scaling
-formula, (c) scope the deterministic rule-based RL fallback (FR-RL4) —
-noting it itself needs `health`/`failure_eta` from the still-blocked
-prognosis, so scoping it will likely surface that dependency again, (d)
-resolve one of the standing P2 decision-required items (λ=0.7
-sign-off/U01, `c`'s redefinition, FR-A4's payload/U14), or (e) something
-else entirely. Do not default to further P3 implementation, and do not
-create a new decision (D020+) without the same propose-then-approve
-sequence used for D014–D019. P2 work otherwise remains blocked on real
-bench hardware (also the only path that could unblock D014's deferred
-current↔temperature candidate).
+**`DECISIONS.md` D020 (2026-08-31, documentation-only) resolved
+`uncertainty_cap` (0.8, in the proxy's own output domain) and the
+elapsed-time→uncertainty scaling formula (linear, `f(x)=x`, output domain
+[0,1] now a specification requirement) — both as policy decisions, since
+D019's proxy was never a calibrated error estimate and no bench data would
+have resolved either. Both remain required, never-defaulted constructor
+arguments in code; no default was added anywhere.** **U05 now narrows to
+exactly one remaining item: `divergence_threshold`'s numeric value**,
+still fully data-gated (needs real reconstruction-error and
+fault/attack-separation statistics); U06 remains open; **no meaningful
+reconstruction accuracy has been validated** — the simulator's clean
+baseline structurally cannot supply the cross-channel/temporal signal
+needed, so no amount of further hardware-free training changes that.
+Nothing in this repo yet decides *which* channels are isolated for real —
+FR-RL2 makes that an RL-agent action, and both the agent and its
+deterministic fallback (FR-RL4) remain unbuilt; `process_isolated_channels`
+is exercised only with test-fixture isolated sets. Prognosis training is
+still blocked on an unspecified degradation-data source. The next session
+should explicitly ask the user whether to: (a) obtain or scope a path to
+real bench data for `divergence_threshold`, (b) scope the deterministic
+rule-based RL fallback (FR-RL4) — noting it itself needs `health`/
+`failure_eta` from the still-blocked prognosis, so scoping it will likely
+surface that dependency again, (c) resolve one of the standing P2
+decision-required items (λ=0.7 sign-off/U01, `c`'s redefinition, FR-A4's
+payload/U14), or (d) something else entirely. Do not default to further P3
+implementation, and do not create a new decision (D021+) without the same
+propose-then-approve sequence used for D014–D020. P2 work otherwise
+remains blocked on real bench hardware (also the only path that could
+unblock D014's deferred current↔temperature candidate).
 
 ## Environment gates (honest — sandbox limits, not code failures)
 - **Docker image builds** (backend `pip`, frontend `npm`) fail cert-verify inside the build (gateway MITMs TLS; base images lack its CA). So the full four-service `up` can't be built here. Dockerfiles are standard/correct — no insecure workarounds added; they build on CI / a normal machine (frontend build already green in CI).
@@ -448,9 +453,9 @@ Blocking questions are tracked in the roadmap discussion; the ones that gate *co
 - P3: LSTM — one shared model or two? **RESOLVED (2026-08-31, `DECISIONS.md` D016)**: two separate models (prognosis; digital-twin), twin is a single channel-agnostic model, not per-channel. No architecture/hyperparameter detail specified. **A concrete `LSTMTwinReconstructor` now exists** (`edge/models/lstm_twin.py`, `43e114d`, 2026-08-31): single-layer, unidirectional LSTM → final hidden state → Linear → scalar (the approved architecture shape); `hidden_size` remains REQUIRED, no default (D016 specifies no hyperparameters). Satisfies the unmodified `TwinReconstructor` Protocol; integration-tested with `SelfHealOrchestrator`/`process_isolated_channels` at `66f790e`. **No meaningful reconstruction accuracy or real-world validation is claimed.**
 - P3: digital-twin training-data source. **RESOLVED for initial dev only (2026-08-31, `DECISIONS.md` D017)**: synthetic (D005/D008 simulator + P2 injection framework) approved for hardware-free digital-twin development/testing — explicitly NOT claimed sufficient/validated for real-world reconstruction accuracy. **A diagnostic-only self-supervised training harness now exists** (`edge/eval/twin_training.py`, `43e114d`) using only the existing simulator + `Preprocessor` — confirmed the simulator's clean baseline has no cross-channel/temporal structure beyond each channel's own fitted mean, so even successful hardware-free training only proves the ML plumbing works, not reconstruction quality. Prognosis training remains blocked: no degradation-trajectory data source exists or is specified.
 - P3: divergence/substitution behavioral design. **RESOLVED (2026-08-31, `DECISIONS.md` D018)**: divergence measured against the isolated sensor's own continuing raw reading — an explicit backstop, NOT proof, NOT an independent reference (PRD's own R3 circularity risk carried forward, not resolved); fit-time z-score magnitude form (not min-max, not rank/CDF); recovery reuses `TRUSTED_MIN=0.7` (no new hysteresis); 60s expiry without recovery escalates to Safe Pump-Stop; uncertainty stays edge-internal, frozen `DecisionMessage` **not modified**, existing `alerts` table used instead; P2 runs before P3 each cycle. **Hardware-free plumbing implementing this design exists and is now integration-tested** (`edge/pipeline/{divergence,self_heal,cycle}.py`, committed/pushed through `0cc4d31`, 2026-08-31, 68 tests total) — `divergence_threshold` remains a REQUIRED parameter, no value chosen.
-- P3: uncertainty-estimation method (FR-H2). **RESOLVED provisionally (2026-08-31, `DECISIONS.md` D019)**: deterministic elapsed-substitution-time proxy — starts at minimum when substitution begins, non-decreasing during that episode, bounded relative to the existing `substitution_max_seconds=60` (D018, not a new time constant), resets per episode. An explicit safety/confidence proxy, NOT a statistically calibrated estimate of reconstruction error. Single-signal only — divergence and reconstruction-stability explicitly NOT added as inputs. Edge-internal, no `DecisionMessage` change. Also approved: P3-HEAL-E1 wording clarified to "Uncertainty flagged high (nearing cap); alert raised." **Hardware-free plumbing implementing this method exists** (`edge/pipeline/uncertainty.py`, committed/pushed `8cc5564`, 2026-08-31) — the scaling formula remains a REQUIRED, never-defaulted injected argument, no formula chosen.
+- P3: uncertainty-estimation method (FR-H2). **RESOLVED provisionally (2026-08-31, `DECISIONS.md` D019)**: deterministic elapsed-substitution-time proxy — starts at minimum when substitution begins, non-decreasing during that episode, bounded relative to the existing `substitution_max_seconds=60` (D018, not a new time constant), resets per episode. An explicit safety/confidence proxy, NOT a statistically calibrated estimate of reconstruction error. Single-signal only — divergence and reconstruction-stability explicitly NOT added as inputs. Edge-internal, no `DecisionMessage` change. Also approved: P3-HEAL-E1 wording clarified to "Uncertainty flagged high (nearing cap); alert raised." **Hardware-free plumbing implementing this method exists** (`edge/pipeline/uncertainty.py`, committed/pushed `8cc5564`, 2026-08-31). **The scaling formula is now RESOLVED (2026-08-31, `DECISIONS.md` D020, documentation-only): linear, `f(x)=x`, output domain [0,1]** — remains a REQUIRED, never-defaulted injected argument in code; no default was added.
 - P3: P2→P3 cycle wiring — which channels reach `SelfHealOrchestrator` each cycle. **Adapter RESOLVED (2026-08-31, `edge/pipeline/cycle.py`, `fe4042e`/`0cc4d31`)**: `process_isolated_channels` takes `isolated_channels`/`raw_values` as REQUIRED, caller-supplied inputs, never derived from trust/band; validate-all-upfront so one bad channel can't side-effect a valid one. **Still UNDECIDED, and NOT what the adapter resolves:** what actually determines *which* channels are isolated for real — FR-RL2 makes this an RL-agent action ("Isolate Sensor"), and both the agent and its deterministic fallback (FR-RL4) remain unbuilt; the adapter is exercised only with test-fixture isolated sets.
-- P3: `divergence_threshold` + substitution uncertainty-cap **numeric values**, and the time→uncertainty **scaling formula** — still UNDECIDED (data-gated/policy choices; U05 narrowed by D018/D019 to just the two numeric values, unaffected by D019's method choice). All three remain required parameters/injectable seams in the now-implemented and integration-tested plumbing — implementation does not require or imply any of them.
+- P3: substitution `uncertainty_cap` value and the time→uncertainty **scaling formula** — **RESOLVED (2026-08-31, `DECISIONS.md` D020, documentation-only, policy decision — not data-gated)**: `uncertainty_cap` = 0.8 (proxy's own output domain, ~48s of the 60s budget); scaling formula = linear, `f(x)=x`, output domain [0,1]. Both remain required, never-defaulted parameters in code — D020 chose the values, it did not add a default. **`divergence_threshold` is now the ONLY remaining open U05 numeric value** — still UNDECIDED, data-gated (needs real reconstruction-error and fault/attack-separation statistics).
 - P3: RL reward shaping + acceptable false-isolation rate UNDECIDED (U06) — also the source of the still-missing isolation decision above.
 None of these block P0.
 

@@ -715,6 +715,84 @@
 - **Status:** documentation-only; no implementation performed or
   authorized by this entry. No P3 code exists in this repo.
 
+### D020 — U05: uncertainty-cap value + elapsed-time→uncertainty scaling formula (provisional policy)
+- **Date:** 2026-08-31
+- **Decision:** Resolves the two items D019 explicitly left open, plus one
+  related gap identified during this session's scoping pass (the
+  uncertainty output domain, never previously declared anywhere).
+  1. **Scaling formula:** linear — `f(x) = x`, where `x` is the already-
+     implemented, bounded elapsed-substitution-time fraction in [0,1]
+     (`ElapsedTimeUncertaintyProxy`'s existing `fraction = min(elapsed_
+     seconds / substitution_max_seconds, 1.0)`, unchanged). No new time
+     constant, no additional signal — reuses exactly the fraction D019
+     already established.
+  2. **Uncertainty output domain:** [0,1] is hereby a SPECIFICATION
+     REQUIREMENT for the project's approved scaling function, consistent
+     with this codebase's existing `Score`-style convention for
+     trust/severity. The approved `f(x)=x` (point 1) satisfies this by
+     construction, since its input is already bounded to [0,1] by the
+     existing fraction clamp — but this is a property of the specific
+     approved function, not a guarantee provided by
+     `ElapsedTimeUncertaintyProxy` or the generic `ScalingFn` Protocol
+     itself, which remains an unconstrained injectable callable with no
+     runtime bound-checking on its return value. A non-conforming
+     scaling_fn could still be injected in code without error; this
+     decision fixes what the project's real scaling function should be
+     and what range it must produce, not what the API mechanically
+     enforces.
+  3. **`uncertainty_cap`:** 0.8, expressed in the uncertainty proxy's own
+     output domain (not seconds — keeps the three signals independent, as
+     already established). With the existing `substitution_max_seconds=
+     60` default (D018 pt.3, unchanged) and linear scaling, the alert
+     fires once ~80% of the substitution budget has elapsed (~48s),
+     strictly before the 60s hard expiry (fraction=1.0) — preserving the
+     intended severity ordering: a softer, earlier "nearing cap" alert
+     (P3-HEAL-E1) before the harder 60s escalation to Safe Pump-Stop
+     (D018 pt.3).
+  4. **`uncertainty_cap` remains a required constructor argument on
+     `SelfHealOrchestrator`, with no default introduced.** This decision
+     fixes what the value should be; it does not change how it is
+     supplied. No hardcoded default is added anywhere — a real value only
+     reaches the orchestrator when an actual caller explicitly passes
+     `uncertainty_cap=0.8` (test fixtures are unaffected either way).
+- **Reason:** D019's proxy was explicitly designed as a deterministic,
+  non-statistical safety/confidence signal, not a calibrated estimate of
+  reconstruction error — so no amount of real bench data would make one
+  scaling shape or cap value more "correct" than another; both are
+  legitimately operational/policy choices, not data-gated ones
+  (established by this session's scoping pass). Linear is the smallest,
+  most defensible shape: it introduces no additional assumption about the
+  *rate* of confidence decay beyond "proportional to elapsed time," unlike
+  a curved (quadratic/exponential) or step alternative, each of which
+  would encode a specific, undocumented belief about how risk should be
+  communicated. 0.8 is a round policy value that leaves a 20%
+  advance-warning margin (~12s) before the hard 60s escalation.
+- **Affects:** any future caller that constructs a `SelfHealOrchestrator`
+  for real use (none exists yet — the P2→P3 cycle-wiring caller remains
+  blocked on the RL agent/fallback, FR-RL2/FR-RL4). Narrows U05 to exactly
+  one remaining open item: `divergence_threshold`.
+- **Does NOT resolve:** `divergence_threshold`'s numeric value — remains
+  fully open and data-gated (needs real reconstruction-error and
+  fault/attack-separation statistics; unaffected by this decision). Does
+  NOT resolve where `uncertainty_cap` should live structurally (e.g.,
+  whether it deserves its own Doc05 `thresholds` schema column the way
+  `divergence_threshold` already has one — Doc05 currently has no column
+  for it at all, a gap noted in this session's scoping pass but not
+  addressed here). Does NOT resolve U06 (RL reward shaping) or anything
+  about prognosis/RL/dry-run.
+- **Does NOT change:** `edge/pipeline/uncertainty.py`,
+  `edge/pipeline/self_heal.py`, or any other existing code or test — this
+  is a documentation-only decision. `ElapsedTimeUncertaintyProxy.
+  scaling_fn` and `SelfHealOrchestrator.uncertainty_cap` remain required
+  constructor arguments with no default in the actual code; this decision
+  does not modify either class, does not add runtime validation/
+  enforcement of the [0,1] output domain to `ScalingFn`/
+  `ElapsedTimeUncertaintyProxy`, and does not introduce a default.
+  D016–D019 unchanged.
+- **Status:** documentation-only; no implementation performed or
+  authorized by this entry. No code or test file is created or modified
+  by this decision.
+
 ---
 
 ## UNDECIDED (must not be silently resolved — see CURRENT_STATE blockers)
@@ -729,13 +807,16 @@
   real data; what tolerance beyond sign comparison) — requires bench data or a dataset (U07);
   no rule exists for the other four channels; even for current/vibration, D013's own
   multi-seed testing found only ~50–60% attribution reliability — not a validated capability.
-- U05 — `divergence_threshold` + substitution uncertainty-cap values (P3). **Partial:**
+- U05 — `divergence_threshold` value (P3). **Partial:**
   behavioral design resolved by D018 (divergence computation form, recovery rule,
   60s-expiry escalation, uncertainty interface, cycle sequencing); uncertainty-
   estimation method resolved provisionally by D019 (deterministic
   elapsed-substitution-time proxy, single-signal, no reconstruction-stability
-  or divergence input). **Still open:** both numeric values themselves
-  (data-gated), and the time→uncertainty scaling formula (D019, not chosen).
+  or divergence input); uncertainty-cap value (0.8) and the time→uncertainty
+  scaling formula (linear, `f(x)=x`, output domain [0,1]) resolved by D020
+  (policy decision, not data-gated). **Still open:** `divergence_threshold`'s
+  numeric value only — data-gated, needs real reconstruction-error and
+  fault/attack-separation statistics.
 - U06 — RL reward shaping + acceptable false-isolation rate (P3).
 - U07 — SWaT/WADI dataset access vs TEP+bench substitute (P2/P7). **Partial:**
   validation methodology frozen (D011); SWaT.A1 access obtained and the
