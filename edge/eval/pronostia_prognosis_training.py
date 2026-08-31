@@ -70,15 +70,47 @@ Nothing here claims trained accuracy: any loss/metric value produced by
 running this module's own tests (tiny synthetic fixtures, one or two
 epochs) is plumbing verification only, exactly as ``twin_training.py``
 already documents for the digital twin.
+
+CLASS-WEIGHTED HEALTHSTATE LOSS (added after a real-PRONOSTIA-data run):
+an unweighted first run (4-bearing LOBO, real data) collapsed HealthState
+classification to always predicting the majority (Healthy) class in every
+fold (macro F1 ~0.30, zero recall on Warning/Critical) -- the expected
+failure mode of unweighted CrossEntropyLoss under D026's real ~80/15/5
+class split. ``class_weights()`` computes inverse-frequency weights from
+training-split examples only (never the held-out bearing's), and
+``run_leave_one_bearing_out`` applies them by default
+(``use_class_weighting=True``). This is a training-loop fix, not a
+methodology or target-semantics change -- D025/D026's RUL/HealthState
+definitions are untouched.
+
+PER-CHANNEL INPUT NORMALIZATION (added after class-weighting alone did NOT
+fix the collapse -- confirmed empirically, not assumed): re-running with
+class weighting and more epochs produced numerically IDENTICAL predictions
+to the unweighted run, regardless of hidden_size or epoch count -- a
+representation-collapse symptom, not a class-imbalance one. Root-caused via
+a cheap forward-pass-only diagnostic: even a FRESH, UNTRAINED network's
+logits barely varied across windows spanning a whole bearing's life (e.g.
+temperature 70 degC at window 0 vs 164 degC at the final window) when fed
+raw, unnormalized values -- the LSTM's gates were saturating on the raw
+scale, before any training even began. Standardizing the same windows
+manually restored real logit variation immediately. ``compute_channel_stats``/
+``normalize_examples`` fix this: per-raw-channel (CHANNELS columns 0..5
+only -- never the D022/D024 availability indicator columns 6..10) z-score
+standardization, fit from training-split examples only (same leakage
+discipline as ``class_weights``), applied by ``run_leave_one_bearing_out``
+by default (``use_input_normalization=True``). A channel with zero
+variance (PRONOSTIA's always-zero pressure/humidity/gas/current, D024)
+gets std=1.0 so normalizing it is a no-op, not a division by zero or
+fabricated scale.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Iterator, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import torch
-from app.schemas.contracts import HealthState
+from app.schemas.contracts import CHANNELS, HealthState
 
 from edge.eval.pronostia_prep import PronostiaRunSequence
 from edge.eval.pronostia_prognosis_input import pronostia_sequence_to_prognosis_input
@@ -90,6 +122,11 @@ from edge.trust.engine import TrustReading
 WINDOW_SIZE = 30  # matches edge/anomaly/preprocess.py's documented default
 STRIDE = 1  # full overlap; standard sliding-window practice
 LAMBDA = 1.0  # multi-task weight; justified by RUL's internal [0,1] normalization below
+
+# Input tensor columns 0..len(CHANNELS)-1 are raw channel values (D022/D024);
+# columns len(CHANNELS)..10 are 0.0/1.0 availability indicators, which must
+# never be normalized (they are already on a fixed, meaningful [0,1] scale).
+_N_RAW_CHANNELS = len(CHANNELS)
 
 
 @dataclass(frozen=True)
@@ -183,6 +220,81 @@ def _rul_fraction(rul_seconds: float, bearing_lifetime: float) -> float:
     return rul_seconds / bearing_lifetime
 
 
+def class_weights(examples: list[WindowExample]) -> torch.Tensor:
+    """Inverse-frequency ``CrossEntropyLoss`` class weights: ``total / (n_classes
+    * count[c])``, in ``_HEALTH_STATE_ORDER``'s index order. A class with
+    zero examples gets weight ``0.0`` (nothing to up-weight from).
+
+    MUST be computed from training-split examples only -- passing
+    validation/held-out examples here would leak that fold's own class
+    distribution into training. ``run_leave_one_bearing_out`` follows this
+    rule (computed fresh per fold, from that fold's ``train_examples``).
+
+    Empirically motivated: an unweighted first real-data run collapsed to
+    always predicting the majority (Healthy) class (macro F1 ~0.30, zero
+    recall on Warning/Critical) -- the standard, expected failure mode
+    under D026's real ~80/15/5 class split with an unweighted loss.
+    """
+    if not examples:
+        raise ValueError("cannot compute class weights from an empty example list")
+    n_classes = len(_HEALTH_STATE_ORDER)
+    counts = [0] * n_classes
+    for ex in examples:
+        counts[_health_state_index(ex.health_state)] += 1
+    total = len(examples)
+    weights = [(total / (n_classes * c)) if c > 0 else 0.0 for c in counts]
+    return torch.tensor(weights, dtype=torch.float32)
+
+
+def compute_channel_stats(examples: list[WindowExample]) -> tuple[torch.Tensor, torch.Tensor]:
+    """Per-raw-channel mean/std (``CHANNELS`` columns 0..``_N_RAW_CHANNELS``-1
+    only -- never the D022/D024 availability indicator columns), computed by
+    pooling every timestep of every given example's ``input_tensor``.
+
+    MUST be computed from training-split examples only -- passing
+    validation/held-out examples here would leak that fold's own input
+    distribution into training (same leakage discipline as
+    ``class_weights``). ``run_leave_one_bearing_out`` follows this rule.
+
+    A channel with zero variance across all given examples (PRONOSTIA's
+    always-zero pressure/humidity/gas/current, D024) gets ``std=1.0``, so
+    normalizing it becomes a no-op (subtract a constant, divide by one)
+    rather than a division by zero or fabricated scale.
+
+    Raises:
+        ValueError: if ``examples`` is empty.
+    """
+    if not examples:
+        raise ValueError("cannot compute channel stats from an empty example list")
+    raw = torch.cat([ex.input_tensor[:, :, :_N_RAW_CHANNELS] for ex in examples], dim=1)
+    mean = raw.mean(dim=(0, 1))
+    std = raw.std(dim=(0, 1))
+    std = torch.where(std == 0, torch.ones_like(std), std)
+    return mean, std
+
+
+def normalize_examples(
+    examples: list[WindowExample], mean: torch.Tensor, std: torch.Tensor
+) -> list[WindowExample]:
+    """Return NEW ``WindowExample``s with the raw channel columns (0..
+    ``_N_RAW_CHANNELS``-1) z-score standardized to ``(x - mean) / std``;
+    availability indicator columns and every other field are passed
+    through unchanged. Does not mutate any input ``WindowExample`` or its
+    ``input_tensor`` (each output tensor is a fresh clone).
+
+    ``mean``/``std`` MUST come from ``compute_channel_stats`` on
+    TRAINING-split examples only -- passing the same fold's own stats to
+    both its train and validation examples (never re-fitting on
+    validation) is what keeps this leakage-free.
+    """
+    normalized: list[WindowExample] = []
+    for ex in examples:
+        t = ex.input_tensor.clone()
+        t[:, :, :_N_RAW_CHANNELS] = (t[:, :, :_N_RAW_CHANNELS] - mean) / std
+        normalized.append(replace(ex, input_tensor=t))
+    return normalized
+
+
 def _stack_batch(
     batch: list[WindowExample],
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -206,6 +318,7 @@ def train(
     epochs: int,
     optimizer: torch.optim.Optimizer,
     batch_size: int,
+    class_weight: torch.Tensor | None = None,
 ) -> list[float]:
     """Run ``epochs`` passes of combined-loss training over ``examples``,
     in minibatches of ``batch_size``. ``epochs``, ``optimizer``, and
@@ -214,12 +327,18 @@ def train(
     constructed and bound to ``network.parameters()`` by the caller, and
     this function chooses no optimizer of its own.
 
-    Loss per batch: ``CrossEntropyLoss(health_logits, class_targets) +
-    LAMBDA * MSELoss(eta, rul_fraction_targets)`` -- classification on
-    the raw HealthState index, regression on the per-bearing-normalized
-    RUL fraction (see ``_rul_fraction``), never on raw seconds directly
-    (D025's ~17x cross-bearing lifetime variation would otherwise let
-    long-life bearings dominate the regression loss).
+    ``class_weight`` (optional, default ``None`` = unweighted) is passed
+    straight through to ``CrossEntropyLoss``'s own ``weight`` argument --
+    see ``class_weights()`` for how to compute it correctly (training-split
+    examples only, to avoid leakage). Defaulting to ``None`` preserves this
+    function's exact prior behavior for any existing caller.
+
+    Loss per batch: ``CrossEntropyLoss(health_logits, class_targets,
+    weight=class_weight) + LAMBDA * MSELoss(eta, rul_fraction_targets)`` --
+    classification on the raw HealthState index, regression on the
+    per-bearing-normalized RUL fraction (see ``_rul_fraction``), never on
+    raw seconds directly (D025's ~17x cross-bearing lifetime variation
+    would otherwise let long-life bearings dominate the regression loss).
 
     Returns the per-epoch mean combined loss. Leaves ``network`` in
     ``eval()`` mode on return (safe to pass directly to ``evaluate``).
@@ -245,7 +364,9 @@ def train(
             optimizer.zero_grad()
             inputs, class_targets, reg_targets = _stack_batch(batch)
             health_logits, eta = network(inputs)
-            class_loss = torch.nn.functional.cross_entropy(health_logits, class_targets)
+            class_loss = torch.nn.functional.cross_entropy(
+                health_logits, class_targets, weight=class_weight
+            )
             reg_loss = torch.nn.functional.mse_loss(eta, reg_targets)
             loss = class_loss + LAMBDA * reg_loss
             loss.backward()
@@ -393,6 +514,8 @@ def run_leave_one_bearing_out(
     optimizer_factory: Callable[[Iterator[torch.nn.Parameter]], torch.optim.Optimizer],
     window_size: int = WINDOW_SIZE,
     stride: int = STRIDE,
+    use_class_weighting: bool = True,
+    use_input_normalization: bool = True,
 ) -> list[FoldResult]:
     """Run full leave-one-bearing-out cross-validation over ``sequences``.
 
@@ -406,6 +529,23 @@ def run_leave_one_bearing_out(
     ``optimizer_factory`` is REQUIRED -- called once per fold on that
     fold's fresh ``network.parameters()`` -- so this function bakes in no
     optimizer choice of its own (same convention as ``train``).
+
+    ``use_class_weighting`` (default ``True``): when set, each fold computes
+    its own ``class_weights()`` from THAT FOLD'S OWN ``train_examples`` only
+    (never the held-out bearing's examples) and passes it to ``train``.
+    Defaults to ``True`` because an unweighted first real-PRONOSTIA-data run
+    collapsed to always predicting the majority HealthState class (macro F1
+    ~0.30) -- set ``False`` to reproduce the unweighted baseline.
+
+    ``use_input_normalization`` (default ``True``): when set, each fold
+    computes ``compute_channel_stats()`` from THAT FOLD'S OWN
+    ``train_examples`` only, then applies ``normalize_examples()`` to both
+    that fold's train AND validation examples using those same
+    training-fit statistics (never re-fit on validation). Defaults to
+    ``True`` because raw, unnormalized PRONOSTIA inputs were confirmed
+    (forward-pass diagnostic on a fresh, untrained network) to saturate
+    the LSTM's gates, collapsing its output to near-constant regardless of
+    input -- set ``False`` to reproduce the unnormalized baseline.
 
     ``sequences`` MUST contain only D025-authorized training-bearing ids
     (``TRAINING_BEARINGS_D025``) -- structurally refuses any other
@@ -439,10 +579,21 @@ def run_leave_one_bearing_out(
         if not val_examples:
             raise ValueError(f"held-out bearing {held_out!r} produced zero windows")
 
+        if use_input_normalization:
+            mean, std = compute_channel_stats(train_examples)
+            train_examples = normalize_examples(train_examples, mean, std)
+            val_examples = normalize_examples(val_examples, mean, std)
+
         network = _LSTMPrognosisNet(hidden_size=hidden_size)
         optimizer = optimizer_factory(network.parameters())
+        weight = class_weights(train_examples) if use_class_weighting else None
         loss_history = train(
-            network, train_examples, epochs=epochs, optimizer=optimizer, batch_size=batch_size
+            network,
+            train_examples,
+            epochs=epochs,
+            optimizer=optimizer,
+            batch_size=batch_size,
+            class_weight=weight,
         )
         metrics = evaluate(network, val_examples)
 
