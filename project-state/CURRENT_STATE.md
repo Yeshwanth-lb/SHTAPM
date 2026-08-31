@@ -4,9 +4,9 @@
 > `DECISIONS.md`, `TODO.md`, `IMPLEMENTATION_LOG.md`. Authoritative product spec
 > lives in `../CLAUDE.md` and `../docs/` — not duplicated here.
 
-**Last updated:** 2026-08-31, end of session — **`66f790e` is the local
-`main` HEAD** (2 commits ahead of `origin/main` — `43e114d`/`66f790e` not
-yet pushed; working tree clean). This session: P3 scoping closed U03/U04
+**Last updated:** 2026-08-31, end of session — **`983eb04` is the local
+`main` HEAD** (commits ahead of `origin/main`, not yet pushed; working
+tree clean once this documentation sync is committed). This session: P3 scoping closed U03/U04
 (`DECISIONS.md` D016/D017), the divergence/substitution behavioral design
 (D018), and the uncertainty-estimation method (D019) — followed by the
 smallest hardware-free P3 slice those decisions authorize (Protocol-only
@@ -565,24 +565,69 @@ explicit policy, 5% loosely qualitatively informed by the investigation,
 20% with no empirical support at all. **HealthState methodology AND
 numeric thresholds are both now resolved on paper, and target-generation
 code implementing D025/D026 now exists and is tested** (`compute_prognosis_targets`,
-`edge/eval/pronostia_prognosis_targets.py`) **— real-dataset label
-generation has not yet been performed.** Training methodology itself
-(loss, optimizer, windowing/sampling, and training) remains fully
-unresolved and not started.
-Real pump/bench validation remains required regardless. The next session
-should explicitly ask the user whether to: (a) obtain or scope a path to
-real bench data for `divergence_threshold`, (b) scope the deterministic
-rule-based RL fallback (FR-RL4) — noting it itself needs `health`/
-`failure_eta` from the still-substantively-blocked prognosis, so scoping
-it will likely surface that dependency again, (c) resolve one of the
-standing P2 decision-required items (λ=0.7 sign-off/U01, `c`'s
-redefinition, FR-A4's payload/U14), (d) generate real-dataset RUL/HealthState
-labels for the 4 D025 training bearings using the now-implemented
-`compute_prognosis_targets` (`edge/eval/pronostia_prognosis_targets.py`),
-or scope windowing/sampling/loss/optimizer/training methodology, or (e) something else
-entirely. Do not default to further P3 implementation, and do not create
-a new decision (D027+) without the same propose-then-approve sequence
-used for D014–D026. P2 work otherwise remains blocked on
+`edge/eval/pronostia_prognosis_targets.py`).
+
+**Since then: a training harness was implemented** (`edge/eval/pronostia_prognosis_training.py`,
+`68addbb`) — 30-sample sliding windows (stride=1, matching P2's own
+documented window-size precedent; target = each window's final-timestep
+RUL/HealthState, the only interpretation compatible with
+`_LSTMPrognosisNet`'s existing final-hidden-state forward path), leave-
+one-bearing-out cross-validation across the 4 D025 training bearings
+(zero sample-level overlap, fresh network per fold), CrossEntropy +
+per-bearing-normalized-RUL MSE multi-task loss, and full HealthState/RUL
+evaluation metrics. Window size/stride/loss/optimizer-interface are
+documented, implementation-level choices in the module's own docstring —
+not DECISIONS.md entries (resolvable by repository precedent/standard
+practice, not irreversible policy calls).
+
+**Then it was actually run against the real, already-downloaded PRONOSTIA
+dataset** (session scratchpad, never committed). The first run (unweighted
+loss, 3 epochs, hidden_size=16) collapsed to always predicting the
+majority HealthState class in every fold (macro F1 ~0.30, zero recall on
+Warning/Critical) — 80% "accuracy" was purely the Healthy-class base rate,
+not real learning. Increasing epochs alone did not help (identical
+predictions regardless of hidden_size/epochs), which ruled out "just needs
+more training" and pointed at a structural issue. A forward-pass-only
+diagnostic (no training) confirmed the cause: raw, unnormalized channel
+values (Bearing1_1's temperature spans 70→164°C over its lifetime) were
+saturating the LSTM's gates so severely that even a **fresh, untrained**
+network's output barely varied across the entire bearing lifespan.
+**Fixed (`983eb04`)**: `compute_channel_stats()`/`normalize_examples()`
+(per-raw-channel z-score standardization; the D022/D024 availability
+indicator columns are never normalized) and `class_weights()` (inverse-
+frequency `CrossEntropyLoss` weighting for D026's real ~80/15/5 class
+split) — both fit from training-split examples only, per fold, mirroring
+D025's own leakage discipline; wired into `run_leave_one_bearing_out` as
+opt-out defaults. Re-running (class-weighted + normalized, 15 epochs,
+hidden_size=32) confirmed the collapse is gone — all three HealthState
+classes are now genuinely predicted in every fold. **Cross-bearing
+generalization is still inconsistent**: 1 of 4 folds (Bearing1_2 held out)
+reaches macro F1 ~0.59 with strong Healthy/Critical recall; the other 3
+folds are weak (macro F1 0.30–0.38), and Warning recall is 0.0 in 2 of 4
+folds. This is consistent with — not contradicted by — this session's own
+earlier finding that Bearing1_1 and Bearing1_2 (same nominal operating
+condition) have substantially different degradation trajectories: with
+only 4 bearings and one held out per fold, generalizing to an unseen
+bearing's possibly-dissimilar degradation shape is a genuine small-sample
+limitation, not a remaining code defect. **No claim of a validated or
+production-ready prognosis model is made anywhere in this work** — this
+run's purpose was to prove the pipeline (windowing → training → LOBO →
+metrics) works correctly end-to-end on real data, which it now does.
+
+Real pump/bench validation remains required regardless — PRONOSTIA stays
+D021's methodology-validation-only proxy, never pump ground truth. The
+next session should explicitly ask the user whether to: (a) once real
+hardware/bench data exists (hardware setup planned next), retune P2's
+Isolation Forest against real clean-baseline data (U07) and resolve
+`divergence_threshold` (U05), (b) scope U06 (RL reward shaping) — the
+sole blocker on the DQN agent, not hardware-dependent, could happen
+anytime, (c) resolve one of the standing P2 decision-required items
+(λ=0.7 sign-off/U01, `c`'s redefinition, FR-A4's payload/U14), (d) once
+real pump data exists, retrain prognosis on it using the now-implemented,
+now-debugged `edge/eval/pronostia_prognosis_training.py` harness, or
+(e) something else entirely. Do not default to further P3 implementation,
+and do not create a new decision (D027+) without the same propose-then-
+approve sequence used for D014–D026. P2 work otherwise remains blocked on
 real bench hardware (also the only path that could unblock D014's deferred
 current↔temperature candidate).
 

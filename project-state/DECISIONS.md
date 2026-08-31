@@ -949,6 +949,342 @@
   dataset-loader, training, or test code is created or authorized by this
   entry.
 
+### D023 — PRONOSTIA data-quality treatment: three subtractive exclusion rules (no fabrication, no reconstruction)
+- **Date:** 2026-08-31
+- **Decision:** Building on D021 (PRONOSTIA/FEMTO adopted as an external
+  vibration+temperature methodology-validation dataset only) and D022
+  (temperature block-mean, vibration RMS, missing-vibration indicator),
+  this entry authorizes exactly three empirically verified, purely
+  subtractive treatments for the raw-data quality problems found by the
+  full 17-bearing audit:
+
+  1. **Exclude bearings with zero temperature files entirely:**
+     `Bearing2_2`, `Bearing3_2`, `Bearing1_3`, `Bearing2_3`, `Bearing2_6`.
+     These bearings have no temperature data whatsoever; since D022's
+     representation uses temperature as the defining 1Hz clock, there is
+     no legitimate way to place these bearings' vibration data at all.
+     They are excluded, not worked around.
+
+  2. **Discard leading-edge vibration bursts occurring before temperature
+     coverage begins**, as a general within-run edge-trimming rule (not a
+     bearing-specific exception): any vibration burst whose timestamp
+     falls before the first second temperature actually covers is dropped.
+     Empirically verified to affect 11 bearings (`Bearing1_1, 1_2, 2_1,
+     3_1` training; `Bearing1_4, 1_5, 1_6, 1_7, 2_4, 2_7, 3_3` test),
+     dropping 75 bursts total (≈810 seconds combined, ≈13.5 minutes),
+     fully resolving 10 of the 11 with zero residual anomalies. This rule
+     applies generally to any bearing meeting this exact condition — it is
+     not a one-off list.
+
+  3. **For `Bearing1_1` ONLY, discard exactly two named files:**
+     `acc_02121.csv` and `acc_02122.csv`, because their timestamps are
+     demonstrably corrupted/non-monotonic (a backward jump from ~15:32:49
+     to ~09:38:46 with no midnight-crossing pattern, sandwiched in an
+     otherwise clean ~10s-cadence sequence). This is a hardcoded exclusion
+     of these exact two files for this exact bearing — it does **NOT**
+     establish, imply, or authorize any general corrupted-record-detection
+     capability. Any future corrupted-record finding in any other bearing
+     requires its own separate decision, not an extension of this one.
+
+  `Bearing1_1` requires **both** treatment 2 and treatment 3 together to
+  become loadable — treatment 3 alone leaves its 7 leading-edge bursts
+  unresolved, and treatment 2 alone leaves its 2 corrupted-file anomaly
+  unresolved.
+
+  **These treatments are subtractive only.** No missing temperature is
+  fabricated. No vibration timestamp is fabricated. No interpolation or
+  backfilling of any kind is performed. No synthetic degradation signal is
+  created. Each treatment only ever removes observations that cannot be
+  legitimately represented under the already-approved D022 representation
+  — it never repairs, estimates, or reconstructs a missing or corrupted
+  observation. **"Discarding observations that cannot be legitimately
+  represented" is the entire scope of this decision; "repairing or
+  reconstructing missing or corrupted observations" is explicitly outside
+  it and not authorized by any part of this entry.**
+
+  No bearing changes train/test split membership as a result of any of
+  these three treatments. The official 6-learning/11-test split is
+  preserved in membership (no bearing moves from one split to the other);
+  only the *usable* count within each split changes, from 6→4 training and
+  11→8 test. After applying all three treatments, **12 of 17 bearings are
+  expected to be loadable: 4 training (`Bearing1_1, 1_2, 2_1, 3_1`) + 8
+  test (`Bearing1_4, 1_5, 1_6, 1_7, 2_4, 2_5, 2_7, 3_3`)** — `Bearing2_5`
+  was already clean and loadable before this decision.
+
+- **Reason:** Each treatment is individually evidenced against the full
+  17-bearing audit (exact affected bearings/files, exact counts, empirical
+  confirmation that the remaining data is fully contiguous/anomaly-free
+  after treatment), is purely subtractive (never inventive), introduces no
+  leakage/contamination risk (no bearing crosses the train/test boundary),
+  and does not touch the representation, architecture, or semantics
+  approved by D022. Bundling them mirrors this project's own precedent
+  (D018, D021, D022 each bundled several related, evidenced sub-choices
+  under one coherent theme) rather than fragmenting three tightly related,
+  narrowly-scoped exclusion rules into separate entries.
+
+- **Affects:** the not-yet-implemented PRONOSTIA-to-prognosis input-
+  building code path (still does not exist — no loader, preprocessing,
+  training, or test code is created or modified by this entry itself).
+
+- **Does NOT resolve or authorize:** temperature interpolation; vibration
+  interpolation; missing-temperature substitution (e.g. an alternative
+  clock source for the 5 excluded bearings); treatment of the four
+  uncovered channels (pressure, humidity, gas, current); HealthState
+  thresholds/band definitions; failure_eta horizon or units; loss
+  function; optimizer; training hyperparameters; training itself;
+  PRONOSTIA train/evaluation methodology beyond the existing official
+  6-learning/11-test split (e.g. any further re-splitting, cross-
+  validation scheme, or leakage-prevention methodology); RL/U06; any
+  pump-validation claim; or any general corrupted-record detection
+  capability (treatment 3 is a two-file, one-bearing exclusion only, not a
+  detection system).
+
+- **Does NOT change:** D016, D017, D018, D019, D020, D021, D022 — all
+  unchanged. No code, test, or dataset file is created or modified by this
+  entry.
+
+- **Status:** documentation-only; no implementation, remediation, code
+  change, or training is performed or authorized by this entry.
+
+### D024 — PRONOSTIA four-channel availability-indicator representation (pressure/humidity/gas/current)
+- **Date:** 2026-08-31
+- **Decision:** For the four channels PRONOSTIA does not and cannot
+  provide (pressure, humidity, gas, current), this entry adopts Option B:
+  a `0.0` placeholder value paired with one separate, explicit,
+  per-timestep availability indicator per channel — four indicators
+  total, one each for pressure, humidity, gas, and current. This directly
+  extends D022's own `vibration_observed` mechanism (value zeroed,
+  explicitly flagged as unobserved, rather than silently presented as
+  real) to the four channels PRONOSTIA never supplies at all, for any
+  timestep, in any PRONOSTIA-derived sequence.
+
+  D024 establishes the eventual, fully-resulting prognosis input
+  representation as **11 scalars per timestep**: the 6 original
+  `CHANNELS` + 1 `vibration_observed` (D022, approved but not yet
+  implemented in code) + 4 new per-channel availability indicators
+  (pressure_observed, humidity_observed, gas_observed, current_observed).
+  This is a specification decision about the eventual, resulting
+  representation — it extends the previously-approved D022 representation
+  (6 → 7) to 11. **It does not describe the current state of
+  `edge/models/lstm_prognosis.py`, which remains committed and unchanged
+  at input width 6** (D022's own `+1` widening has been decided but not
+  yet implemented in code, and this entry does not implement it either).
+
+  The `0.0` placeholder value for an unavailable channel is acceptable
+  **only because** its paired availability indicator explicitly marks
+  that value as unobserved at that timestep. The stored number by itself
+  carries no claim of measurement; the indicator is what makes the
+  representation honest. Without the indicator, a `0.0` placeholder would
+  be indistinguishable from a genuine zero reading and would constitute
+  exactly the kind of unflagged fabrication this project has repeatedly
+  rejected (D017, D021, D022, D023).
+
+  **`trust` MUST NOT be used to represent absence.** `trust=0` continues
+  to mean, exclusively, low confidence in a genuine reading (FR-M3) —
+  never "no measurement exists." This mirrors D022's own reasoning for
+  why `vibration_observed` was introduced as a separate signal rather
+  than overloading `trust`. For the four channels here, whatever `trust`
+  value is technically supplied is mathematically inert given the `0.0`
+  raw value (`0.0 × trust = 0.0` regardless) — but even so, `trust` is
+  never the mechanism used to signal unavailability; the dedicated
+  indicator is.
+
+  The four availability indicators are **machine-readable absence
+  markers only** — each is a structural signal that no measurement
+  exists at that timestep for that channel. None of them is, or should
+  ever be read as, evidence that pressure, humidity, gas, or current were
+  measured, trained, validated, or physically mapped by PRONOSTIA in any
+  respect. **This decision does not create, imply, or authorize any
+  pump-validation claim of any kind.**
+
+  **This entry authorizes the architecture/input-contract representation
+  only. It does NOT authorize training, and no training may be described
+  as validated or informed by this entry.**
+
+- **Reason:** Reuses the one mechanism this project has already
+  established and approved for exactly this situation (D022's
+  `vibration_observed`) rather than inventing a new one, keeping the
+  four-channel gap honestly represented without fabricating data or
+  overloading `trust`'s existing FR-M3 meaning.
+
+- **Affects:** the eventual, not-yet-implemented widening of
+  `edge/models/lstm_prognosis.py`'s `_LSTMPrognosisNet.__init__`
+  (`input_size` would eventually become 11) and its input-builder
+  function — neither is implemented by this entry.
+
+- **Does NOT resolve:** HealthState thresholds/band definitions;
+  failure_eta horizon or units; loss function; optimizer; training
+  hyperparameters; training methodology; any prognosis acceptance
+  metric; RL/U06; any real pump/bench validation.
+
+- **Does NOT change:** D021, D022, D023 — all unchanged. The currently
+  committed `edge/models/lstm_prognosis.py` is not modified by this
+  entry and remains at input width 6. No code, test, or dataset file is
+  created or modified by this decision.
+
+- **Status:** documentation-only; no implementation, training, or test
+  code is created or authorized by this entry.
+
+### D025 — PRONOSTIA prognosis-target methodology: training-bearing-only RUL, seconds unit, proportional HealthState bands (numeric thresholds deferred)
+- **Date:** 2026-08-31
+- **Decision:** Building on D021 (PRONOSTIA adopted for methodology-
+  validation only) and D023 (12 of 17 bearings usable: 4 training, 8
+  test), this entry establishes the target-generation methodology for
+  FR-M1/M2 prognosis training, as follows:
+
+  1. **RUL/failure_eta targets are generated ONLY for the 4 usable
+     training-split bearings** (`Bearing1_1, 1_2, 2_1, 3_1`). Test-split
+     bearings (`Bearing1_4, 1_5, 1_6, 1_7, 2_4, 2_5, 2_7, 3_3`) remain
+     WITHOUT failure_eta training targets under this decision — D021's
+     own text already identifies the test set as truncated, and no
+     alternative endpoint source is authorized here. **This decision does
+     NOT authorize use of `Validation_Set`/`Full_Test_Set` data in any
+     form.** Test bearings must never be described or treated as having a
+     known failure endpoint as a result of this decision.
+
+  2. **Training-bearing RUL** is defined as:
+     `RUL(t) = final_recorded_timestep_of_that_bearing − t`.
+     The final recorded timestep of each training bearing's own sequence
+     is assigned `RUL = 0`, grounded directly in D021's own approved
+     "run to actual physical failure" language for the learning set — not
+     a new empirical claim introduced by this entry.
+
+  3. **`failure_eta` is represented in seconds.** Given the D022
+     representation's confirmed gapless 1Hz structure, seconds and
+     1Hz-timestep-index are numerically identical here; seconds is chosen
+     as the more human-interpretable of the two, and the applicable half
+     of `failure_eta`'s own existing wire-contract phrasing ("cycles/
+     seconds ahead" — PRONOSTIA has no "cycles" concept).
+
+  4. **HealthState will use bearing-relative/proportional RUL bands**,
+     not fixed absolute-second bands — chosen specifically because the 4
+     usable training bearings' lifetimes vary by roughly 17× (1,654s to
+     27,952s per this project's own 17-bearing audit), which would make a
+     single fixed-second threshold physically meaningless across bearings
+     of such different scale. **The exact Warning/Critical proportions
+     are explicitly NOT resolved by this entry** and require a separate,
+     later, evidence-based decision (see the investigation this entry
+     identifies but does not perform).
+
+     Proportional bands, once numerically defined, are a **deliberately
+     derived labeling methodology** — chosen because PRONOSTIA provides
+     no Healthy/Warning/Critical annotation of any kind. They must never
+     be described or treated as physically observed health-state labels;
+     they are a modeling construct built on top of the RUL definition
+     above.
+
+  5. **Leakage discipline for target generation under this decision**:
+     any per-bearing quantity (a bearing's own total lifetime, its own
+     signal baseline) may be computed from that bearing's own history.
+     Any cross-bearing or global statistic used in fitting RUL/HealthState
+     target-generation parameters (e.g. shared proportion boundaries, if
+     ever tuned rather than fixed a priori) must be derived using ONLY
+     the 4 usable training bearings. Test-bearing data must never
+     influence training-time threshold or statistic fitting.
+
+- **Reason:** Directly grounded in D021's own already-approved language
+  (run-to-failure learning set, truncated test set) and this project's
+  own empirical findings (gapless 1Hz structure, 17× lifetime variation)
+  — no external convention or paper-derived threshold is assumed. Avoids
+  expanding PRONOSTIA dataset usage beyond D021/D023's current scope.
+
+- **Affects:** the not-yet-written PRONOSTIA target-generation code (does
+  not exist yet — no code, label, or training run is created by this
+  entry itself) and any future training harness consuming it.
+
+- **Does NOT resolve:** the exact numeric Warning/Critical proportions
+  (requires a separate, later, evidence-based decision — see the
+  investigation identified below, not performed by this entry); whether
+  `Validation_Set`/`Full_Test_Set` is ever authorized as a test-bearing
+  endpoint source (a fully separate, not-yet-proposed decision); training
+  itself; windowing/stride/sampling methodology; loss function; optimizer;
+  any training hyperparameter; acceptance metrics; RL/U06; any
+  pump-validation claim.
+
+- **Does NOT change:** D016–D024, all unchanged. D021's methodology-
+  validation-only scope is unchanged and explicitly preserved — this
+  entry does not add, reduce, or reinterpret that scope in any way. No
+  code, test, label, or dataset file is created or modified by this
+  entry.
+
+- **Status:** documentation-only; no implementation, label generation, or
+  training is performed or authorized by this entry.
+
+### D026 — PRONOSTIA HealthState numeric proportions: 20% Warning / 5% Critical (explicit modeling policy, not empirically derived)
+- **Date:** 2026-08-31
+- **Decision:** Building on D025 (bearing-relative/proportional RUL bands
+  adopted as the HealthState methodology, exact proportions left open),
+  this entry resolves the two remaining numeric proportions as explicit,
+  acknowledged modeling-policy values:
+
+  - **Healthy:** `RUL > 20%` of that bearing's own total recorded
+    lifetime.
+  - **Warning:** `5% < RUL <= 20%`.
+  - **Critical:** `RUL <= 5%`.
+
+  **Both numbers are explicit modeling-policy choices, not empirically
+  derived thresholds and not PRONOSTIA ground truth.** Neither claims the
+  4 usable training bearings statistically determined these values.
+
+  The **5% Critical** value is loosely informed by a qualitative,
+  read-only investigation of the 4 D025 training bearings' own late-life
+  vibration-RMS behavior, which found an approximate ~5–10% region of
+  normalized life reasonably consistent with each bearing's own observed
+  escalation. This is offered as **qualitative motivation only** — the
+  investigation explicitly did not, and could not, statistically prove
+  5% specifically over any other nearby value; the underlying analysis
+  used only these 4 bearings, never test-split or `Validation_Set` data,
+  never optimized against the observed outcomes, and drew no claim of
+  generalization beyond this exploratory read.
+
+  The **20% Warning** value has **no empirical threshold support** from
+  the 4 training bearings — a dedicated investigation found the bearings'
+  own degradation-onset timing is genuinely inconsistent (ranging from
+  ~mid-life gradual onset to ~90%+ abrupt late onset across the four),
+  such that no shared proportional Warning boundary is supported by the
+  data at any value. 20% is adopted purely as a simple, round, transparent
+  policy choice — explicitly not backed by, and not claimed to be
+  supported by, the training-bearing evidence.
+
+- **Reason:** A dedicated decision-readiness investigation (this
+  session's own read-only work) concluded that continuing to search for
+  an empirically-derived value was not justified: n=4 training bearings
+  cannot responsibly support fitting or statistically validating a
+  HealthState threshold, and the model's separate `failure_eta`
+  regression head already carries the precise, continuous countdown —
+  HealthState's legitimate role is a coarse, monotonic stage-of-life
+  categorization complementing that precise value, not an independent
+  precision instrument requiring empirical proof. Given that framing,
+  simple, explicitly-labeled policy values (mirroring D020's
+  `uncertainty_cap` precedent) are preferable to presenting either
+  boundary as data-derived when the data does not support that claim.
+
+- **Affects:** the not-yet-implemented PRONOSTIA HealthState
+  target-generation code (does not exist yet — no label, code, or
+  training run is created by this entry itself).
+
+- **Does NOT resolve:** windowing/stride/sampling methodology; loss
+  function; optimizer; any training hyperparameter; the target-generation
+  implementation itself; training itself; acceptance metrics; RL/U06; any
+  pump-validation claim; whether `Validation_Set`/`Full_Test_Set` is ever
+  authorized (still not authorized by this or any entry).
+
+- **Does NOT change:** D016–D025, all unchanged — in particular, D025's
+  RUL/failure_eta methodology (training-bearings-only, seconds unit,
+  final-timestep-anchor) is entirely untouched by this entry, which
+  resolves the HealthState numeric proportions only. D025's leakage
+  discipline (any cross-bearing/global statistic used in target
+  generation must be fit using only the 4 usable training bearings; test-
+  bearing data must never influence training-time threshold fitting) and
+  its label-semantics requirement (HealthState labels are constructed
+  modeling labels, not physical ground truth and not PRONOSTIA-provided
+  annotations) both continue to apply in full, unmodified, to these two
+  numbers. No code, test, label, or dataset file is created or modified
+  by this entry.
+
+- **Status:** documentation-only; no implementation, label generation, or
+  training is performed or authorized by this entry.
+
 ---
 
 ## UNDECIDED (must not be silently resolved — see CURRENT_STATE blockers)
