@@ -2,7 +2,7 @@
 # Populated in later phases from the frozen stack (TRD §02.2), NOT in P0:
 #   P1: paho-mqtt==1.6.*, gpiozero, smbus2, spidev, w1thermsensor,
 #       adafruit-circuitpython-dht
-#   P3: torch==2.2.*, stable-baselines3==2.3.*
+#   P3 (RL, not yet active): stable-baselines3==2.3.*
 # (kept empty in P0 so nothing is installed before its phase)
 
 # P2 (active): Isolation Forest detector (edge/anomaly/iforest.py, FR-A1).
@@ -12,3 +12,8 @@ scikit-learn==1.4.*
 # P2 (active): SWaT.A1 dataset harness (edge/eval/swat_eval.py, D011/D012).
 # Reads the .xlsx dataset files; not a runtime dependency of the edge pipeline.
 openpyxl==3.1.*
+
+# P3 (active): hardware-free LSTM digital-twin plumbing
+# (edge/models/lstm_twin.py, edge/eval/twin_training.py, D016). Pins the
+# frozen TRD §02.2 version.
+torch==2.2.*
