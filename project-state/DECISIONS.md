@@ -793,6 +793,162 @@
   authorized by this entry. No code or test file is created or modified
   by this decision.
 
+### D021 — U04 (prognosis): PRONOSTIA/FEMTO adopted as initial external prognosis training/validation dataset (methodology-scoped, not pump-validated)
+- **Date:** 2026-08-31
+- **Decision:** The PRONOSTIA/FEMTO bearing dataset (IEEE PHM 2012 Prognostic
+  Challenge, hosted at the NASA Prognostics Center of Excellence Data Set
+  Repository; origin: Nectoux et al., "PRONOSTIA: An Experimental Platform
+  for Bearings Accelerated Life Test," IEEE PHM 2012) is adopted as the
+  initial external research/training dataset for FR-M1/M2 prognosis
+  development. It contains real rolling-bearing run-to-failure trajectories
+  (17 experiments across 3 operating conditions; 6 full run-to-failure
+  "learning set" + 11 truncated "test set") with genuine vibration
+  (twin-accelerometer, 25.6kHz) and temperature (PT-100, 10Hz) degradation
+  signals, run to actual physical failure.
+
+  This dataset's purpose is exclusively to validate the prognosis training
+  pipeline and LSTM methodology (windowing, training loop, loss convergence,
+  RUL-labeling technique) against real degradation trajectories. **It is NOT
+  evidence that the resulting model, or any model this project trains, is
+  accurate for this project's actual pump.**
+
+  Vibration and temperature may be treated ONLY as same-failure-mode-class
+  proxies for pump-bearing degradation (the physical intuition: bearing wear
+  raising vibration amplitude and temperature is the same failure-mode class
+  in PRONOSTIA's test rig and in a pump's own bearings) — not as the same
+  system, not as a validated transfer, not as physical equivalence beyond
+  that narrow same-class relationship.
+
+  Pressure, humidity, gas, and current are **NOT validated by this dataset**
+  in any respect and must never be described as trained, validated, or
+  even exercised against real degradation data as a result of this
+  decision. No channel-by-channel physical equivalence between PRONOSTIA's
+  sensors and this project's six channels is assumed or implied beyond the
+  single, explicitly approved vibration/temperature same-failure-mode-class
+  proxy relationship stated above.
+
+  Real pump/bench validation remains required before any FR-M1/M2
+  acceptance claim — this decision does not reduce or substitute for that
+  requirement in any way.
+
+  This decision explicitly does NOT authorize using SWaT, the P2 Drift/
+  RampFDI injection framework, or the existing D005/D008 simulator as a
+  degradation-data source; none of those are degradation data and none are
+  affected by this entry.
+
+- **Reason:** Of the public candidates researched (NASA C-MAPSS turbofan,
+  PRONOSTIA/FEMTO bearing, Kaggle "Pump Sensor Data," MetroPT-3),
+  PRONOSTIA offers the narrowest, most physically defensible proxy claim
+  available without inventing a pump-equivalence mapping: bearings are a
+  real component class present inside pumps, and vibration/temperature are
+  the literal physical channels that class of degradation would move,
+  unlike C-MAPSS (turbofan, zero shared channel types) or the Kaggle/
+  MetroPT candidates (undocumented sensor semantics or license/provenance
+  gaps respectively). This mirrors D011/D012's own precedent of adopting an
+  external dataset under an explicitly scoped, non-equivalence claim.
+
+- **Affects:** future prognosis training/experimentation work only
+  (`edge/models/lstm_prognosis.py`'s existing untrained architecture skeleton
+  is unaffected — no code, weights, or training run is created by this
+  decision). Does not touch any existing P2/P3 production code, tests, or
+  the existing digital-twin work.
+
+- **Does NOT resolve:** HealthState threshold/band definitions, failure_eta
+  horizon/units, loss function, optimizer, or any other still-open
+  prognosis specification item (see D016's own disclaimer, unchanged). Does
+  NOT resolve how PRONOSTIA's 25.6kHz/10Hz sampling maps onto this
+  project's 1Hz/30-sample window structure. Does NOT resolve how the other
+  four channels (pressure, humidity, gas, current) are represented during
+  any PRONOSTIA-based training run for architecture-shape compatibility —
+  this remains a fully separate, open modeling/data-mapping decision, and
+  no treatment (zero-filling, a reduced-channel architecture variant, or
+  any other approach) is chosen, implied, or recommended by this entry.
+  Does NOT resolve U06 (RL) or U05's remaining `divergence_threshold` value.
+
+- **Does NOT change:** D016, D017 (this is precisely the "separate, later
+  scoping step" D017 explicitly declined to make — D017's own text and
+  scope are unmodified by this entry), D018, D019, D020, or any existing
+  code/tests. No dataset is downloaded, no training is performed, and no
+  file besides this entry is created or modified by this decision.
+
+- **Status:** documentation-only; no implementation, download, or training
+  performed or authorized by this entry.
+
+### D022 — PRONOSTIA input-representation mechanics: temperature downsampling, vibration burst summary, and missing-vibration indicator (narrow, mechanism-only)
+- **Date:** 2026-08-31
+- **Decision:** Building on D021 (PRONOSTIA/FEMTO adopted as an external
+  vibration+temperature methodology-validation dataset only), this entry
+  resolves exactly three narrow representation-mechanics choices needed to
+  convert PRONOSTIA's actual raw structure into inputs the existing
+  prognosis skeleton can consume:
+
+  1. **Temperature downsampling (10Hz → 1Hz):** a 1-second block mean of
+     the actually-measured 10Hz samples. Uses 100% of the real measured
+     data (no discarded samples), introduces no filter/cutoff parameter.
+
+  2. **Vibration burst summary:** each real ~0.1s vibration burst is
+     collapsed to one scalar via RMS of the per-sample Euclidean magnitude,
+     `sqrt(horizontal_i^2 + vertical_i^2)`, computed across the burst's
+     samples. No interpolation of vibration across the ~10s silent gaps
+     between bursts — a burst's summary value exists only at the timestep
+     where a real burst actually occurred.
+
+  3. **Missing-vibration indicator:** `trust=0` is explicitly NOT reused to
+     represent an absent vibration observation — `SelfHealOrchestrator`'s
+     existing trust mechanism applies one scalar per channel across an
+     entire window (`trust[ch].trust`), not per-timestep, so it cannot
+     mechanically distinguish "observed with low confidence" from "no
+     observation exists" without conflating two different quantities.
+     Instead, one explicit per-timestep `vibration_observed` indicator is
+     added: `1.0` at timesteps where a real burst landed, `0.0` elsewhere;
+     the vibration value itself is `0.0` at unobserved timesteps. This
+     mirrors the existing masked-channel-indicator precedent already used
+     by `edge/models/lstm_twin.py`'s `build_masked_input` (zero the value,
+     flag it explicitly) rather than inventing a new mechanism.
+
+     This widens the prognosis input contract from `len(CHANNELS)` to
+     `len(CHANNELS)+1` scalars per timestep. **The LSTM itself is NOT
+     redesigned:** it remains the single-layer, unidirectional encoder with
+     the same two independent output heads (health 3-way classification,
+     failure_eta scalar regression) approved earlier this session — only
+     the per-timestep input WIDTH changes, not the network's depth,
+     directionality, or head structure.
+
+- **Reason:** Each choice is the smallest defensible option that uses only
+  real measured data without interpolation or fabrication: block-mean and
+  RMS are standard, parameter-free (or minimally-parameterized) summaries
+  rather than a feature-engineering system; the observed-indicator reuses
+  an already-established project pattern (the twin's masking indicator)
+  instead of overloading `trust`'s existing, different meaning (confidence
+  in a reading's genuineness, not whether a reading exists at all).
+
+- **Affects:** the not-yet-implemented PRONOSTIA-to-prognosis input-building
+  function (a future analogue to `build_trust_weighted_input`) and, when
+  implemented, `edge/models/lstm_prognosis.py`'s `_LSTMPrognosisNet.
+  __init__`'s `input_size` (from `len(CHANNELS)` to `len(CHANNELS)+1`). No
+  code or test file is created or modified by this entry itself.
+
+- **Does NOT resolve:** the four non-covered channels (pressure, humidity,
+  gas, current) — they remain entirely unresolved; no zero-filling,
+  synthesis, or any other treatment is chosen, implied, or assumed by this
+  entry. Does NOT choose HealthState thresholds/band definitions. Does NOT
+  choose failure_eta horizon or units. Does NOT choose loss function,
+  optimizer, or any training hyperparameter. Does NOT define or authorize
+  any prognosis acceptance metric. Does NOT touch RL/U06. Does NOT create
+  any pump-validation claim — D021's own scope (methodology/training-
+  pipeline validation only, vibration+temperature as a same-failure-mode-
+  class proxy, real pump/bench validation still required) is entirely
+  unchanged by this entry. **This entry does not authorize training** —
+  it resolves representation mechanics only.
+
+- **Does NOT change:** D016, D017, D018, D019, D020, D021 — all unchanged,
+  D021 in particular unaffected in scope or wording. No existing code or
+  test file is modified by this entry.
+
+- **Status:** documentation-only; no implementation, preprocessing,
+  dataset-loader, training, or test code is created or authorized by this
+  entry.
+
 ---
 
 ## UNDECIDED (must not be silently resolved — see CURRENT_STATE blockers)

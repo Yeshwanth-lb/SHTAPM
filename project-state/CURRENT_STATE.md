@@ -24,7 +24,41 @@ policy decisions — both remain required, never-defaulted constructor
 arguments in code, no default added.** `divergence_threshold` remains the
 sole open U05 numeric value, still data-gated; **no meaningful
 reconstruction accuracy or real-world validation is claimed anywhere in
-this slice**. **Hardware-free P2 still
+this slice**. **Since then, an untrained hardware-free prognosis
+architecture skeleton was implemented and committed** (`LSTMPrognosisPredictor`/
+`_LSTMPrognosisNet`, `edge/models/lstm_prognosis.py`, `9f802df` — single-
+layer unidirectional LSTM, two heads, no Protocol, no training/pipeline
+integration), **then `DECISIONS.md` D021 (2026-08-31, documentation-only)
+adopted PRONOSTIA/FEMTO** (IEEE PHM 2012 bearing run-to-failure dataset)
+**as the initial external prognosis training/methodology dataset** —
+vibration + temperature ONLY, as a same-failure-mode-class proxy for
+pump-bearing degradation; explicitly NOT evidence of pump validation;
+pressure/humidity/gas/current remain unvalidated; real pump/bench
+validation still required; D017 unchanged. D021 does not resolve
+HealthState thresholds, failure_eta horizon/units, loss, optimizer,
+resampling/windowing, or the other four channels' treatment — all remain
+open. No dataset downloaded, no training performed, no code/tests modified
+by D021. **Then PRONOSTIA was acquired and inspected read-only**
+(NASA PCoE-hosted URL, verified byte-exact + zip-integrity, extracted only
+to the session scratchpad — never into this repo): 6 training + 11 test
+bearing experiments confirmed; vibration = 25.6kHz bursts every ~10s
+(periodic, not continuous); temperature = continuous 10Hz; real
+degradation-to-failure signatures directly measured (vibration amplitude
+~20-30x rise, temperature rise ~70→164 in Bearing1_1); RUL derivable via
+the Test_set/Full_Test_Set truncation pairing. **Since then, `DECISIONS.md`
+D022 (2026-08-31, documentation-only) resolved three narrow input-
+representation-mechanics choices**: temperature 10Hz→1Hz via 1-second
+block mean; vibration burst → one RMS-of-Euclidean-magnitude scalar per
+real burst (no interpolation across the ~10s gaps); an explicit
+per-timestep `vibration_observed` indicator (not `trust=0`, which cannot
+represent per-timestep absence given `trust[ch].trust` is one scalar per
+channel per whole window) — widening the future prognosis input contract
+from `len(CHANNELS)` to `len(CHANNELS)+1` **without redesigning the LSTM**
+(still single-layer, unidirectional, same two heads). D022 does not
+resolve the four non-covered channels, HealthState thresholds, failure_eta
+horizon/units, loss, optimizer, hyperparameters, or authorize training;
+D021 unchanged. No code, preprocessing, dataset loader, or test created or
+modified by D022. **Hardware-free P2 still
 has no remaining mandatory software implementation** (unchanged from the
 prior session — see `P2_RESUME.md` §10 for that handoff). See
 `DECISIONS.md` D013–D019 and `P2_RESUME.md` §1a/§3a/§7a/§9/§10/§14 for
@@ -409,19 +443,35 @@ needed, so no amount of further hardware-free training changes that.
 Nothing in this repo yet decides *which* channels are isolated for real —
 FR-RL2 makes that an RL-agent action, and both the agent and its
 deterministic fallback (FR-RL4) remain unbuilt; `process_isolated_channels`
-is exercised only with test-fixture isolated sets. Prognosis training is
-still blocked on an unspecified degradation-data source. The next session
+is exercised only with test-fixture isolated sets. An untrained prognosis
+architecture skeleton now exists (`edge/models/lstm_prognosis.py`,
+`9f802df`); `DECISIONS.md` D021 (2026-08-31) adopted PRONOSTIA/FEMTO
+(acquired + inspected read-only, scratchpad-only) as an external
+vibration+temperature methodology-validation dataset only; `DECISIONS.md`
+D022 (2026-08-31) then resolved the temperature-downsampling method
+(1-second block mean), the vibration-burst-summary statistic (RMS of
+Euclidean magnitude), and a missing-vibration `vibration_observed`
+indicator (widening the future input contract to `len(CHANNELS)+1`, LSTM
+shape unchanged) — but **none of this is implemented as code yet** (D022 is
+documentation-only), and prognosis training is still blocked in every
+practical sense: pressure/humidity/gas/current have no data source at all;
+HealthState thresholds, failure_eta horizon/units, loss, and optimizer
+remain fully open; no PRONOSTIA preprocessing/dataset-loader code exists.
+Real pump/bench validation remains required regardless. The next session
 should explicitly ask the user whether to: (a) obtain or scope a path to
 real bench data for `divergence_threshold`, (b) scope the deterministic
 rule-based RL fallback (FR-RL4) — noting it itself needs `health`/
-`failure_eta` from the still-blocked prognosis, so scoping it will likely
-surface that dependency again, (c) resolve one of the standing P2
-decision-required items (λ=0.7 sign-off/U01, `c`'s redefinition, FR-A4's
-payload/U14), or (d) something else entirely. Do not default to further P3
-implementation, and do not create a new decision (D021+) without the same
-propose-then-approve sequence used for D014–D020. P2 work otherwise
-remains blocked on real bench hardware (also the only path that could
-unblock D014's deferred current↔temperature candidate).
+`failure_eta` from the still-substantively-blocked prognosis, so scoping it
+will likely surface that dependency again, (c) resolve one of the standing
+P2 decision-required items (λ=0.7 sign-off/U01, `c`'s redefinition, FR-A4's
+payload/U14), (d) implement the D022-specified PRONOSTIA preprocessing/
+input-building code (or resolve one of D022's own still-open follow-ons:
+four-channel treatment, HealthState thresholds, failure_eta horizon/units),
+or (e) something else entirely. Do not default to further P3 implementation,
+and do not create a new decision (D023+) without the same propose-then-
+approve sequence used for D014–D022. P2 work otherwise remains blocked on
+real bench hardware (also the only path that could unblock D014's deferred
+current↔temperature candidate).
 
 ## Environment gates (honest — sandbox limits, not code failures)
 - **Docker image builds** (backend `pip`, frontend `npm`) fail cert-verify inside the build (gateway MITMs TLS; base images lack its CA). So the full four-service `up` can't be built here. Dockerfiles are standard/correct — no insecure workarounds added; they build on CI / a normal machine (frontend build already green in CI).
