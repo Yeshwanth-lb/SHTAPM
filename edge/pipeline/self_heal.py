@@ -55,6 +55,13 @@ from edge.trust.beta import TRUSTED_MIN
 # edge/trust/beta.py's DEFAULT_LAMBDA precedent. Not a new/duplicated value.
 SUBSTITUTION_MAX_SECONDS_DEFAULT: float = 60.0
 
+# DECISIONS.md D020 (2026-08-31): approved uncertainty_cap value, in the
+# uncertainty proxy's own output domain. NOT a default -- SelfHealOrchestrator
+# still requires uncertainty_cap to be explicitly supplied by the caller.
+# Exists only as a canonical, importable reference to avoid duplicated
+# fixture copies drifting from the real approved value.
+UNCERTAINTY_CAP_D020: float = 0.8
+
 
 class EscalationReason:
     DIVERGENCE_EXCEEDED = "divergence_exceeded"

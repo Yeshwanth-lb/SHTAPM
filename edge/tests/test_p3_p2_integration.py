@@ -26,10 +26,12 @@ NFR-P3's documented "<500 ms" self-healing budget -- that target is
 explicitly edge/Pi-resident and measured "under load" (TRD/Doc06); nothing
 about a host-machine measurement can establish or approximate on-Pi timing.
 
-All threshold/cap/bound/hidden-size values below are TEST FIXTURES ONLY --
-never presented as project specification values (divergence_threshold,
-uncertainty_cap, and the elapsed-time scaling formula all remain
-unresolved, U05/D019).
+`divergence_threshold`/`substitution_max_seconds`/`hidden_size` below are
+TEST FIXTURES ONLY -- never presented as project specification values
+(`divergence_threshold` remains genuinely unresolved, U05). `uncertainty_
+cap`/the elapsed-time scaling formula are NOT fixtures: they are the real,
+D020-approved values (`UNCERTAINTY_CAP_D020` / `linear_scaling`), imported
+directly rather than re-derived.
 
 Skipped entirely when torch is unavailable -- same skip-pattern as
 edge/tests/test_lstm_twin.py.
@@ -56,8 +58,11 @@ from edge.anomaly.preprocess import Preprocessor  # noqa: E402
 from edge.models.lstm_twin import LSTMTwinReconstructor, _LSTMTwinNet  # noqa: E402
 from edge.pipeline.cycle import process_isolated_channels  # noqa: E402
 from edge.pipeline.divergence import DivergenceScorer  # noqa: E402
-from edge.pipeline.self_heal import SelfHealOrchestrator  # noqa: E402
-from edge.pipeline.uncertainty import ElapsedTimeUncertaintyProxy  # noqa: E402
+from edge.pipeline.self_heal import UNCERTAINTY_CAP_D020, SelfHealOrchestrator  # noqa: E402
+from edge.pipeline.uncertainty import (  # noqa: E402
+    ElapsedTimeUncertaintyProxy,
+    linear_scaling,
+)
 from edge.trust.c_consistency import ConsistencyProvider  # noqa: E402
 from edge.trust.engine import TrustEngine  # noqa: E402
 from edge.trust.h_reliability import HReliabilityProvider  # noqa: E402
@@ -70,9 +75,11 @@ STEP = 1
 FLAG_POLICY_TAIL_FRACTION_FIXTURE = 0.1
 
 DIVERGENCE_THRESHOLD_FIXTURE = 3.0
-UNCERTAINTY_CAP_FIXTURE = 0.8
 SUBSTITUTION_MAX_SECONDS_FIXTURE = 60.0
 HIDDEN_SIZE_FIXTURE = 4
+# uncertainty_cap/the scaling formula below are NOT fixtures: they are the
+# real, D020-approved values (UNCERTAINTY_CAP_D020 / linear_scaling),
+# imported directly rather than re-derived.
 
 _BASELINE = {
     "temperature": 25.0,
@@ -83,11 +90,6 @@ _BASELINE = {
     "current": 1.0,
 }
 _NOISE_AMPLITUDE = {ch: v * 0.02 for ch, v in _BASELINE.items()}
-
-
-def _LINEAR_SCALING_FIXTURE(elapsed_fraction: float) -> float:
-    """TEST FIXTURE ONLY -- not the approved D019 scaling formula."""
-    return elapsed_fraction
 
 
 def _ts(i: int) -> str:
@@ -154,7 +156,7 @@ def _make_self_heal_orchestrator():
     twin = LSTMTwinReconstructor(network)
     divergence_scorer = DivergenceScorer()
     divergence_scorer.fit({"temperature": [-0.1, 0.0, 0.1]})
-    uncertainty_proxy = ElapsedTimeUncertaintyProxy(scaling_fn=_LINEAR_SCALING_FIXTURE)
+    uncertainty_proxy = ElapsedTimeUncertaintyProxy(scaling_fn=linear_scaling)
     calls = {"n": 0}
 
     def safe_stop():
@@ -165,7 +167,7 @@ def _make_self_heal_orchestrator():
         divergence_scorer=divergence_scorer,
         uncertainty_proxy=uncertainty_proxy,
         divergence_threshold=DIVERGENCE_THRESHOLD_FIXTURE,
-        uncertainty_cap=UNCERTAINTY_CAP_FIXTURE,
+        uncertainty_cap=UNCERTAINTY_CAP_D020,
         safe_stop=safe_stop,
         substitution_max_seconds=SUBSTITUTION_MAX_SECONDS_FIXTURE,
     )

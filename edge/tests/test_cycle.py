@@ -1,9 +1,11 @@
 """Tests for edge/pipeline/cycle.py (P2->P3 narrow adapter).
 
-All threshold/trust/raw-value fixtures below are TEST FIXTURES ONLY -- none
-is presented as a project specification value. `_DEFAULT_TRUST_FIXTURE` is
-test scaffolding (a baseline "healthy" trust for channels not under test in
-a given case), not a divergence_threshold/uncertainty_cap/spec value.
+`DIVERGENCE_THRESHOLD_FIXTURE`/`SUBSTITUTION_MAX_SECONDS_FIXTURE` below are
+TEST FIXTURES ONLY -- neither is presented as a project specification
+value. `_DEFAULT_TRUST_FIXTURE` is test scaffolding (a baseline "healthy"
+trust for channels not under test in a given case). `uncertainty_cap`/the
+scaling formula are NOT fixtures: they are the real, D020-approved values
+(`UNCERTAINTY_CAP_D020` / `linear_scaling`), imported directly.
 """
 
 from __future__ import annotations
@@ -20,8 +22,8 @@ from edge.anomaly.pipeline import WindowOutcome
 from edge.anomaly.preprocess import Window
 from edge.pipeline.cycle import process_isolated_channels
 from edge.pipeline.divergence import DivergenceScorer
-from edge.pipeline.self_heal import SelfHealOrchestrator
-from edge.pipeline.uncertainty import ElapsedTimeUncertaintyProxy
+from edge.pipeline.self_heal import UNCERTAINTY_CAP_D020, SelfHealOrchestrator
+from edge.pipeline.uncertainty import ElapsedTimeUncertaintyProxy, linear_scaling
 from edge.trust.beta import classify
 from edge.trust.engine import TrustReading
 
@@ -30,14 +32,8 @@ from edge.trust.engine import TrustReading
 # ---------------------------------------------------------------------------
 
 DIVERGENCE_THRESHOLD_FIXTURE = 3.0
-UNCERTAINTY_CAP_FIXTURE = 0.8
 SUBSTITUTION_MAX_SECONDS_FIXTURE = 60.0
 _DEFAULT_TRUST_FIXTURE = 0.9  # baseline "healthy" trust for channels not under test
-
-
-def _LINEAR_SCALING_FIXTURE(elapsed_fraction: float) -> float:
-    """TEST FIXTURE ONLY -- not the approved D019 scaling formula."""
-    return elapsed_fraction
 
 
 class _FixedReconstructionTwinFixture:
@@ -97,7 +93,7 @@ def _make_orchestrator(twin=None):
     # Both channels fit identically (same tight fixture spread) so
     # multi-channel tests can reason about either one predictably.
     divergence_scorer.fit({"temperature": [-0.1, 0.0, 0.1], "current": [-0.1, 0.0, 0.1]})
-    uncertainty_proxy = ElapsedTimeUncertaintyProxy(scaling_fn=_LINEAR_SCALING_FIXTURE)
+    uncertainty_proxy = ElapsedTimeUncertaintyProxy(scaling_fn=linear_scaling)
     calls = {"n": 0}
 
     def safe_stop():
@@ -108,7 +104,7 @@ def _make_orchestrator(twin=None):
         divergence_scorer=divergence_scorer,
         uncertainty_proxy=uncertainty_proxy,
         divergence_threshold=DIVERGENCE_THRESHOLD_FIXTURE,
-        uncertainty_cap=UNCERTAINTY_CAP_FIXTURE,
+        uncertainty_cap=UNCERTAINTY_CAP_D020,
         safe_stop=safe_stop,
         substitution_max_seconds=SUBSTITUTION_MAX_SECONDS_FIXTURE,
     )

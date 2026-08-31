@@ -1,9 +1,13 @@
-"""Tests for edge/pipeline/self_heal.py (P3 · D016-D019 orchestration).
+"""Tests for edge/pipeline/self_heal.py (P3 · D016-D020 orchestration).
 
-All threshold/cap/residual/elapsed-time values below are TEST FIXTURES,
-labelled as such -- none is presented as the project's divergence_threshold
-or uncertainty_cap specification (both remain data-gated/open, U05), and the
-linear scaling function used is explicitly not the approved D019 formula.
+``DIVERGENCE_THRESHOLD_FIXTURE`` and ``SUBSTITUTION_MAX_SECONDS_FIXTURE``
+below are TEST FIXTURES -- neither is presented as the project's resolved
+divergence_threshold value (still data-gated/open, U05) or as a new
+substitution-bound spec (a fixture copy of the already-approved D018
+default). ``uncertainty_cap``/the elapsed-time scaling formula are NOT
+fixtures here: they are the real, D020-approved values
+(``UNCERTAINTY_CAP_D020`` / ``linear_scaling``), imported directly rather
+than re-derived, to avoid a local copy drifting from the approved one.
 
 The TwinReconstructor stub below is a fixture ONLY: edge/models/twin.py
 ships no production implementation (per explicit implementation-approval
@@ -20,10 +24,11 @@ from edge.anomaly.preprocess import Window
 from edge.pipeline.divergence import DivergenceScorer
 from edge.pipeline.self_heal import (
     SUBSTITUTION_MAX_SECONDS_DEFAULT,
+    UNCERTAINTY_CAP_D020,
     EscalationReason,
     SelfHealOrchestrator,
 )
-from edge.pipeline.uncertainty import ElapsedTimeUncertaintyProxy
+from edge.pipeline.uncertainty import ElapsedTimeUncertaintyProxy, linear_scaling
 from edge.trust.beta import TRUSTED_MIN
 
 # ---------------------------------------------------------------------------
@@ -31,13 +36,7 @@ from edge.trust.beta import TRUSTED_MIN
 # ---------------------------------------------------------------------------
 
 DIVERGENCE_THRESHOLD_FIXTURE = 3.0
-UNCERTAINTY_CAP_FIXTURE = 0.8
 SUBSTITUTION_MAX_SECONDS_FIXTURE = 60.0
-
-
-def _LINEAR_SCALING_FIXTURE(elapsed_fraction: float) -> float:
-    """TEST FIXTURE ONLY -- not the approved D019 scaling formula."""
-    return elapsed_fraction
 
 
 class _FixedReconstructionTwinFixture:
@@ -73,7 +72,7 @@ def _make_orchestrator(
     *,
     clock: ManualClock,
     divergence_threshold: float = DIVERGENCE_THRESHOLD_FIXTURE,
-    uncertainty_cap: float = UNCERTAINTY_CAP_FIXTURE,
+    uncertainty_cap: float = UNCERTAINTY_CAP_D020,
     substitution_max_seconds: float = SUBSTITUTION_MAX_SECONDS_FIXTURE,
     safe_stop=None,
     twin_value: float = 0.0,
@@ -85,7 +84,7 @@ def _make_orchestrator(
     # Both channels fit identically so multi-channel tests can reason about
     # either one predictably.
     divergence_scorer.fit({"temperature": [-0.1, 0.0, 0.1], "current": [-0.1, 0.0, 0.1]})
-    uncertainty_proxy = ElapsedTimeUncertaintyProxy(scaling_fn=_LINEAR_SCALING_FIXTURE)
+    uncertainty_proxy = ElapsedTimeUncertaintyProxy(scaling_fn=linear_scaling)
 
     calls = {"n": 0}
     if safe_stop is None:
@@ -211,14 +210,14 @@ def test_divergence_exactly_at_threshold_escalates():
     exact_divergence = divergence_scorer.score("temperature", residual)
 
     twin = _FixedReconstructionTwinFixture(reconstructed_value)
-    uncertainty_proxy = ElapsedTimeUncertaintyProxy(scaling_fn=_LINEAR_SCALING_FIXTURE)
+    uncertainty_proxy = ElapsedTimeUncertaintyProxy(scaling_fn=linear_scaling)
     calls = {"n": 0}
     orchestrator = SelfHealOrchestrator(
         twin=twin,
         divergence_scorer=divergence_scorer,
         uncertainty_proxy=uncertainty_proxy,
         divergence_threshold=exact_divergence,
-        uncertainty_cap=UNCERTAINTY_CAP_FIXTURE,
+        uncertainty_cap=UNCERTAINTY_CAP_D020,
         safe_stop=lambda: calls.__setitem__("n", calls["n"] + 1),
         substitution_max_seconds=SUBSTITUTION_MAX_SECONDS_FIXTURE,
         clock=clock,
@@ -269,14 +268,14 @@ def test_default_substitution_max_seconds_matches_doc05():
     twin = _FixedReconstructionTwinFixture(0.0)
     divergence_scorer = DivergenceScorer()
     divergence_scorer.fit({"temperature": [-0.1, 0.0, 0.1]})
-    uncertainty_proxy = ElapsedTimeUncertaintyProxy(scaling_fn=_LINEAR_SCALING_FIXTURE)
+    uncertainty_proxy = ElapsedTimeUncertaintyProxy(scaling_fn=linear_scaling)
     calls = {"n": 0}
     orchestrator = SelfHealOrchestrator(
         twin=twin,
         divergence_scorer=divergence_scorer,
         uncertainty_proxy=uncertainty_proxy,
         divergence_threshold=DIVERGENCE_THRESHOLD_FIXTURE,
-        uncertainty_cap=UNCERTAINTY_CAP_FIXTURE,
+        uncertainty_cap=UNCERTAINTY_CAP_D020,
         safe_stop=lambda: calls.__setitem__("n", calls["n"] + 1),
         # substitution_max_seconds intentionally omitted -- exercises the
         # default, which must equal the Doc05-documented value.
@@ -301,14 +300,14 @@ def test_rejects_non_positive_substitution_max_seconds():
     twin = _FixedReconstructionTwinFixture(0.0)
     divergence_scorer = DivergenceScorer()
     divergence_scorer.fit({"temperature": [0.0]})
-    uncertainty_proxy = ElapsedTimeUncertaintyProxy(scaling_fn=_LINEAR_SCALING_FIXTURE)
+    uncertainty_proxy = ElapsedTimeUncertaintyProxy(scaling_fn=linear_scaling)
     with pytest.raises(ValueError):
         SelfHealOrchestrator(
             twin=twin,
             divergence_scorer=divergence_scorer,
             uncertainty_proxy=uncertainty_proxy,
             divergence_threshold=DIVERGENCE_THRESHOLD_FIXTURE,
-            uncertainty_cap=UNCERTAINTY_CAP_FIXTURE,
+            uncertainty_cap=UNCERTAINTY_CAP_D020,
             safe_stop=lambda: None,
             substitution_max_seconds=0.0,
             clock=clock,
@@ -325,7 +324,7 @@ def test_uncertainty_cap_alert_without_escalation():
     orchestrator, calls = _make_orchestrator(clock=clock)
     orchestrator.process_isolated_channel("temperature", _empty_window(), raw_value=0.0, trust=0.2)
     # Linear scaling fixture: fraction = elapsed / max. At elapsed=50/60,
-    # uncertainty = 0.833 >= UNCERTAINTY_CAP_FIXTURE (0.8), while still well
+    # uncertainty = 0.833 >= UNCERTAINTY_CAP_D020 (0.8), while still well
     # under the 60s expiry and with a small (non-escalating) divergence.
     clock.advance(50.0)
     outcome = orchestrator.process_isolated_channel(
@@ -358,7 +357,7 @@ def test_uncertainty_exactly_at_cap_raises_alert():
     exact, not merely close under floating-point rounding.
     """
     clock = ManualClock()
-    uncertainty_proxy = ElapsedTimeUncertaintyProxy(scaling_fn=_LINEAR_SCALING_FIXTURE)
+    uncertainty_proxy = ElapsedTimeUncertaintyProxy(scaling_fn=linear_scaling)
     elapsed_probe = 30.0
     exact_uncertainty = uncertainty_proxy.uncertainty(
         elapsed_probe, SUBSTITUTION_MAX_SECONDS_FIXTURE
@@ -541,13 +540,13 @@ def test_safe_stop_wired_to_real_relay_controller():
     twin = _FixedReconstructionTwinFixture(0.0)
     divergence_scorer = DivergenceScorer()
     divergence_scorer.fit({"temperature": [-0.1, 0.0, 0.1]})
-    uncertainty_proxy = ElapsedTimeUncertaintyProxy(scaling_fn=_LINEAR_SCALING_FIXTURE)
+    uncertainty_proxy = ElapsedTimeUncertaintyProxy(scaling_fn=linear_scaling)
     orchestrator = SelfHealOrchestrator(
         twin=twin,
         divergence_scorer=divergence_scorer,
         uncertainty_proxy=uncertainty_proxy,
         divergence_threshold=DIVERGENCE_THRESHOLD_FIXTURE,
-        uncertainty_cap=UNCERTAINTY_CAP_FIXTURE,
+        uncertainty_cap=UNCERTAINTY_CAP_D020,
         safe_stop=controller.safe_off,
         substitution_max_seconds=SUBSTITUTION_MAX_SECONDS_FIXTURE,
         clock=clock,

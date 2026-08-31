@@ -28,13 +28,17 @@ NOT ATTEMPTED:
         triggers stop") also requires physical hardware validation
         regardless of software state.
 
-Every threshold/cap/bound/hidden-size value below is a TEST FIXTURE ONLY --
-explicitly labelled `*_FIXTURE`, never presented as the project's resolved
-divergence_threshold/uncertainty_cap/scaling formula (all three remain
-data-gated/unresolved, U05/D019). These tests prove the MECHANISM behaves
-as Doc06/PRD describe when GIVEN some threshold; they are NOT, and cannot
-be, a real-world validation of what that threshold should actually be, and
-they are not a claim of digital-twin reconstruction accuracy.
+`DIVERGENCE_THRESHOLD_FIXTURE`/`SUBSTITUTION_MAX_SECONDS_FIXTURE`/
+`HIDDEN_SIZE_FIXTURE` below are TEST FIXTURES ONLY, explicitly labelled
+`*_FIXTURE` -- `divergence_threshold` remains the project's one genuinely
+unresolved U05 value (data-gated); these tests prove the MECHANISM behaves
+as Doc06/PRD describe when GIVEN some threshold, not a real-world
+validation of what that threshold should be. `uncertainty_cap`/the
+elapsed-time scaling formula are deliberately NOT fixtures here: they are
+the real, D020-approved values (`UNCERTAINTY_CAP_D020` / `linear_scaling`),
+imported directly -- these tests exercise the actual approved policy, not
+a stand-in for it. None of this is a claim of digital-twin reconstruction
+accuracy.
 
 Skipped entirely when torch is unavailable -- same skip-pattern as
 edge/tests/test_lstm_twin.py.
@@ -52,19 +56,19 @@ from edge.actuation.relay import FakeActuator, RelayController, RelayState  # no
 from edge.anomaly.preprocess import Window  # noqa: E402
 from edge.models.lstm_twin import LSTMTwinReconstructor, _LSTMTwinNet  # noqa: E402
 from edge.pipeline.divergence import DivergenceScorer  # noqa: E402
-from edge.pipeline.self_heal import EscalationReason, SelfHealOrchestrator  # noqa: E402
-from edge.pipeline.uncertainty import ElapsedTimeUncertaintyProxy  # noqa: E402
+from edge.pipeline.self_heal import (  # noqa: E402
+    UNCERTAINTY_CAP_D020,
+    EscalationReason,
+    SelfHealOrchestrator,
+)
+from edge.pipeline.uncertainty import ElapsedTimeUncertaintyProxy, linear_scaling  # noqa: E402
 
 # ---- TEST FIXTURES ONLY -- not project specification values ---------------
 DIVERGENCE_THRESHOLD_FIXTURE = 3.0
-UNCERTAINTY_CAP_FIXTURE = 0.8
 SUBSTITUTION_MAX_SECONDS_FIXTURE = 60.0
 HIDDEN_SIZE_FIXTURE = 4
-
-
-def _LINEAR_SCALING_FIXTURE(elapsed_fraction: float) -> float:
-    """TEST FIXTURE ONLY -- not the approved D019 scaling formula."""
-    return elapsed_fraction
+# uncertainty_cap/the scaling formula are NOT fixtures -- see module
+# docstring; UNCERTAINTY_CAP_D020/linear_scaling are imported above.
 
 
 class ManualClock:
@@ -89,7 +93,7 @@ def _make_orchestrator(clock: ManualClock, safe_stop=None):
     twin = LSTMTwinReconstructor(network)
     divergence_scorer = DivergenceScorer()
     divergence_scorer.fit({"temperature": [-0.1, 0.0, 0.1]})
-    uncertainty_proxy = ElapsedTimeUncertaintyProxy(scaling_fn=_LINEAR_SCALING_FIXTURE)
+    uncertainty_proxy = ElapsedTimeUncertaintyProxy(scaling_fn=linear_scaling)
     calls = {"n": 0}
 
     if safe_stop is None:
@@ -102,7 +106,7 @@ def _make_orchestrator(clock: ManualClock, safe_stop=None):
         divergence_scorer=divergence_scorer,
         uncertainty_proxy=uncertainty_proxy,
         divergence_threshold=DIVERGENCE_THRESHOLD_FIXTURE,
-        uncertainty_cap=UNCERTAINTY_CAP_FIXTURE,
+        uncertainty_cap=UNCERTAINTY_CAP_D020,
         safe_stop=safe_stop,
         substitution_max_seconds=SUBSTITUTION_MAX_SECONDS_FIXTURE,
         clock=clock,
@@ -117,9 +121,10 @@ def _make_orchestrator(clock: ManualClock, safe_stop=None):
 
 def test_p3_heal_e1_substitution_near_uncertainty_cap_raises_alert():
     """Doc06/PRD wording (D019-clarified): "Uncertainty flagged high
-    (nearing cap); alert raised". MECHANISM test with a fixture cap -- the
-    real uncertainty_cap value remains unresolved (U05); this does not
-    validate what that value should be."""
+    (nearing cap); alert raised". Uses the REAL, D020-approved
+    `UNCERTAINTY_CAP_D020` (0.8) -- this is a MECHANISM test, not a
+    real-world validation claim, but the cap value itself is no longer a
+    placeholder (D020 resolved it as a policy decision)."""
     clock = ManualClock()
     window = _window()
 
@@ -134,7 +139,7 @@ def test_p3_heal_e1_substitution_near_uncertainty_cap_raises_alert():
 
     divergence_scorer = DivergenceScorer()
     divergence_scorer.fit({"temperature": [-0.1, 0.0, 0.1]})
-    uncertainty_proxy = ElapsedTimeUncertaintyProxy(scaling_fn=_LINEAR_SCALING_FIXTURE)
+    uncertainty_proxy = ElapsedTimeUncertaintyProxy(scaling_fn=linear_scaling)
     calls = {"n": 0}
 
     def safe_stop():
@@ -145,14 +150,14 @@ def test_p3_heal_e1_substitution_near_uncertainty_cap_raises_alert():
         divergence_scorer=divergence_scorer,
         uncertainty_proxy=uncertainty_proxy,
         divergence_threshold=DIVERGENCE_THRESHOLD_FIXTURE,
-        uncertainty_cap=UNCERTAINTY_CAP_FIXTURE,
+        uncertainty_cap=UNCERTAINTY_CAP_D020,
         safe_stop=safe_stop,
         substitution_max_seconds=SUBSTITUTION_MAX_SECONDS_FIXTURE,
         clock=clock,
     )
 
     orchestrator.process_isolated_channel("temperature", window, raw_value=tracked_value, trust=0.2)
-    clock.advance(50.0)  # fraction = 50/60 = 0.833 >= UNCERTAINTY_CAP_FIXTURE (0.8)
+    clock.advance(50.0)  # fraction = 50/60 = 0.833 >= UNCERTAINTY_CAP_D020 (0.8)
     outcome = orchestrator.process_isolated_channel(
         "temperature", window, raw_value=tracked_value, trust=0.2
     )
@@ -204,8 +209,9 @@ def test_p3_heal_s2_bounded_window_prevents_indefinite_trust_despite_low_diverge
     successfully keeps divergence low (raw_value tracks the twin's
     reconstruction) for the entire substitution episode, proving the 60s
     bound ALONE -- independent of divergence ever firing -- still forces
-    escalation. Uses fixture threshold/cap/bound values (U05 unresolved);
-    not a real attack-injection scenario."""
+    escalation. Uses a fixture `divergence_threshold` (still U05,
+    data-gated) and the real, D020-approved `uncertainty_cap`/scaling
+    formula; not a real attack-injection scenario."""
     clock = ManualClock()
     window = _window()
 
@@ -220,7 +226,7 @@ def test_p3_heal_s2_bounded_window_prevents_indefinite_trust_despite_low_diverge
 
     divergence_scorer = DivergenceScorer()
     divergence_scorer.fit({"temperature": [-0.1, 0.0, 0.1]})
-    uncertainty_proxy = ElapsedTimeUncertaintyProxy(scaling_fn=_LINEAR_SCALING_FIXTURE)
+    uncertainty_proxy = ElapsedTimeUncertaintyProxy(scaling_fn=linear_scaling)
     calls = {"n": 0}
 
     def safe_stop():
@@ -231,7 +237,7 @@ def test_p3_heal_s2_bounded_window_prevents_indefinite_trust_despite_low_diverge
         divergence_scorer=divergence_scorer,
         uncertainty_proxy=uncertainty_proxy,
         divergence_threshold=DIVERGENCE_THRESHOLD_FIXTURE,
-        uncertainty_cap=UNCERTAINTY_CAP_FIXTURE,
+        uncertainty_cap=UNCERTAINTY_CAP_D020,
         safe_stop=safe_stop,
         substitution_max_seconds=SUBSTITUTION_MAX_SECONDS_FIXTURE,
         clock=clock,

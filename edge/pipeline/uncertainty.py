@@ -35,6 +35,18 @@ class UncertaintyProxy(Protocol):
     def uncertainty(self, elapsed_seconds: float, substitution_max_seconds: float) -> float: ...
 
 
+def linear_scaling(elapsed_fraction: float) -> float:
+    """D020-approved elapsed-time -> uncertainty scaling formula: f(x) = x.
+
+    NOT a default -- ``ElapsedTimeUncertaintyProxy`` still requires
+    ``scaling_fn`` to be explicitly supplied by the caller. This is a
+    named, importable reference to the approved formula, existing solely
+    so tests (and any future real caller) don't each re-derive/duplicate
+    it independently.
+    """
+    return elapsed_fraction
+
+
 class ElapsedTimeUncertaintyProxy:
     """D019's deterministic elapsed-time proxy. ``scaling_fn`` is the ONLY
     thing that determines the actual output values -- this class supplies

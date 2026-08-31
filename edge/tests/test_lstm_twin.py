@@ -32,22 +32,21 @@ from edge.models.lstm_twin import (  # noqa: E402
 from edge.models.twin import TwinReconstructor  # noqa: E402
 from edge.pipeline.cycle import process_isolated_channels  # noqa: E402
 from edge.pipeline.divergence import DivergenceScorer  # noqa: E402
-from edge.pipeline.self_heal import SelfHealOrchestrator  # noqa: E402
-from edge.pipeline.uncertainty import ElapsedTimeUncertaintyProxy  # noqa: E402
+from edge.pipeline.self_heal import UNCERTAINTY_CAP_D020, SelfHealOrchestrator  # noqa: E402
+from edge.pipeline.uncertainty import (  # noqa: E402
+    ElapsedTimeUncertaintyProxy,
+    linear_scaling,
+)
 from edge.trust.beta import classify  # noqa: E402
 from edge.trust.engine import TrustReading  # noqa: E402
 
 HIDDEN_SIZE_FIXTURE = 4
-# Integration-test-only fixtures: SelfHealOrchestrator/process_isolated_channels
-# require SOME divergence_threshold/uncertainty_cap to be constructed. TEST
-# FIXTURES ONLY -- not project specification values; U05 remains open.
+# Integration-test-only: SelfHealOrchestrator/process_isolated_channels
+# require SOME divergence_threshold to be constructed. TEST FIXTURE ONLY --
+# not a project specification value; U05 remains open. uncertainty_cap/the
+# scaling formula are NOT fixtures: they are the real, D020-approved values
+# (UNCERTAINTY_CAP_D020 / linear_scaling), imported directly.
 DIVERGENCE_THRESHOLD_FIXTURE = 3.0
-UNCERTAINTY_CAP_FIXTURE = 0.8
-
-
-def _LINEAR_SCALING_FIXTURE(elapsed_fraction: float) -> float:
-    """TEST FIXTURE ONLY -- not the approved D019 scaling formula."""
-    return elapsed_fraction
 
 
 def _window(values_by_channel: dict[str, float]) -> Window:
@@ -174,7 +173,7 @@ def _make_orchestrator_with_real_twin():
     twin = LSTMTwinReconstructor(network)
     divergence_scorer = DivergenceScorer()
     divergence_scorer.fit({"temperature": [-0.1, 0.0, 0.1]})
-    uncertainty_proxy = ElapsedTimeUncertaintyProxy(scaling_fn=_LINEAR_SCALING_FIXTURE)
+    uncertainty_proxy = ElapsedTimeUncertaintyProxy(scaling_fn=linear_scaling)
     calls = {"n": 0}
 
     def safe_stop():
@@ -185,7 +184,7 @@ def _make_orchestrator_with_real_twin():
         divergence_scorer=divergence_scorer,
         uncertainty_proxy=uncertainty_proxy,
         divergence_threshold=DIVERGENCE_THRESHOLD_FIXTURE,
-        uncertainty_cap=UNCERTAINTY_CAP_FIXTURE,
+        uncertainty_cap=UNCERTAINTY_CAP_D020,
         safe_stop=safe_stop,
     )
     return orchestrator, calls
