@@ -4,32 +4,39 @@
 > `DECISIONS.md`, `TODO.md`, `IMPLEMENTATION_LOG.md`. Authoritative product spec
 > lives in `../CLAUDE.md` and `../docs/` — not duplicated here.
 
-**Last updated:** 2026-08-30, end of session — **`d28de0b` is the clean
-baseline** (`main`/`origin/main` identical, working tree clean). Today's
-work: P2-ANOM-S1 (`b82f935`), the broader-`PhysicsRule` scoping decision
-(`DECISIONS.md` D014, `5612a2a`), the P2-TRUST-H2 structural-limitation
-decision (`DECISIONS.md` D015, `3a1be08`), and the P2-TRUST-H1/P2-ANOM-H1/E1
-shared-root-cause documentation (`d28de0b`, no new decision created) —
-**hardware-free P2 has no remaining mandatory software implementation** as
-a result (see `P2_RESUME.md` §10 for the full handoff). A P3
-implementation-readiness analysis was also performed (conversation-only,
-nothing committed, **P3 work has NOT started**) — see `P2_RESUME.md` §10
-and `TODO.md`'s P3 section. See `DECISIONS.md` D013/D014/D015 and
-`P2_RESUME.md` §1a/§3a/§7a/§9/§10 for full detail; this file gives the
-short version. P0/P1 sections below are unchanged and still accurate as of
-2026-08-10.)
+**Last updated:** 2026-08-31, end of session — **`8cc5564` is the clean
+baseline** (`main`/`origin/main` identical, working tree clean). This
+session: P3 scoping closed U03/U04 (`DECISIONS.md` D016/D017), the
+divergence/substitution behavioral design (D018), and the
+uncertainty-estimation method (D019) — all documentation-only — followed by
+a read-only U05 completion/readiness analysis and an
+implementation-readiness-to-execution plan. That plan was then implemented
+as **the smallest hardware-free P3 slice D016–D019 authorize**: a
+Protocol-only digital-twin seam, `DivergenceScorer`, `ElapsedTime
+UncertaintyProxy`, and `SelfHealOrchestrator`, wired to the existing
+`RelayController.safe_off()` Safe Pump-Stop interface — reviewed, fixed per
+review, committed, and pushed as **`8cc5564`** (see the new P3 section
+below for full detail). `divergence_threshold`, `uncertainty_cap`, and the
+elapsed-time→uncertainty scaling formula remain required parameters/
+injectable seams — **no values chosen, U05 unchanged**. **Hardware-free P2
+still has no remaining mandatory software implementation** (unchanged from
+the prior session — see `P2_RESUME.md` §10 for that handoff). See
+`DECISIONS.md` D013–D019 and `P2_RESUME.md` §1a/§3a/§7a/§9/§10 for full
+detail; this file gives the short version. P0/P1 sections below are
+unchanged and still accurate as of 2026-08-10.)
 
 ---
 
 ## Snapshot
-- **Current phase:** P2 — Anomaly / Trust / Attribution (hardware-free FOUNDATIONS complete, incl. c/k/h + `ChannelFlagPolicy` + a minimal `PhysicsRule`; formal P2 acceptance suite now exists and has partially passed — see below). P0 + P1 hardware-free paths complete + verified.
-- **Current milestone:** D013 (`DECISIONS.md`, committed at `1c784e5`) — `ChannelFlagPolicy` redesigned ("Candidate B": per-channel own-baseline two-sided test) and a minimal provisional `PhysicsRule` (`TrendSignPhysicsRule`, reusing D010's `k` heuristic) implemented to unblock `AttributionEngine`. Since then (2026-08-29), the one remaining hardware-free P2 acceptance gap was closed: a new `AdaptiveStealthFDI` injection type + its P2-ANOM-S1 scenario, **committed and pushed as `b82f935`** (verified 2026-08-30 — `main`/`origin/main` identical at `b82f935`). The formal P2 acceptance suite (`edge/tests/test_p2_acceptance.py`) now attempts 11/14 Doc06 scenarios: **7/11 PASS** (full matrix: `P2_RESUME.md` §1a). The broader-`PhysicsRule` scoping decision was closed and recorded as **D014** (2026-08-30, documentation-only — no new code): no new channel coverage added; `current`↔`temperature` deferred as the sole future candidate, gated on real bench data. Most recently, the P2-TRUST-H2 root cause was re-analyzed and recorded as **D015** (2026-08-30, documentation-only): the gap is a joint D009/D010 structural limitation, not primarily GAMMA — both decisions left unchanged, H2 remains FAIL.
+- **Current phase:** P2 — Anomaly / Trust / Attribution (hardware-free FOUNDATIONS complete, incl. c/k/h + `ChannelFlagPolicy` + a minimal `PhysicsRule`; formal P2 acceptance suite now exists and has partially passed — see below). P0 + P1 hardware-free paths complete + verified. P3 — hardware-free self-healing **plumbing slice added** (digital-twin seam, divergence scorer, uncertainty proxy, self-heal orchestrator implementing D016–D019; numeric values, scaling formula, a real twin, prognosis, and RL all still open — see below).
+- **Current milestone:** `8cc5564` (`DECISIONS.md` D016–D019 implemented as the smallest authorized hardware-free P3 slice, 2026-08-31 — see the new P3 section below for full detail). Previous P2 milestone, still accurate: D013 (`DECISIONS.md`, committed at `1c784e5`) — `ChannelFlagPolicy` redesigned ("Candidate B": per-channel own-baseline two-sided test) and a minimal provisional `PhysicsRule` (`TrendSignPhysicsRule`, reusing D010's `k` heuristic) implemented to unblock `AttributionEngine`. Since then (2026-08-29), the one remaining hardware-free P2 acceptance gap was closed: a new `AdaptiveStealthFDI` injection type + its P2-ANOM-S1 scenario, **committed and pushed as `b82f935`** (verified 2026-08-30 — `main`/`origin/main` identical at `b82f935`). The formal P2 acceptance suite (`edge/tests/test_p2_acceptance.py`) now attempts 11/14 Doc06 scenarios: **7/11 PASS** (full matrix: `P2_RESUME.md` §1a). The broader-`PhysicsRule` scoping decision was closed and recorded as **D014** (2026-08-30, documentation-only — no new code): no new channel coverage added; `current`↔`temperature` deferred as the sole future candidate, gated on real bench data. The P2-TRUST-H2 root cause was re-analyzed and recorded as **D015** (2026-08-30, documentation-only): the gap is a joint D009/D010 structural limitation, not primarily GAMMA — both decisions left unchanged, H2 remains FAIL.
 - **Overall completion:**
   - **P0 hardware-free: VERIFIED** — offline four-service stack (simulator→Mosquitto→backend→WebSocket→frontend) + E2E latency probe (p95 3–5 ms).
   - **P1 hardware-free: COMPLETE** — C1 driver abstraction, C2 sampler/ring buffer, C3 MQTT buffered-resume/LWT, C2→C3 runtime, C4 relay/watchdog. All unit + real-broker-integration verified.
   - **P2 hardware-free FOUNDATIONS: COMPLETE** — preprocess/windowing, injection framework (now 8 injections incl. `AdaptiveStealthFDI`), Beta trust core + engine, c/k/h signal providers, `ChannelFlagPolicy` (Candidate B, D013), a minimal provisional `PhysicsRule` (D013), attribution engine, pipeline orchestrator, multivariate IF detector.
   - **P2 SWaT DIAGNOSTICS: DIAGNOSTICALLY COMPLETE** (probes, not acceptance) — full campaign (normalization study, threshold sweep, root-cause screen, targeted diagnostics, IF hyperparameter grid) converged on **D012 signal coverage as the dominant demonstrated limitation** of the SWaT proxy validation. Normalization decision RESOLVED (per-window min-max confirmed, not changed). No further SWaT work planned unless explicitly requested — see `P2_RESUME.md` §3a.
   - **P2 FORMAL ACCEPTANCE: PARTIALLY done.** 7/11 attempted Doc06 scenarios PASS (D013 + the 2026-08-29 P2-ANOM-S1 addition); 4 FAIL with precisely diagnosed root causes; O3 structurally unreachable with the current minimal `PhysicsRule`. Full matrix + mandatory-blocker-vs-validation-limitation breakdown: `P2_RESUME.md` §1a/§7a.
+  - **P3 hardware-free: PARTIAL PLUMBING COMPLETE** (2026-08-31, `8cc5564`) — digital-twin `TwinReconstructor` Protocol seam (no production implementation, none authorized by D016), `DivergenceScorer` (D018 pt.1's fit-time z-score form), `ElapsedTimeUncertaintyProxy` (D019's method), `SelfHealOrchestrator` wiring these to the existing `RelayController.safe_off()`. `divergence_threshold`, `uncertainty_cap`, and the scaling formula remain required parameters/injectable seams — no values chosen (U05 unchanged). Prognosis/LSTM (blocked, D017), RL/DQN (U06), a real digital-twin (no architecture authorized, D016), and P2→P3 cycle wiring (which channels get passed to the orchestrator each cycle) are all NOT started.
   - **BLOCKED / PENDING (need Pi/rig — not faked):** physical sensor/interface reads, **INA219 pump-current**, **on-Pi LSTM+IF <500 ms** timing, **physical relay safe-stop**, and **physical sensor→DOM / under-load latency**. Neither P0 nor P1 is *fully* done until these are addressed. Real P2 accuracy validation (O2/O3/O4 on real sensors) is also gated here.
 
 ## Hardware-free E2E latency — VERIFIED (2026-08-10)
@@ -172,6 +179,63 @@ See `DECISIONS.md` D015 and `P2_RESUME.md` §1a/§6/§7/§7a for full detail. Su
 - **P2-TRUST-H2 remains FAIL. O4/AC2 is NOT claimed satisfied.** No code
   or test was changed — documentation-only.
 
+### P3 — hardware-free self-healing plumbing (2026-08-31, committed + pushed `8cc5564`)
+Implements the smallest hardware-free slice `DECISIONS.md` D016–D019
+authorize: digital twin -> elapsed-time uncertainty proxy -> substitution
+-> z-score divergence backstop -> existing Safe Pump-Stop interface. No new
+decision was created by this work. Summary:
+- `edge/models/twin.py` — `TwinReconstructor` Protocol (digital-twin
+  reconstruction seam, D016). **Protocol-only, no production
+  implementation** — D016 specifies no architecture/hyperparameters and
+  none was authorized for this slice. Docstring explicitly warns future
+  implementations not to read `window.features[missing_channel]` (would
+  collapse the divergence backstop to near-zero).
+- `edge/pipeline/divergence.py` — `DivergenceScorer`: fit-time z-score of
+  the twin-vs-isolated-sensor residual (D018 pt.1's approved form).
+  `divergence_threshold` is a REQUIRED caller parameter — NOT chosen, still
+  data-gated (U05).
+- `edge/pipeline/uncertainty.py` — `ElapsedTimeUncertaintyProxy`: D019's
+  deterministic elapsed-substitution-time method. The elapsed→uncertainty
+  scaling formula is a required, never-defaulted injected seam — NOT
+  chosen (D019, still open; no functional form is constrained by any doc).
+- `edge/pipeline/self_heal.py` — `SelfHealOrchestrator`: wires the above to
+  D018's behavioral rules (recovery at reused `TRUSTED_MIN`; the existing
+  Doc05-documented `substitution_max_seconds=60` default reused as a single
+  named, overridable constant — not duplicated/hardcoded elsewhere; cycle
+  sequencing after P2) and to the existing `RelayController.safe_off()`
+  Safe Pump-Stop interface. `uncertainty_cap` is a REQUIRED caller
+  parameter — NOT chosen (U05, still open; noted in the prior scoping
+  analysis as policy-decidable rather than data-gated, but not decided
+  here). The three signals (divergence, elapsed time, uncertainty) are
+  kept independent by construction — none of the three comparisons gates
+  another's computation.
+- Implementation went through a dedicated plan → build → strict code
+  review → pre-commit fix pass: the review found no specification
+  violation and no active bug, and flagged two design concerns since
+  addressed (the twin-masking docstring warning above, and missing
+  `__init__.py` in the two new packages) plus test-coverage gaps (exact
+  threshold/cap equality, simultaneous divergence+expiry, repeated
+  escalation) closed with 4 additional tests.
+- 38 tests total (`edge/tests/test_divergence.py`,
+  `test_uncertainty.py`, `test_self_heal.py`), all fixture values
+  explicitly labelled `*_FIXTURE` and never presented as specification.
+- **Full `edge/` suite (2026-08-31): 343 passed, 4 failed (the same 4
+  pre-existing P2 failures — P2-ANOM-H1/E1, P2-TRUST-H1/H2, unrelated to
+  this change), 2 skipped** — zero regressions.
+- **No `DecisionMessage`, simulator, or P2-internal file modified.** No new
+  `D0XX` decision created — this is implementation of already-approved
+  D016–D019, not a new specification.
+- **Committed and pushed** — `feat: add hardware-free P3 self-healing
+  plumbing` (`8cc5564`); `main`/`origin/main` identical, verified
+  (`git rev-list --left-right --count` = `0 0`).
+- **Still open / NOT done by this slice:** `divergence_threshold` and
+  `uncertainty_cap` numeric values (U05), the elapsed-time→uncertainty
+  scaling formula (D019), any production digital-twin (D016 authorizes no
+  architecture), prognosis/LSTM (D017, blocked on a degradation-data
+  source), RL/DQN (U06), and the P2→P3 cycle-wiring glue (which channels
+  actually get passed to `SelfHealOrchestrator` each cycle is not yet
+  built).
+
 ## P2 diagnostics (2026-08-10) — behaviour probes, NOT acceptance (commit d17942f)
 Diagnostic-only tooling under `edge/eval/` (not on pytest `testpaths`, not in the production pipeline; scikit-learn-gated tests). All magnitudes + flag threshold are EVALUATION FIXTURES, not project specs. **No P2 acceptance criterion is claimed passed.**
 - **IF behaviour probe** (`edge/eval/if_eval.py`) — real `IsolationForestDetector` on the simulator + the 7 §12.4 injections. Finding: **clean-vs-clean false-positive rate ≈ 21.6%** at the eval-fixture threshold 0.95 → per-window min-max on the simulator's structureless independent-noise windows does not calibrate tightly; "detected" flags sit on that FP floor and are not reliable separation.
@@ -193,6 +257,12 @@ Diagnostic-only tooling under `edge/eval/` (not on pytest `testpaths`, not in th
   bench hardware — plus the two documented validation limitations still
   genuinely open: `c`'s rank-based noise (P2-TRUST-H1) and IF/normalization
   (P2-ANOM-H1/E1) — see `P2_RESUME.md` §7a.
+- P3: U03/U04/D018/D019 scoping, the U05 readiness analysis, the
+  implementation plan, and the hardware-free plumbing slice itself are all
+  complete — committed and pushed as `8cc5564` (see the P3 section above).
+  Remaining P3 work is genuinely open, not merely undocumented: the two
+  numeric values (U05), the scaling formula (D019), a real digital-twin
+  (D016), prognosis (D017), RL/DQN (U06), and P2→P3 cycle wiring.
 
 ## Next
 **Not assumed to be coding — read `P2_RESUME.md` §10/§11/§12/§13 first.**
@@ -210,19 +280,29 @@ expiry→Safe-Stop, edge-internal uncertainty with no `DecisionMessage`
 change, P2-then-P3 sequencing), and **the uncertainty-estimation method is
 resolved provisionally** (`DECISIONS.md` D019 — deterministic
 elapsed-substitution-time proxy, single-signal, safety/confidence proxy
-NOT a calibrated error estimate), but **no P3 code exists**. **U05 is now
-narrowed to just its two numeric values** (still data-gated); the
-time→uncertainty scaling formula and U06 remain open. Prognosis training is
-still blocked on an unspecified degradation-data source. The next session
-should explicitly ask the user whether to: (a) continue P3 scoping (the
-numeric values, the scaling formula, U06, or scoping the digital-twin's
-hardware-free training/testing approach), (b) resolve one of the standing
-P2 decision-required items (λ=0.7 sign-off/U01, `c`'s redefinition,
-FR-A4's payload/U14), or (c) something else entirely. Do not
-default to P3 implementation, and do not create a new decision (D020+)
-without the same propose-then-approve sequence used for D014–D019. P2 work
-otherwise remains blocked on real bench hardware (also the only path that
-could unblock D014's deferred current↔temperature candidate).
+NOT a calibrated error estimate), and, as of 2026-08-31, **the smallest
+hardware-free P3 slice this design authorizes has been implemented,
+reviewed, and is committed/pushed** (`8cc5564`): a Protocol-only
+digital-twin seam, `DivergenceScorer`, `ElapsedTimeUncertaintyProxy`, and
+`SelfHealOrchestrator`, wired to the existing `RelayController.safe_off()`
+Safe Pump-Stop interface — see the P3 section above for full detail. **U05
+is still narrowed to just its two numeric values** (`divergence_threshold`
+data-gated; `uncertainty_cap` noted as policy-decidable but still
+unchosen); the time→uncertainty scaling formula and U06 remain open; no
+production digital-twin exists (D016 authorizes no architecture).
+Prognosis training is still blocked on an unspecified degradation-data
+source. The next session should explicitly ask the user whether to: (a)
+choose the `uncertainty_cap` value (flagged as policy-decidable, not
+data-gated) or the scaling formula, (b) build the P2→P3 cycle-wiring glue
+(which channels get passed to `SelfHealOrchestrator` each cycle), (c)
+continue other P3 scoping (U06, or the digital-twin's hardware-free
+training/testing approach), (d) resolve one of the standing P2
+decision-required items (λ=0.7 sign-off/U01, `c`'s redefinition, FR-A4's
+payload/U14), or (e) something else entirely. Do not default to further P3
+implementation, and do not create a new decision (D020+) without the same
+propose-then-approve sequence used for D014–D019. P2 work otherwise
+remains blocked on real bench hardware (also the only path that could
+unblock D014's deferred current↔temperature candidate).
 
 ## Environment gates (honest — sandbox limits, not code failures)
 - **Docker image builds** (backend `pip`, frontend `npm`) fail cert-verify inside the build (gateway MITMs TLS; base images lack its CA). So the full four-service `up` can't be built here. Dockerfiles are standard/correct — no insecure workarounds added; they build on CI / a normal machine (frontend build already green in CI).
@@ -251,11 +331,11 @@ Blocking questions are tracked in the roadmap discussion; the ones that gate *co
 - P2: IF hyperparameters + flag threshold UNTUNED — dataset-gated; SWaT diagnostics (2026-08-25) now show hyperparameter changes have limited upside even where real signal exists (`P2_RESUME.md` §3a).
 - P2/P7: SWaT.A1 access GRANTED, harness built, full diagnostic campaign run and **diagnostically complete** — gates all P2 detection/attribution/trust real-data ACCEPTANCE and O3/O10 metrics regardless, since SWaT/WADI structurally cannot satisfy O3 or the literal six-channel semantics (D011). Real accuracy validation now needs bench hardware, not more dataset work.
 - P2: P2-ANOM-S1 (adaptive/stealth injection type) — **RESOLVED (2026-08-29)**: `AdaptiveStealthFDI` implemented (`edge/injection/injections.py`) and its acceptance scenario PASSES; verified at the committed fixture seed/parameters only, not multi-seed stress-tested.
-- P3: LSTM — one shared model or two? **RESOLVED (2026-08-31, `DECISIONS.md` D016)**: two separate models (prognosis; digital-twin), twin is a single channel-agnostic model, not per-channel. No architecture/hyperparameter detail specified. No P3 code created.
+- P3: LSTM — one shared model or two? **RESOLVED (2026-08-31, `DECISIONS.md` D016)**: two separate models (prognosis; digital-twin), twin is a single channel-agnostic model, not per-channel. No architecture/hyperparameter detail specified. **`TwinReconstructor` Protocol seam now exists** (`edge/models/twin.py`, `8cc5564`, 2026-08-31) — Protocol-only, no production implementation (none authorized by this decision).
 - P3: digital-twin training-data source. **RESOLVED for initial dev only (2026-08-31, `DECISIONS.md` D017)**: synthetic (D005/D008 simulator + P2 injection framework) approved for hardware-free digital-twin development/testing — explicitly NOT claimed sufficient/validated for real-world reconstruction accuracy. Prognosis training remains blocked: no degradation-trajectory data source exists or is specified.
-- P3: divergence/substitution behavioral design. **RESOLVED (2026-08-31, `DECISIONS.md` D018)**: divergence measured against the isolated sensor's own continuing raw reading — an explicit backstop, NOT proof, NOT an independent reference (PRD's own R3 circularity risk carried forward, not resolved); fit-time z-score magnitude form (not min-max, not rank/CDF); recovery reuses `TRUSTED_MIN=0.7` (no new hysteresis); 60s expiry without recovery escalates to Safe Pump-Stop; uncertainty stays edge-internal, frozen `DecisionMessage` **not modified**, existing `alerts` table used instead; P2 runs before P3 each cycle. No P3 code created.
-- P3: uncertainty-estimation method (FR-H2). **RESOLVED provisionally (2026-08-31, `DECISIONS.md` D019)**: deterministic elapsed-substitution-time proxy — starts at minimum when substitution begins, non-decreasing during that episode, bounded relative to the existing `substitution_max_seconds=60` (D018, not a new time constant), resets per episode. An explicit safety/confidence proxy, NOT a statistically calibrated estimate of reconstruction error. Single-signal only — divergence and reconstruction-stability explicitly NOT added as inputs. Edge-internal, no `DecisionMessage` change. Also approved: P3-HEAL-E1 wording clarified to "Uncertainty flagged high (nearing cap); alert raised." No P3 code created.
-- P3: `divergence_threshold` + substitution uncertainty-cap **numeric values**, and the time→uncertainty **scaling formula** — still UNDECIDED (data-gated/policy choices; U05 narrowed by D018/D019 to just the two numeric values, unaffected by D019's method choice).
+- P3: divergence/substitution behavioral design. **RESOLVED (2026-08-31, `DECISIONS.md` D018)**: divergence measured against the isolated sensor's own continuing raw reading — an explicit backstop, NOT proof, NOT an independent reference (PRD's own R3 circularity risk carried forward, not resolved); fit-time z-score magnitude form (not min-max, not rank/CDF); recovery reuses `TRUSTED_MIN=0.7` (no new hysteresis); 60s expiry without recovery escalates to Safe Pump-Stop; uncertainty stays edge-internal, frozen `DecisionMessage` **not modified**, existing `alerts` table used instead; P2 runs before P3 each cycle. **Hardware-free plumbing implementing this design now exists** (`edge/pipeline/{divergence,self_heal}.py`, committed/pushed `8cc5564`, 2026-08-31, 38 tests) — `divergence_threshold` remains a REQUIRED parameter, no value chosen.
+- P3: uncertainty-estimation method (FR-H2). **RESOLVED provisionally (2026-08-31, `DECISIONS.md` D019)**: deterministic elapsed-substitution-time proxy — starts at minimum when substitution begins, non-decreasing during that episode, bounded relative to the existing `substitution_max_seconds=60` (D018, not a new time constant), resets per episode. An explicit safety/confidence proxy, NOT a statistically calibrated estimate of reconstruction error. Single-signal only — divergence and reconstruction-stability explicitly NOT added as inputs. Edge-internal, no `DecisionMessage` change. Also approved: P3-HEAL-E1 wording clarified to "Uncertainty flagged high (nearing cap); alert raised." **Hardware-free plumbing implementing this method now exists** (`edge/pipeline/uncertainty.py`, committed/pushed `8cc5564`, 2026-08-31) — the scaling formula remains a REQUIRED, never-defaulted injected argument, no formula chosen.
+- P3: `divergence_threshold` + substitution uncertainty-cap **numeric values**, and the time→uncertainty **scaling formula** — still UNDECIDED (data-gated/policy choices; U05 narrowed by D018/D019 to just the two numeric values, unaffected by D019's method choice). Both remain required parameters/injectable seams in the now-implemented plumbing (`edge/pipeline/self_heal.py`, `8cc5564`) — implementation does not require or imply either value.
 - P3: RL reward shaping + acceptable false-isolation rate UNDECIDED.
 None of these block P0.
 

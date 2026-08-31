@@ -154,13 +154,29 @@ the committed fixture seed/parameters only, not multi-seed stress-tested.
 > spec. The rule-based fallback is only partially independent (needs
 > LSTM's `health`/`failure_eta`). Reusable now: the frozen
 > `DecisionMessage`/`RLAction` contract and `RelayController.safe_off()`
-> (P1). **Do not start P3 without explicit direction.**
+> (P1). **Hardware-free plumbing implemented 2026-08-31 (`8cc5564`,
+> committed and pushed):** `TwinReconstructor` Protocol seam
+> (`edge/models/twin.py`, Protocol-only — no production implementation,
+> none authorized by D016), `DivergenceScorer` (`edge/pipeline/
+> divergence.py`, D018 pt.1's fit-time z-score form), `ElapsedTime
+> UncertaintyProxy` (`edge/pipeline/uncertainty.py`, D019's method —
+> scaling formula still a required, never-defaulted injected seam), and
+> `SelfHealOrchestrator` (`edge/pipeline/self_heal.py`, D018 pts.2/3/5)
+> wiring these to the existing `RelayController.safe_off()`. `divergence_
+> threshold`, `uncertainty_cap`, and the scaling formula remain required
+> parameters/injectable seams — no values chosen, U05 unchanged. 38 new
+> tests pass hardware-free; full `edge/` suite unaffected (same 4
+> pre-existing P2 failures, zero new regressions). No `DecisionMessage`/
+> simulator/P2 change; no new decision recorded. **Further P3 work
+> (numeric values, the scaling formula, a real digital-twin, prognosis,
+> RL, P2→P3 cycle wiring) still needs explicit direction — do not default
+> to it.**
 - [ ] LSTM health (Healthy/Warning/Critical) + failure-ETA on trust-weighted windows  *(architecture decided: D016; still blocked — no prognosis training-data source/degradation generator specified, D017)*
-- [ ] Digital-twin: channel-agnostic reconstruction + uncertainty estimate  *(architecture decided: D016; initial synthetic data source approved for hardware-free dev, D017; uncertainty method decided: D019 (elapsed-time proxy, provisional) — scaling formula + numeric cap still open)*
+- [ ] Digital-twin: channel-agnostic reconstruction + uncertainty estimate  *(architecture decided: D016; initial synthetic data source approved for hardware-free dev, D017; `TwinReconstructor` Protocol seam implemented 2026-08-31 (`edge/models/twin.py`, `8cc5564`) — no production reconstruction implementation, none authorized by D016; uncertainty estimate implemented + tested hardware-free (`ElapsedTimeUncertaintyProxy`, `edge/pipeline/uncertainty.py`, D019) — scaling formula still a required injected seam, no default; numeric uncertainty-cap still open, U05)*
 - [ ] DQN over state `[health, anomaly_flag, T1..T6, failure_eta]` + reward  *(blocked: U06)*
 - [ ] Deterministic rule-based RL fallback (fail-safe)
-- [ ] Self-heal: isolate/re-weight + bounded uncertainty-capped virtual substitution  *(behavioral design decided: D018 — z-score divergence form, TRUSTED_MIN recovery, edge-internal uncertainty; uncertainty method decided: D019 — elapsed-time proxy; still blocked: the two numeric values (U05) + scaling formula)*
-- [ ] Divergence detection → escalate to Safe Pump-Stop  *(semantics + form decided: D018 — twin-vs-isolated-sensor backstop, z-score magnitude; numeric `divergence_threshold` still data-gated)*
+- [x] Self-heal: isolate/re-weight + bounded uncertainty-capped virtual substitution  *(orchestration plumbing implemented + tested hardware-free 2026-08-31 — `SelfHealOrchestrator`, `edge/pipeline/self_heal.py`, `8cc5564`: recovery at reused `TRUSTED_MIN`, 60s expiry reused from the Doc05-documented default, wired to the existing `RelayController.safe_off()`; 38 tests incl. exact-boundary-equality, simultaneous-conditions, and repeated-escalation cases. `divergence_threshold`/`uncertainty_cap`/scaling formula remain REQUIRED parameters, no values chosen — U05 unchanged, data-gated. No production digital-twin exists (Protocol-only, D016); not validated on real hardware)*
+- [x] Divergence detection → escalate to Safe Pump-Stop  *(implemented + tested hardware-free 2026-08-31 — `DivergenceScorer`, `edge/pipeline/divergence.py`, `8cc5564`: fit-time z-score of the twin-vs-isolated-sensor residual (D018 pt.1), wired through `SelfHealOrchestrator` to the existing `RelayController.safe_off()`; numeric `divergence_threshold` remains a REQUIRED parameter, no value chosen — still data-gated, U05)*
 - [ ] Dry-run detection → autonomous Safe Pump-Stop
 - [ ] Gate: rule fallback engages if policy missing; divergence→safe-stop (60s-expiry-without-recovery also escalates, D018); dry-run stops before damage; self-heal <500ms
 
