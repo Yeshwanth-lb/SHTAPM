@@ -800,3 +800,50 @@ two numeric values after D018, and D019 doesn't touch either of them.
 **No P3 code exists in this repo.** The next actionable P3 step remains a
 decision (the scaling formula and the two numeric values — all still
 data-gated or policy choices not yet made; U06), not code.
+
+## 14. P3 hardware-free implementation (2026-08-31) — plumbing + LSTM twin built and integration-tested; P3 STILL not decision-complete
+
+Corrects §10–§13's repeated "P3 STILL not started" / "no P3 code exists"
+line: it has since been implemented, in three approved increments, each
+through a dedicated plan → build → strict review → fix pass. Full detail
+lives in `CURRENT_STATE.md`'s P3 sections (kept there, not duplicated
+here, to match this session's established split — decisions/scoping in
+this file, implementation narrative in `CURRENT_STATE.md`); this entry
+exists only so a fresh read of §10–§13 doesn't end on a stale claim.
+
+- **Self-healing plumbing** (`8cc5564`, pushed): `DivergenceScorer`
+  (D018 pt.1), `ElapsedTimeUncertaintyProxy` (D019), `SelfHealOrchestrator`
+  wired to the existing `RelayController.safe_off()`. `divergence_
+  threshold`/`uncertainty_cap`/the scaling formula all required
+  parameters, none chosen.
+- **P2→P3 cycle adapter + hardening** (`fe4042e`, `0cc4d31`, pushed):
+  `process_isolated_channels` takes `isolated_channels`/`raw_values` as
+  required, caller-supplied inputs — a read-only scoping pass first
+  established P2 exposes no isolation-state object anywhere, and that
+  isolation is architecturally an unbuilt RL-agent action (FR-RL2), so
+  the adapter deliberately does not derive it from trust/band.
+- **Hardware-free LSTM digital twin + integration tests** (`43e114d`,
+  `66f790e`, **committed, NOT yet pushed**): `LSTMTwinReconstructor` —
+  single-layer unidirectional LSTM → final hidden state → Linear →
+  scalar (`hidden_size` required, D016 specifies no hyperparameters),
+  satisfying the unmodified `TwinReconstructor` Protocol; a
+  diagnostic-only self-supervised training harness on the existing
+  simulator + `Preprocessor` only; two integration tests proving the real
+  twin flows through `SelfHealOrchestrator`/`process_isolated_channels`
+  end-to-end. **No meaningful reconstruction accuracy or real-world
+  validation is claimed** — confirmed the simulator's clean baseline has
+  no cross-channel/temporal structure beyond each channel's own fitted
+  mean, so no amount of further hardware-free training changes that.
+
+**Full P3 suite: 68 tests pass hardware-free.** No `DecisionMessage`, P2
+internals, trust, actuation, or simulator file was ever modified across
+any of this; no new `D0XX` decision was created.
+
+**Still true, unchanged by any of this implementation:** `divergence_
+threshold`, `uncertainty_cap`, and the elapsed-time→uncertainty scaling
+formula remain unchosen (U05/D019); prognosis stays blocked (D017); RL/DQN
+and its deterministic fallback remain unbuilt (U06) — which is also why
+nothing in this repo yet decides *which* channels are isolated for real.
+**P3 is implemented as hardware-free plumbing, not decision-complete or
+validated** — see `CURRENT_STATE.md`'s "Next" section for the current
+menu of next steps.

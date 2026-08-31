@@ -168,14 +168,39 @@ the committed fixture seed/parameters only, not multi-seed stress-tested.
 > tests pass hardware-free; full `edge/` suite unaffected (same 4
 > pre-existing P2 failures, zero new regressions). No `DecisionMessage`/
 > simulator/P2 change; no new decision recorded. **Further P3 work
-> (numeric values, the scaling formula, a real digital-twin, prognosis,
-> RL, P2→P3 cycle wiring) still needs explicit direction — do not default
-> to it.**
+> (numeric values, the scaling formula, real reconstruction-accuracy
+> validation, prognosis, RL) still needs explicit direction — do not
+> default to it.** **Since then (2026-08-31, committed + pushed through
+> `66f790e`):** the P2→P3 adapter (`edge/pipeline/cycle.py`,
+> `process_isolated_channels` — takes `isolated_channels`/`raw_values` as
+> REQUIRED, caller-supplied inputs, never derives isolation from
+> trust/band; validate-all-upfront so one bad channel can't side-effect a
+> valid one) was implemented, then hardened with multi-channel and
+> zero-side-effect tests. A concrete **LSTM digital-twin** was then
+> implemented (`edge/models/lstm_twin.py`, `LSTMTwinReconstructor`):
+> single-layer, unidirectional PyTorch LSTM → final hidden state → Linear
+> → scalar (approved architecture shape, D016 leaves `hidden_size`
+> unspecified — REQUIRED, no default), masked-channel input (never reads
+> the missing channel's own data) + one-hot indicator, satisfying the
+> existing `TwinReconstructor` Protocol unchanged. A diagnostic-only
+> self-supervised training harness (`edge/eval/twin_training.py`) trains
+> it on the existing simulator + `Preprocessor` only — **no meaningful
+> reconstruction accuracy is claimed or validated**; the simulator's clean
+> baseline has no cross-channel/temporal structure beyond each channel's
+> own fitted mean. Two integration tests then proved the real
+> `LSTMTwinReconstructor` (not a fixture stub) flows end-to-end through
+> `SelfHealOrchestrator`/`process_isolated_channels`, producing a
+> well-formed outcome. `divergence_threshold`, `uncertainty_cap`, and the
+> scaling formula are still not chosen — U05/D019 unchanged. Isolation
+> itself is still not decided anywhere in this repo (FR-RL2 makes it an
+> RL-agent action; the agent and its deterministic fallback, FR-RL4, are
+> unbuilt) — `process_isolated_channels` still needs a real
+> `isolated_channels` source. 68 P3 tests pass hardware-free.**
 - [ ] LSTM health (Healthy/Warning/Critical) + failure-ETA on trust-weighted windows  *(architecture decided: D016; still blocked — no prognosis training-data source/degradation generator specified, D017)*
-- [ ] Digital-twin: channel-agnostic reconstruction + uncertainty estimate  *(architecture decided: D016; initial synthetic data source approved for hardware-free dev, D017; `TwinReconstructor` Protocol seam implemented 2026-08-31 (`edge/models/twin.py`, `8cc5564`) — no production reconstruction implementation, none authorized by D016; uncertainty estimate implemented + tested hardware-free (`ElapsedTimeUncertaintyProxy`, `edge/pipeline/uncertainty.py`, D019) — scaling formula still a required injected seam, no default; numeric uncertainty-cap still open, U05)*
+- [x] Digital-twin: channel-agnostic reconstruction + uncertainty estimate  *(concrete LSTM reconstruction implemented + tested hardware-free 2026-08-31 — `LSTMTwinReconstructor`/`_LSTMTwinNet`, `edge/models/lstm_twin.py`, `43e114d`: single-layer unidirectional LSTM → final hidden state → Linear → scalar; `hidden_size` REQUIRED, no default; masked-channel input never reads the true value + one-hot indicator; satisfies the unmodified `TwinReconstructor` Protocol, integration-tested with `SelfHealOrchestrator` at `66f790e`. Diagnostic-only training harness at `edge/eval/twin_training.py` uses the existing simulator + Preprocessor only. **No meaningful reconstruction accuracy or real-world validation claimed** — the simulator's clean baseline has no cross-channel/temporal structure beyond each channel's own fitted mean. Uncertainty estimate implemented + tested hardware-free (`ElapsedTimeUncertaintyProxy`, `edge/pipeline/uncertainty.py`, D019) — scaling formula still a required injected seam, no default; numeric uncertainty-cap still open, U05)*
 - [ ] DQN over state `[health, anomaly_flag, T1..T6, failure_eta]` + reward  *(blocked: U06)*
 - [ ] Deterministic rule-based RL fallback (fail-safe)
-- [x] Self-heal: isolate/re-weight + bounded uncertainty-capped virtual substitution  *(orchestration plumbing implemented + tested hardware-free 2026-08-31 — `SelfHealOrchestrator`, `edge/pipeline/self_heal.py`, `8cc5564`: recovery at reused `TRUSTED_MIN`, 60s expiry reused from the Doc05-documented default, wired to the existing `RelayController.safe_off()`; 38 tests incl. exact-boundary-equality, simultaneous-conditions, and repeated-escalation cases. `divergence_threshold`/`uncertainty_cap`/scaling formula remain REQUIRED parameters, no values chosen — U05 unchanged, data-gated. No production digital-twin exists (Protocol-only, D016); not validated on real hardware)*
+- [x] Self-heal: isolate/re-weight + bounded uncertainty-capped virtual substitution  *(orchestration plumbing implemented + tested hardware-free 2026-08-31 — `SelfHealOrchestrator`, `edge/pipeline/self_heal.py`, `8cc5564`: recovery at reused `TRUSTED_MIN`, 60s expiry reused from the Doc05-documented default, wired to the existing `RelayController.safe_off()`. P2→P3 adapter (`process_isolated_channels`, `edge/pipeline/cycle.py`, `fe4042e`/`0cc4d31`) wires an existing P2 `WindowOutcome` through, taking `isolated_channels`/`raw_values` as REQUIRED caller-supplied inputs (never derived from trust/band), validate-all-upfront. Now integration-tested with the real `LSTMTwinReconstructor` (`66f790e`). 68 tests total incl. exact-boundary-equality, simultaneous-conditions, repeated-escalation, multi-channel, and zero-side-effect cases. `divergence_threshold`/`uncertainty_cap`/scaling formula remain REQUIRED parameters, no values chosen — U05 unchanged, data-gated. Nothing in this repo yet decides *which* channels are isolated (FR-RL2/FR-RL4 unbuilt); not validated on real hardware)*
 - [x] Divergence detection → escalate to Safe Pump-Stop  *(implemented + tested hardware-free 2026-08-31 — `DivergenceScorer`, `edge/pipeline/divergence.py`, `8cc5564`: fit-time z-score of the twin-vs-isolated-sensor residual (D018 pt.1), wired through `SelfHealOrchestrator` to the existing `RelayController.safe_off()`; numeric `divergence_threshold` remains a REQUIRED parameter, no value chosen — still data-gated, U05)*
 - [ ] Dry-run detection → autonomous Safe Pump-Stop
 - [ ] Gate: rule fallback engages if policy missing; divergence→safe-stop (60s-expiry-without-recovery also escalates, D018); dry-run stops before damage; self-heal <500ms
