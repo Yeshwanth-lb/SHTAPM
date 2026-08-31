@@ -498,6 +498,76 @@
 - **Status:** documentation-only; no implementation performed or
   authorized by this entry.
 
+### D016 — U03: prognosis and digital-twin implemented as separate models; twin is channel-agnostic
+- **Date:** 2026-08-31
+- **Decision:** Prognosis (FR-M1–3: health state + failure-ETA) and the
+  digital-twin (FR-H2: isolated-channel reconstruction + uncertainty) are
+  implemented as **two separate models**, not one shared multi-task LSTM.
+  The digital-twin is a single **channel-agnostic** model — it takes the
+  available channels plus an indicator of which channel is missing, and
+  reconstructs that one channel — rather than one model per channel. TRD
+  §02.6's singular `lstm.pt` naming is treated as illustrative
+  folder-structure prose, not a binding technical requirement; storage may
+  use e.g. `lstm_twin.pt` + `lstm_prognosis.pt` (exact names TBD at
+  implementation time).
+- **Reason:** The digital-twin can be developed and hardware-free-tested
+  now via self-supervised masking on the existing D005/D008 simulator
+  streams; prognosis cannot, since no degradation-trajectory training data
+  exists yet (D017/U04). Separate models decouple the two tasks so the
+  twin's development is not gated on prognosis's unresolved data question,
+  and avoid an untested multi-task negative-transfer risk with no data
+  currently available to evaluate it either way. A channel-agnostic twin
+  avoids a 6× architecture/storage/training surface with no PRD/TRD
+  requirement forcing per-channel models.
+- **Affects:** future `edge/pipeline/prognosis(lstm)`,
+  `edge/pipeline/self_heal`, `edge/models/` (none of these exist yet — no
+  code created by this decision).
+- **Does NOT resolve:** U04 (training-data source — see D017), U05
+  (`divergence_threshold` + substitution uncertainty-cap values), U06 (RL
+  reward shaping), the digital-twin's uncertainty-estimation method
+  (FR-H2), or any model architecture detail — no layer sizes,
+  hyperparameters, or loss functions are specified or implied by this
+  decision.
+- **Does NOT change:** D009–D015, or any existing P2 code/tests.
+- **Status:** documentation-only; no implementation performed or
+  authorized by this entry. No P3 code exists in this repo.
+
+### D017 — U04: synthetic simulator data approved for initial P3 development; not a real-world validation substitute
+- **Date:** 2026-08-31
+- **Decision:** Synthetic (simulator-generated) data is approved as the
+  data source for **initial, hardware-free P3 development and testing
+  only** — no Pi/rig is available. This is explicitly scoped to
+  plumbing/logic development and testing; it must **never** be described
+  as validating real-world prognosis accuracy or real-world digital-twin
+  reconstruction accuracy. The existing D005/D008 simulator (`simulator/`)
+  plus P2's injection framework (`edge/injection/`) provide the **initial
+  synthetic data source** for hardware-free digital-twin development (e.g.,
+  self-supervised mask-and-reconstruct training/testing). This is a
+  statement of availability, not a claim that this data is proven
+  sufficient or adequate for useful/real-world reconstruction accuracy —
+  that adequacy remains **unvalidated and untested**. No new
+  synthetic-data-generation capability is created or specified by this
+  decision. **Prognosis (FR-M1–3) training remains blocked**: no synthetic
+  degradation-trajectory generator exists, and this decision does not
+  create, specify, or approve one — that remains a separate, later scoping
+  step (or real bench data becomes available first).
+- **Reason:** Mirrors the discipline already established for P2
+  ("foundation/plumbing complete ≠ validation complete", `P2_RESUME.md`)
+  and D005's existing precedent for simulator-based non-physical work,
+  without extending that precedent to license real-accuracy claims neither
+  D005 nor the simulator's own design were ever meant to support.
+- **Affects:** future hardware-free digital-twin development/testing only;
+  explicitly does not affect prognosis, which stays blocked pending its own
+  data decision.
+- **Does NOT resolve:** whether bench data is ever required before any P3
+  acceptance claim; the design or existence of any degradation-trajectory
+  generator; U03 (see D016), U05, U06, or the digital-twin's
+  uncertainty-estimation method.
+- **Does NOT change:** D005, D008, or any other existing decision; no code,
+  tests, or the existing simulator are modified by this entry.
+- **Status:** documentation-only; no implementation performed or
+  authorized by this entry. No P3 code exists in this repo.
+
 ---
 
 ## UNDECIDED (must not be silently resolved — see CURRENT_STATE blockers)
@@ -512,8 +582,6 @@
   real data; what tolerance beyond sign comparison) — requires bench data or a dataset (U07);
   no rule exists for the other four channels; even for current/vibration, D013's own
   multi-seed testing found only ~50–60% attribution reliability — not a validated capability.
-- U03 — LSTM: one shared model or two (prognosis vs digital-twin) (P3); edge stores single `lstm.pt`.
-- U04 — Digital-twin training-data source: bench-collected vs synthetic (P3).
 - U05 — `divergence_threshold` + substitution uncertainty-cap values (P3).
 - U06 — RL reward shaping + acceptable false-isolation rate (P3).
 - U07 — SWaT/WADI dataset access vs TEP+bench substitute (P2/P7). **Partial:**

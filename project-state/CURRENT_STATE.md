@@ -195,21 +195,26 @@ Diagnostic-only tooling under `edge/eval/` (not on pytest `testpaths`, not in th
   (P2-ANOM-H1/E1) — see `P2_RESUME.md` §7a.
 
 ## Next
-**Not assumed to be coding — read `P2_RESUME.md` §10 first.** Hardware-free
-P2 has no remaining mandatory software implementation (its 4 documented
-FAILs are all hardware/data-blocked or decision-required limitations, not
-missing code — none are fixable by more coding without either real bench
-data or a new specification decision touching `c`, `k`'s non-paired
-default, or GAMMA). The next session should explicitly ask the user
-whether to: (a) formally enter **P3** (start by resolving U03/U04 — see
-`TODO.md`'s P3 section and `P2_RESUME.md` §10; **P3 has NOT been started**,
-only analyzed), (b) resolve one of the standing P2 decision-required items
-(λ=0.7 sign-off/U01, `c`'s redefinition, FR-A4's payload/U14), or (c)
-something else entirely. Do not default to P3 implementation, and do not
-create a new decision (D016+) without the same propose-then-approve
-sequence used for D014/D015. P2 work otherwise remains blocked on real
-bench hardware (also the only path that could unblock D014's deferred
-current↔temperature candidate).
+**Not assumed to be coding — read `P2_RESUME.md` §10/§11 first.**
+Hardware-free P2 has no remaining mandatory software implementation (its 4
+documented FAILs are all hardware/data-blocked or decision-required
+limitations, not missing code — none are fixable by more coding without
+either real bench data or a new specification decision touching `c`, `k`'s
+non-paired default, or GAMMA). For P3, **U03/U04 are now resolved**
+(`DECISIONS.md` D016/D017, 2026-08-31 — separate channel-agnostic
+digital-twin model; synthetic data approved for initial hardware-free twin
+development only, not validation), but **no P3 code exists** — U05, U06,
+and the digital-twin's uncertainty-estimation method remain open, and
+prognosis training is still blocked on an unspecified degradation-data
+source. The next session should explicitly ask the user whether to: (a)
+continue P3 scoping (U05, U06, the uncertainty method, or scoping the
+digital-twin's hardware-free training/testing approach), (b) resolve one
+of the standing P2 decision-required items (λ=0.7 sign-off/U01, `c`'s
+redefinition, FR-A4's payload/U14), or (c) something else entirely. Do not
+default to P3 implementation, and do not create a new decision (D018+)
+without the same propose-then-approve sequence used for D014–D017. P2 work
+otherwise remains blocked on real bench hardware (also the only path that
+could unblock D014's deferred current↔temperature candidate).
 
 ## Environment gates (honest — sandbox limits, not code failures)
 - **Docker image builds** (backend `pip`, frontend `npm`) fail cert-verify inside the build (gateway MITMs TLS; base images lack its CA). So the full four-service `up` can't be built here. Dockerfiles are standard/correct — no insecure workarounds added; they build on CI / a normal machine (frontend build already green in CI).
@@ -238,9 +243,9 @@ Blocking questions are tracked in the roadmap discussion; the ones that gate *co
 - P2: IF hyperparameters + flag threshold UNTUNED — dataset-gated; SWaT diagnostics (2026-08-25) now show hyperparameter changes have limited upside even where real signal exists (`P2_RESUME.md` §3a).
 - P2/P7: SWaT.A1 access GRANTED, harness built, full diagnostic campaign run and **diagnostically complete** — gates all P2 detection/attribution/trust real-data ACCEPTANCE and O3/O10 metrics regardless, since SWaT/WADI structurally cannot satisfy O3 or the literal six-channel semantics (D011). Real accuracy validation now needs bench hardware, not more dataset work.
 - P2: P2-ANOM-S1 (adaptive/stealth injection type) — **RESOLVED (2026-08-29)**: `AdaptiveStealthFDI` implemented (`edge/injection/injections.py`) and its acceptance scenario PASSES; verified at the committed fixture seed/parameters only, not multi-seed stress-tested.
-- P3: LSTM — one shared model or two (prognosis vs digital-twin)? UNDECIDED (edge stores single `lstm.pt`).
-- P3: digital-twin training-data source UNDECIDED.
-- P3: `divergence_threshold` + substitution uncertainty-cap values UNDECIDED (schema column, no default).
+- P3: LSTM — one shared model or two? **RESOLVED (2026-08-31, `DECISIONS.md` D016)**: two separate models (prognosis; digital-twin), twin is a single channel-agnostic model, not per-channel. No architecture/hyperparameter detail specified. No P3 code created.
+- P3: digital-twin training-data source. **RESOLVED for initial dev only (2026-08-31, `DECISIONS.md` D017)**: synthetic (D005/D008 simulator + P2 injection framework) approved for hardware-free digital-twin development/testing — explicitly NOT claimed sufficient/validated for real-world reconstruction accuracy. Prognosis training remains blocked: no degradation-trajectory data source exists or is specified.
+- P3: `divergence_threshold` + substitution uncertainty-cap values UNDECIDED (schema column, no default). The digital-twin's uncertainty-estimation method (FR-H2) is also UNDECIDED — unaffected by D016/D017.
 - P3: RL reward shaping + acceptable false-isolation rate UNDECIDED.
 None of these block P0.
 

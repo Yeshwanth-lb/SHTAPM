@@ -708,3 +708,29 @@ U03/U04), resolve one of the standing P2 decision-required items (λ, `c`,
 FR-A4), or do something else. Do not default to P3 implementation, and do
 not create a new decision (D016+) without the same explicit
 propose-then-approve sequence used for D014/D015.
+
+## 11. P3 scoping update (2026-08-31) — D016/D017 recorded, P3 STILL not started
+
+**U03 and U04 are now resolved as decisions** — `DECISIONS.md` **D016**
+(prognosis and digital-twin are two separate models; the twin is a single
+channel-agnostic model, not per-channel; no architecture/hyperparameter
+detail specified) and **D017** (synthetic simulator data approved for
+**initial, hardware-free P3 development/testing only** — the existing
+D005/D008 simulator + P2's injection framework are the initial synthetic
+data source for digital-twin development, but their adequacy for
+real-world reconstruction accuracy is explicitly **unvalidated**, not
+claimed sufficient; prognosis training remains blocked, since no
+degradation-trajectory generator exists or is specified by D017).
+
+**Still open, unchanged by D016/D017:** U05 (`divergence_threshold` +
+uncertainty-cap values), U06 (RL reward shaping), and the digital-twin's
+uncertainty-estimation method (FR-H2) — none of these were resolved, and
+none should be assumed.
+
+**No P3 code has been created or modified.** D016/D017 are
+documentation-only decisions about *architecture shape* and *initial data
+source*, not authorization to implement. The next actionable P3 step is
+still a decision (U05, U06, the uncertainty method, or scoping the digital
+twin's self-supervised training/testing approach against the existing
+simulator) — not code — and should still go through the same
+propose-then-approve sequence used for D014–D017.

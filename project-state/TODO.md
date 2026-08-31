@@ -124,17 +124,26 @@ the committed fixture seed/parameters only, not multi-seed stress-tested.
 - [ ] O10 confusion matrix / ablations on a real dataset — blocked on hardware (SWaT/WADI structurally cannot satisfy this, D011).
 
 ## P3 — Prognosis + RL + Self-Healing + Safety  ⚠ (no Doc06 phase; from PRD P3)
-> **Readiness analysis performed 2026-08-30 (conversation-only, no files
-> touched, no P3 work started)** — see `P2_RESUME.md` §10. P3 is next per
-> the PRD build order but is NOT implementation-ready as a whole: LSTM
-> (U03/U04), RL reward shaping (U06), and divergence/uncertainty (U05) are
-> all open decisions; a synthetic dry-run signature needs its own new
-> spec; the rule-based fallback is only partially independent (its PRD
-> state vector needs LSTM's `health`/`failure_eta`). Reusable now: the
-> frozen `DecisionMessage`/`RLAction` contract and
-> `RelayController.safe_off()` (P1). **Do not start P3 without explicit
-> direction.**
-- [ ] LSTM health (Healthy/Warning/Critical) + failure-ETA on trust-weighted windows  *(blocked: U03/U04)*
+> **Readiness analysis performed 2026-08-30; U03/U04 scoped and recorded
+> 2026-08-31 (conversation/documentation-only, no P3 code created)** — see
+> `P2_RESUME.md` §10/§11. P3 is next per the PRD build order but is still
+> NOT implementation-ready as a whole. **`DECISIONS.md` D016** (2026-08-31):
+> prognosis and digital-twin are separate models; the twin is a single
+> channel-agnostic model, not per-channel — no architecture/hyperparameter
+> detail specified. **`DECISIONS.md` D017** (2026-08-31): synthetic
+> simulator data approved for **initial hardware-free digital-twin
+> development/testing only** — NOT claimed sufficient for real-world
+> reconstruction accuracy; prognosis training stays blocked, since no
+> degradation-trajectory data source exists or is specified. **Still open:
+> U05** (divergence/uncertainty-cap), **U06** (RL reward shaping), and the
+> digital-twin's uncertainty-estimation method. A synthetic dry-run
+> signature needs its own new spec. The rule-based fallback is only
+> partially independent (its PRD state vector needs LSTM's
+> `health`/`failure_eta`). Reusable now: the frozen
+> `DecisionMessage`/`RLAction` contract and `RelayController.safe_off()`
+> (P1). **Do not start P3 without explicit direction.**
+- [ ] LSTM health (Healthy/Warning/Critical) + failure-ETA on trust-weighted windows  *(architecture decided: D016; still blocked — no prognosis training-data source/degradation generator specified, D017)*
+- [ ] Digital-twin: channel-agnostic reconstruction + uncertainty estimate  *(architecture decided: D016; initial synthetic data source approved for hardware-free dev, D017; uncertainty-estimation method still undecided)*
 - [ ] DQN over state `[health, anomaly_flag, T1..T6, failure_eta]` + reward  *(blocked: U06)*
 - [ ] Deterministic rule-based RL fallback (fail-safe)
 - [ ] Self-heal: isolate/re-weight + bounded uncertainty-capped virtual substitution  *(blocked: U05)*
