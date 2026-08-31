@@ -734,3 +734,42 @@ still a decision (U05, U06, the uncertainty method, or scoping the digital
 twin's self-supervised training/testing approach against the existing
 simulator) — not code — and should still go through the same
 propose-then-approve sequence used for D014–D017.
+
+## 12. P3 divergence/substitution behavioral design (2026-08-31) — D018 recorded, P3 STILL not started
+
+**`DECISIONS.md` D018** records the behavioral design for the FR-H1–H4
+isolation/substitution/divergence path — five sub-decisions, all
+documentation-only, no code created:
+1. **Divergence computation form:** fit-time z-score-based magnitude
+   (unitless, cross-channel comparable) — not per-window min-max, not an
+   empirical-CDF/rank score. Numeric `divergence_threshold` still NOT
+   chosen (data-gated).
+2. **Recovery:** re-admit to trusted fusion when P2 trust returns to
+   `TRUSTED_MIN` (0.7, already-frozen) — no new hysteresis/threshold.
+3. **60s expiry:** if `substitution_max_seconds` (60, Doc05 default)
+   expires without recovery, escalate to Safe Pump-Stop — an explicit
+   safety-policy choice, not a pre-existing PRD mandate.
+4. **Uncertainty interface:** stays edge-internal; the frozen
+   `DecisionMessage` contract is **not modified**; P3-HEAL-E1's alert
+   requirement is satisfied via the existing `alerts` table (`'system'`
+   type) instead.
+5. **Cycle sequencing:** P2 (trust/isolation) runs before P3
+   (substitution/divergence) each cycle; the isolated channel's raw value
+   is monitoring-only and never re-enters the trusted-fusion/prognosis
+   path.
+
+D018 also formally records **"Interpretation A"** (divergence measured
+against the isolated sensor's own continuing raw reading) as an explicit
+**backstop, not proof, not an independent reference** — the PRD's own R3
+circularity/gameability risk is carried forward, not resolved.
+
+**Still explicitly open, unaffected by D018:** the numeric
+`divergence_threshold` value, the numeric uncertainty-cap value, the
+digital-twin's uncertainty-estimation method (FR-H2), and U06 (RL reward
+shaping). **U05 is narrowed to exactly the two numeric values** — the
+behavioral/semantic questions that made U05 unscopable before are now
+resolved as decisions, not as capability.
+
+**No P3 code exists in this repo.** The next actionable P3 step remains a
+decision (the numeric values — data-gated; the uncertainty method — no
+textual basis exists to choose one; U06), not code.

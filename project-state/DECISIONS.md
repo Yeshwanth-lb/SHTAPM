@@ -568,6 +568,97 @@
 - **Status:** documentation-only; no implementation performed or
   authorized by this entry. No P3 code exists in this repo.
 
+### D018 — P3 digital-twin substitution/divergence behavioral design (Interpretation A + five sub-decisions)
+- **Date:** 2026-08-31
+- **Decision:** Building on D016 (separate, channel-agnostic digital-twin
+  model) and D017 (synthetic data approved for initial hardware-free
+  development only), the following behavioral design is adopted for the
+  FR-H1–H4 isolation/substitution/divergence path. **No numeric threshold,
+  uncertainty-cap value, or uncertainty-estimation method is chosen by this
+  entry.**
+
+  **Foundation — divergence semantics ("Interpretation A"):** When a
+  channel is isolated, its raw reading continues to be sampled and remains
+  available, but is excluded/down-weighted from trusted fusion (FR-H1).
+  FR-H3's "real-vs-twin divergence" is measured between the digital-twin's
+  reconstruction and that isolated channel's continuing raw reading.
+  **This divergence check is an explicit backstop/anomaly signal — it is
+  NOT proof that the twin's reconstruction is correct, and it is NOT an
+  independent trusted reference**, since no redundant per-channel
+  instrumentation exists in the current hardware (TRD BOM: one physical
+  sensor per channel). The circularity/gameability risk this creates is
+  the one the PRD's own risk register already names (R3: *"Virtual
+  substitution is circular / gameable"*) — this decision does not resolve
+  that risk, only adopts the interpretation the PRD's test cases
+  (P3-HEAL-S1/S2) and available architecture actually support, with the
+  risk explicitly carried forward, not hidden.
+
+  1. **Divergence computation form:** a fit-time z-score-based
+     magnitude/distance representation (reusing the same
+     fit-on-clean-baseline-mean/std discipline already used by
+     `ConsistencyProvider`/`TrendSignPhysicsRule`), not per-window min-max
+     normalization (already found to be a source of excess noise, H1/E1
+     analysis) and not an empirical-CDF/rank score (already found to be
+     diffuse-under-null, unsuited to representing a magnitude of physical
+     disagreement, TRUST-H1 analysis). Unitless and cross-channel
+     comparable by construction. **No numeric `divergence_threshold` is
+     chosen — remains data-gated (U05).**
+  2. **Recovery:** a previously isolated channel may be re-admitted to
+     trusted fusion when its P2 trust score returns to `TRUSTED_MIN`
+     (0.7), the same, already-frozen boundary FR-T3 already uses to
+     classify a channel as "Trusted." No new hysteresis, window count, or
+     threshold is introduced — the existing three-band structure
+     (Malicious <0.4 / Suspicious 0.4–0.7 / Trusted ≥0.7) already provides
+     the buffer between whatever triggered isolation and this
+     re-admission point.
+  3. **60-second substitution expiry:** if `substitution_max_seconds`
+     (already 60, Doc05 default) expires without the channel having
+     safely recovered per (2), the system escalates to Safe Pump-Stop.
+     This is an explicit safety-policy decision filling a gap FR-H3 does
+     not itself specify (FR-H3's escalation clause is grammatically tied
+     only to divergence exceeding its threshold) — not a claim the PRD
+     already mandated this.
+  4. **Uncertainty interface:** the raw numeric uncertainty estimate
+     (FR-H2) stays edge-internal. The frozen `DecisionMessage` contract
+     (`backend/app/schemas/contracts.py`) is not modified. P3-HEAL-E1's
+     "confidence flagged high; alert raised" is satisfied via the existing
+     `alerts` mechanism (Doc05: `type`/`channel`/`message`/`reason`),
+     using the existing `'system'` value of the `type` ENUM, unless
+     implementation later proves an enum extension is technically
+     required — no new alert type is introduced now.
+  5. **Cycle sequencing:** within each processing cycle, P2 (trust/
+     isolation determination) runs first; P3 (substitution + divergence
+     check for isolated channels) runs second, consuming P2's output
+     without modifying P2's internals. The isolated channel's raw value
+     is monitoring-only for the duration of isolation: it feeds the
+     divergence check and nothing else — it is never fed back into the
+     trusted-fusion/prognosis path (FR-M3).
+- **Reason:** Closes the behavioral design questions the U05 scoping
+  analysis (this session) found necessary before any divergence/
+  substitution code could be written, using in every case either an
+  already-frozen project constant (`TRUSTED_MIN`, `substitution_max_seconds`),
+  an already-established computational pattern (fit-time z-score, reused
+  from `c`/`k`'s own baseline-fitting discipline), or an already-existing
+  mechanism (the `alerts` table), rather than inventing new infrastructure.
+  Explicitly declines to resolve the two genuinely data-gated numeric
+  values or the uncertainty-estimation method, consistent with this
+  project's established discipline of not inventing thresholds/formulas
+  without real data (D010, D013, D017).
+- **Affects:** future `edge/pipeline/self_heal`, future digital-twin/
+  divergence-check code (none exists yet — no code created by this
+  decision), Doc05's `alerts` usage pattern (no schema change),
+  `edge/trust/beta.py`'s `TRUSTED_MIN` (reused, not modified).
+- **Does NOT resolve:** the numeric `divergence_threshold` value, the
+  numeric uncertainty-cap value, or the uncertainty-estimation method
+  (FR-H2) — all remain explicitly open (U05 narrows to exactly these two
+  numeric values; the uncertainty method remains a separate, unnumbered
+  open item, unaffected by this decision).
+- **Does NOT change:** D005, D009–D017, `beta.py`'s `TRUSTED_MIN`/
+  `MALICIOUS_MAX` values, the `DecisionMessage` contract, or any existing
+  code/tests. Documentation-only.
+- **Status:** documentation-only; no implementation performed or
+  authorized by this entry. No P3 code exists in this repo.
+
 ---
 
 ## UNDECIDED (must not be silently resolved — see CURRENT_STATE blockers)
@@ -582,7 +673,11 @@
   real data; what tolerance beyond sign comparison) — requires bench data or a dataset (U07);
   no rule exists for the other four channels; even for current/vibration, D013's own
   multi-seed testing found only ~50–60% attribution reliability — not a validated capability.
-- U05 — `divergence_threshold` + substitution uncertainty-cap values (P3).
+- U05 — `divergence_threshold` + substitution uncertainty-cap values (P3). **Partial:**
+  behavioral design resolved by D018 (divergence computation form, recovery rule,
+  60s-expiry escalation, uncertainty interface, cycle sequencing). **Still open:**
+  both numeric values themselves (data-gated), and the digital-twin's
+  uncertainty-estimation method (separate, unnumbered, unaffected by D018).
 - U06 — RL reward shaping + acceptable false-isolation rate (P3).
 - U07 — SWaT/WADI dataset access vs TEP+bench substitute (P2/P7). **Partial:**
   validation methodology frozen (D011); SWaT.A1 access obtained and the

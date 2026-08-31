@@ -195,24 +195,29 @@ Diagnostic-only tooling under `edge/eval/` (not on pytest `testpaths`, not in th
   (P2-ANOM-H1/E1) — see `P2_RESUME.md` §7a.
 
 ## Next
-**Not assumed to be coding — read `P2_RESUME.md` §10/§11 first.**
+**Not assumed to be coding — read `P2_RESUME.md` §10/§11/§12 first.**
 Hardware-free P2 has no remaining mandatory software implementation (its 4
 documented FAILs are all hardware/data-blocked or decision-required
 limitations, not missing code — none are fixable by more coding without
 either real bench data or a new specification decision touching `c`, `k`'s
-non-paired default, or GAMMA). For P3, **U03/U04 are now resolved**
-(`DECISIONS.md` D016/D017, 2026-08-31 — separate channel-agnostic
-digital-twin model; synthetic data approved for initial hardware-free twin
-development only, not validation), but **no P3 code exists** — U05, U06,
-and the digital-twin's uncertainty-estimation method remain open, and
-prognosis training is still blocked on an unspecified degradation-data
-source. The next session should explicitly ask the user whether to: (a)
-continue P3 scoping (U05, U06, the uncertainty method, or scoping the
-digital-twin's hardware-free training/testing approach), (b) resolve one
-of the standing P2 decision-required items (λ=0.7 sign-off/U01, `c`'s
-redefinition, FR-A4's payload/U14), or (c) something else entirely. Do not
-default to P3 implementation, and do not create a new decision (D018+)
-without the same propose-then-approve sequence used for D014–D017. P2 work
+non-paired default, or GAMMA). For P3, **U03/U04 are resolved**
+(`DECISIONS.md` D016/D017 — separate channel-agnostic digital-twin model;
+synthetic data approved for initial hardware-free twin development only,
+not validation) and **the divergence/substitution behavioral design is
+resolved** (`DECISIONS.md` D018 — twin-vs-isolated-sensor backstop
+semantics, z-score divergence form, `TRUSTED_MIN`-based recovery, 60s
+expiry→Safe-Stop, edge-internal uncertainty with no `DecisionMessage`
+change, P2-then-P3 sequencing), but **no P3 code exists**. **U05 is now
+narrowed to just its two numeric values** (still data-gated); the
+uncertainty-estimation method and U06 remain open. Prognosis training is
+still blocked on an unspecified degradation-data source. The next session
+should explicitly ask the user whether to: (a) continue P3 scoping (the
+numeric values, the uncertainty method, U06, or scoping the digital-twin's
+hardware-free training/testing approach), (b) resolve one of the standing
+P2 decision-required items (λ=0.7 sign-off/U01, `c`'s redefinition,
+FR-A4's payload/U14), or (c) something else entirely. Do not
+default to P3 implementation, and do not create a new decision (D019+)
+without the same propose-then-approve sequence used for D014–D018. P2 work
 otherwise remains blocked on real bench hardware (also the only path that
 could unblock D014's deferred current↔temperature candidate).
 
@@ -245,7 +250,8 @@ Blocking questions are tracked in the roadmap discussion; the ones that gate *co
 - P2: P2-ANOM-S1 (adaptive/stealth injection type) — **RESOLVED (2026-08-29)**: `AdaptiveStealthFDI` implemented (`edge/injection/injections.py`) and its acceptance scenario PASSES; verified at the committed fixture seed/parameters only, not multi-seed stress-tested.
 - P3: LSTM — one shared model or two? **RESOLVED (2026-08-31, `DECISIONS.md` D016)**: two separate models (prognosis; digital-twin), twin is a single channel-agnostic model, not per-channel. No architecture/hyperparameter detail specified. No P3 code created.
 - P3: digital-twin training-data source. **RESOLVED for initial dev only (2026-08-31, `DECISIONS.md` D017)**: synthetic (D005/D008 simulator + P2 injection framework) approved for hardware-free digital-twin development/testing — explicitly NOT claimed sufficient/validated for real-world reconstruction accuracy. Prognosis training remains blocked: no degradation-trajectory data source exists or is specified.
-- P3: `divergence_threshold` + substitution uncertainty-cap values UNDECIDED (schema column, no default). The digital-twin's uncertainty-estimation method (FR-H2) is also UNDECIDED — unaffected by D016/D017.
+- P3: divergence/substitution behavioral design. **RESOLVED (2026-08-31, `DECISIONS.md` D018)**: divergence measured against the isolated sensor's own continuing raw reading — an explicit backstop, NOT proof, NOT an independent reference (PRD's own R3 circularity risk carried forward, not resolved); fit-time z-score magnitude form (not min-max, not rank/CDF); recovery reuses `TRUSTED_MIN=0.7` (no new hysteresis); 60s expiry without recovery escalates to Safe Pump-Stop; uncertainty stays edge-internal, frozen `DecisionMessage` **not modified**, existing `alerts` table used instead; P2 runs before P3 each cycle. No P3 code created.
+- P3: `divergence_threshold` + substitution uncertainty-cap **numeric values** — still UNDECIDED (data-gated; U05 narrowed by D018 to just these two numbers). The digital-twin's uncertainty-estimation method (FR-H2) is also still UNDECIDED — unaffected by D016/D017/D018.
 - P3: RL reward shaping + acceptable false-isolation rate UNDECIDED.
 None of these block P0.
 

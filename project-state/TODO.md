@@ -124,32 +124,38 @@ the committed fixture seed/parameters only, not multi-seed stress-tested.
 - [ ] O10 confusion matrix / ablations on a real dataset — blocked on hardware (SWaT/WADI structurally cannot satisfy this, D011).
 
 ## P3 — Prognosis + RL + Self-Healing + Safety  ⚠ (no Doc06 phase; from PRD P3)
-> **Readiness analysis performed 2026-08-30; U03/U04 scoped and recorded
-> 2026-08-31 (conversation/documentation-only, no P3 code created)** — see
-> `P2_RESUME.md` §10/§11. P3 is next per the PRD build order but is still
-> NOT implementation-ready as a whole. **`DECISIONS.md` D016** (2026-08-31):
-> prognosis and digital-twin are separate models; the twin is a single
-> channel-agnostic model, not per-channel — no architecture/hyperparameter
-> detail specified. **`DECISIONS.md` D017** (2026-08-31): synthetic
+> **Readiness analysis performed 2026-08-30; U03/U04 scoped 2026-08-31
+> (D016/D017); divergence/substitution behavioral design scoped 2026-08-31
+> (D018) — all documentation-only, no P3 code created.** See `P2_RESUME.md`
+> §10/§11/§12. P3 is next per the PRD build order but is still NOT
+> implementation-ready as a whole. **D016:** prognosis and digital-twin are
+> separate models; twin is single channel-agnostic model — no
+> architecture/hyperparameter detail specified. **D017:** synthetic
 > simulator data approved for **initial hardware-free digital-twin
 > development/testing only** — NOT claimed sufficient for real-world
-> reconstruction accuracy; prognosis training stays blocked, since no
-> degradation-trajectory data source exists or is specified. **Still open:
-> U05** (divergence/uncertainty-cap), **U06** (RL reward shaping), and the
-> digital-twin's uncertainty-estimation method. A synthetic dry-run
-> signature needs its own new spec. The rule-based fallback is only
-> partially independent (its PRD state vector needs LSTM's
-> `health`/`failure_eta`). Reusable now: the frozen
-> `DecisionMessage`/`RLAction` contract and `RelayController.safe_off()`
+> accuracy; prognosis training stays blocked (no degradation-data source
+> exists). **D018:** divergence measured against the isolated sensor's own
+> continuing raw reading (an explicit backstop, NOT proof, NOT an
+> independent reference — PRD's own R3 circularity risk carried forward,
+> not resolved), using a fit-time z-score magnitude form; recovery reuses
+> `TRUSTED_MIN=0.7`; 60s expiry without recovery escalates to Safe
+> Pump-Stop; uncertainty stays edge-internal (frozen `DecisionMessage`
+> **not** modified, existing `alerts` table used instead); P2 runs before
+> P3 each cycle. **U05 now narrows to just its two numeric values** (still
+> open, data-gated). **Still open:** the uncertainty-estimation method
+> (unnumbered), **U06** (RL reward shaping). A synthetic dry-run signature
+> needs its own new spec. The rule-based fallback is only partially
+> independent (needs LSTM's `health`/`failure_eta`). Reusable now: the
+> frozen `DecisionMessage`/`RLAction` contract and `RelayController.safe_off()`
 > (P1). **Do not start P3 without explicit direction.**
 - [ ] LSTM health (Healthy/Warning/Critical) + failure-ETA on trust-weighted windows  *(architecture decided: D016; still blocked — no prognosis training-data source/degradation generator specified, D017)*
 - [ ] Digital-twin: channel-agnostic reconstruction + uncertainty estimate  *(architecture decided: D016; initial synthetic data source approved for hardware-free dev, D017; uncertainty-estimation method still undecided)*
 - [ ] DQN over state `[health, anomaly_flag, T1..T6, failure_eta]` + reward  *(blocked: U06)*
 - [ ] Deterministic rule-based RL fallback (fail-safe)
-- [ ] Self-heal: isolate/re-weight + bounded uncertainty-capped virtual substitution  *(blocked: U05)*
-- [ ] Divergence detection → escalate to Safe Pump-Stop
+- [ ] Self-heal: isolate/re-weight + bounded uncertainty-capped virtual substitution  *(behavioral design decided: D018 — z-score divergence form, TRUSTED_MIN recovery, edge-internal uncertainty; still blocked: the two numeric values (U05) + uncertainty method)*
+- [ ] Divergence detection → escalate to Safe Pump-Stop  *(semantics + form decided: D018 — twin-vs-isolated-sensor backstop, z-score magnitude; numeric `divergence_threshold` still data-gated)*
 - [ ] Dry-run detection → autonomous Safe Pump-Stop
-- [ ] Gate: rule fallback engages if policy missing; divergence→safe-stop; dry-run stops before damage; self-heal <500ms
+- [ ] Gate: rule fallback engages if policy missing; divergence→safe-stop (60s-expiry-without-recovery also escalates, D018); dry-run stops before damage; self-heal <500ms
 
 ## P4 — Backend + Ledger
 - [ ] SQLAlchemy models (all Doc05 tables) + Alembic migration
