@@ -251,7 +251,79 @@ the committed fixture seed/parameters only, not multi-seed stress-tested.
 > failure_eta horizon/units, loss, optimizer, hyperparameters, or authorize
 > training. D021 unchanged. No code, preprocessing, dataset loader, or test
 > was created or modified by D022.
-- [ ] LSTM health (Healthy/Warning/Critical) + failure-ETA on trust-weighted windows  *(architecture skeleton implemented hardware-free 2026-08-31 — `LSTMPrognosisPredictor`/`_LSTMPrognosisNet`, `edge/models/lstm_prognosis.py`, `9f802df`: untrained, no accuracy/calibration claim, no Protocol, no pipeline integration. Training-data source partially addressed: D021 adopts PRONOSTIA/FEMTO (acquired + inspected read-only) for vibration+temperature methodology validation only — pressure/humidity/gas/current still have no data source. D022 resolves the temperature-downsampling method, vibration-burst-summary statistic, and a missing-vibration indicator (widening the future input contract to `len(CHANNELS)+1`, LSTM shape unchanged) — still no preprocessing/loader/training code exists. HealthState thresholds, failure_eta horizon/units, loss, optimizer, and four-channel treatment all remain open; real pump/bench validation still required)*
+> **Then a PRONOSTIA preprocessing/loader layer was implemented and
+> tested hardware-free** (`edge/eval/pronostia_prep.py`/`test_pronostia_
+> prep.py`, 20 tests, real-data sanity-checked against the acquired
+> dataset — not yet committed). Real-data testing surfaced genuine raw-
+> data quality problems across the 17 bearings: a full **read-only audit**
+> then measured them precisely (5 bearings with zero temperature files;
+> 11 bearings with leading-edge vibration bursts before temperature
+> coverage begins, 75 bursts/~13.5 min total; `Bearing1_1`'s 2 corrupted
+> timestamp files). **Since then, `DECISIONS.md` D023 (2026-08-31,
+> documentation-only) authorized three purely subtractive treatments** for
+> these exact findings: (1) exclude the 5 zero-temperature bearings
+> entirely; (2) a general rule discarding leading-edge vibration bursts
+> before temperature coverage begins; (3) for `Bearing1_1` only, discard
+> exactly `acc_02121.csv`/`acc_02122.csv` (corrupted timestamps) — NOT a
+> general corruption-detection capability. No fabrication, interpolation,
+> or reconstruction of any kind is authorized. No bearing changes train/
+> test split membership; the official 6-learning/11-test split is
+> preserved in membership, with usable counts becoming 4 training + 8
+> test (12/17 total expected loadable once implemented). `Bearing1_1`
+> needs both treatments 2 and 3 together. D023 does not resolve channel
+> treatment, thresholds, horizon/units, loss, optimizer, or authorize
+> training; D016–D022 unchanged. No code/loader/test was created or
+> modified by D023 itself — the three treatments are not yet implemented.
+> **Since then, `DECISIONS.md` D024 (2026-08-31, documentation-only)
+> authorized the eventual four-channel availability-indicator
+> representation** for pressure/humidity/gas/current (PRONOSTIA supplies
+> none of these): Option B — `0.0` placeholders paired with one explicit
+> per-timestep availability indicator per channel, extending D022's own
+> `vibration_observed` mechanism. Establishes the eventual, fully-resulting
+> prognosis input width as **11** (6 `CHANNELS` + 1 `vibration_observed`,
+> D022-approved but not yet implemented in code + 4 new per-channel
+> availability indicators) — **`edge/models/lstm_prognosis.py` remains
+> committed and unchanged at input width 6; D024 does not implement this
+> widening.** `trust` is explicitly prohibited from representing absence
+> and keeps its FR-M3 meaning exactly; the four indicators are
+> machine-readable absence markers only, never evidence that
+> pressure/humidity/gas/current were measured, trained, or validated. D024
+> authorizes the representation only, not training. D021–D023 unchanged.
+> No code, test, or dataset file created or modified by D024.
+> **Since then, `DECISIONS.md` D025 (2026-08-31, documentation-only)
+> established the PRONOSTIA prognosis-target methodology**: RUL/failure_eta
+> targets generated ONLY for the 4 usable training bearings (`Bearing1_1,
+> 1_2, 2_1, 3_1`) — test-split bearings remain WITHOUT failure_eta targets,
+> and `Validation_Set`/`Full_Test_Set` is explicitly NOT authorized.
+> `RUL(t) = final_recorded_timestep − t`, final timestep = `RUL=0`
+> (grounded in D021's own "run to actual physical failure" language),
+> represented in **seconds** (numerically identical to 1Hz timesteps here).
+> HealthState will use **bearing-relative/proportional RUL bands** (not
+> fixed-second bands, given the ~17× lifetime variation across usable
+> bearings) — **exact Warning/Critical proportions are NOT resolved by
+> D025** and require a later, evidence-based decision. Any cross-bearing
+> statistic used in target generation must be fit training-bearings-only.
+> D025 does not authorize training, windowing/sampling, loss/optimizer/
+> hyperparameters, acceptance metrics, RL, or pump validation; D021's
+> methodology-validation-only scope is explicitly preserved; D021–D024
+> unchanged. No code, label, or dataset file created or modified by D025.
+> **Since then, `DECISIONS.md` D026 (2026-08-31, documentation-only)
+> resolved D025's two remaining numeric HealthState proportions as
+> explicit modeling-policy values**: Healthy = RUL > 20% of lifetime,
+> Warning = 5% < RUL <= 20%, Critical = RUL <= 5%. Both are explicitly
+> policy choices, not empirically derived or PRONOSTIA ground truth. The
+> 5% Critical value is loosely, qualitatively informed by a read-only
+> investigation of the 4 training bearings' own late-life behavior
+> (~5-10% region) — not statistically proven. The 20% Warning value has
+> **no empirical support** from the 4 bearings (their degradation-onset
+> timing was found genuinely inconsistent) and is pure policy. D025's
+> RUL/failure_eta methodology, leakage discipline, and label-semantics
+> requirement all remain unchanged and apply in full to these numbers.
+> D026 does not authorize windowing/sampling, loss, optimizer,
+> hyperparameters, training, acceptance metrics, RL, pump validation, or
+> Validation_Set/Full_Test_Set use. No code, label, or dataset file
+> created or modified by D026.
+- [ ] LSTM health (Healthy/Warning/Critical) + failure-ETA on trust-weighted windows  *(architecture skeleton implemented hardware-free 2026-08-31 — `LSTMPrognosisPredictor`/`_LSTMPrognosisNet`, `edge/models/lstm_prognosis.py`, `9f802df`: untrained, no accuracy/calibration claim, no Protocol, no pipeline integration, still 6-wide. Training-data source partially addressed: D021 adopts PRONOSTIA/FEMTO (acquired + inspected read-only) for vibration+temperature methodology validation only — pressure/humidity/gas/current still have no real data source. D022 resolves the temperature-downsampling method, vibration-burst-summary statistic, and a missing-vibration indicator (eventual input contract `len(CHANNELS)+1`). A preprocessing/loader layer exists (`edge/eval/pronostia_prep.py`, committed `c425de0`) and a full 17-bearing data-quality audit found 12/17 bearings usable after D023's three subtractive treatments (implemented and verified against real data). D024 authorizes the eventual four-channel availability-indicator representation (Option B, per-channel, eventual input width 11) — **implemented and committed** (`8b7aa6c`). D025 establishes the RUL/HealthState target-generation methodology (training-bearings-only RUL in seconds, proportional HealthState bands); **D026 resolves the numeric proportions (20% Warning / 5% Critical, explicit policy)**. HealthState methodology AND numeric thresholds are now both resolved on paper, and **target-generation code implementing D025/D026 exists** (`compute_prognosis_targets`, `edge/eval/pronostia_prognosis_targets.py`) — **no real-dataset labels have been generated yet**. Loss, optimizer, windowing/sampling, and training itself all remain open; real pump/bench validation still required)*
 - [x] Digital-twin: channel-agnostic reconstruction + uncertainty estimate  *(concrete LSTM reconstruction implemented + tested hardware-free 2026-08-31 — `LSTMTwinReconstructor`/`_LSTMTwinNet`, `edge/models/lstm_twin.py`, `43e114d`: single-layer unidirectional LSTM → final hidden state → Linear → scalar; `hidden_size` REQUIRED, no default; masked-channel input never reads the true value + one-hot indicator; satisfies the unmodified `TwinReconstructor` Protocol, integration-tested with `SelfHealOrchestrator` at `66f790e`. Diagnostic-only training harness at `edge/eval/twin_training.py` uses the existing simulator + Preprocessor only. **No meaningful reconstruction accuracy or real-world validation claimed** — the simulator's clean baseline has no cross-channel/temporal structure beyond each channel's own fitted mean. Uncertainty estimate implemented + tested hardware-free (`ElapsedTimeUncertaintyProxy`, `edge/pipeline/uncertainty.py`, D019) — scaling formula (linear, D020) and uncertainty-cap (0.8, D020) both resolved as policy decisions, documentation-only; still required, never-defaulted constructor arguments in code, no value baked in)*
 - [ ] DQN over state `[health, anomaly_flag, T1..T6, failure_eta]` + reward  *(blocked: U06)*
 - [ ] Deterministic rule-based RL fallback (fail-safe)

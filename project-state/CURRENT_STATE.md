@@ -58,7 +58,76 @@ from `len(CHANNELS)` to `len(CHANNELS)+1` **without redesigning the LSTM**
 resolve the four non-covered channels, HealthState thresholds, failure_eta
 horizon/units, loss, optimizer, hyperparameters, or authorize training;
 D021 unchanged. No code, preprocessing, dataset loader, or test created or
-modified by D022. **Hardware-free P2 still
+modified by D022. **Then a PRONOSTIA preprocessing/loader layer was
+implemented** (`edge/eval/pronostia_prep.py`/`test_pronostia_prep.py`, 20
+tests, real-data sanity-checked against the acquired dataset — not yet
+committed), and real-data testing plus a full **read-only 17-bearing
+audit** measured genuine raw-data quality problems: 5 bearings with zero
+temperature files; 11 bearings with leading-edge vibration bursts before
+temperature coverage begins (75 bursts, ~13.5 min total); `Bearing1_1`'s 2
+corrupted-timestamp files (`acc_02121.csv`/`acc_02122.csv`). **Since then,
+`DECISIONS.md` D023 (2026-08-31, documentation-only) authorized three
+purely subtractive treatments** for exactly these findings — exclude the 5
+zero-temperature bearings; a general leading-edge-burst-trimming rule; a
+`Bearing1_1`-only exclusion of those 2 named corrupted files (explicitly
+NOT a general corruption-detection capability) — with no fabrication,
+interpolation, or reconstruction of any kind authorized. No bearing
+changes train/test split membership; the official 6-learning/11-test
+split is preserved in membership, with usable counts becoming 4 training +
+8 test (12/17 total expected loadable once implemented; `Bearing1_1` needs
+both the trimming rule and its own file exclusion together). D023 does not
+resolve channel treatment, thresholds, horizon/units, loss, optimizer, or
+authorize training; D016–D022 unchanged. **The three treatments were
+subsequently implemented in `edge/eval/pronostia_prep.py` and verified
+against the real dataset (12/17 bearings loadable, matching the audit
+exactly) — still uncommitted.** **Since then, `DECISIONS.md` D024
+(2026-08-31, documentation-only) authorized the eventual four-channel
+availability-indicator representation** for pressure/humidity/gas/current
+(PRONOSTIA supplies none of these): Option B — `0.0` placeholders paired
+with one explicit per-timestep availability indicator per channel,
+extending D022's `vibration_observed` mechanism. Establishes the eventual,
+fully-resulting prognosis input width as **11** (6 `CHANNELS` + 1
+`vibration_observed`, D022-approved but not yet implemented in code + 4
+new per-channel availability indicators) — **`edge/models/lstm_prognosis.py`
+remains committed and unchanged at input width 6; D024 does not implement
+this widening.** `trust` is explicitly prohibited from representing
+absence and keeps its FR-M3 meaning exactly; the four indicators are
+machine-readable absence markers only, never evidence that
+pressure/humidity/gas/current were measured, trained, or validated. D024
+authorizes the representation only, not training. D021–D023 unchanged. No
+code, test, or dataset file created or modified by D024. **Since then,
+`DECISIONS.md` D025 (2026-08-31, documentation-only) established the
+PRONOSTIA prognosis-target methodology**: RUL/failure_eta targets
+generated ONLY for the 4 usable training bearings (`Bearing1_1, 1_2, 2_1,
+3_1`); test-split bearings remain WITHOUT failure_eta targets;
+`Validation_Set`/`Full_Test_Set` explicitly NOT authorized. `RUL(t) =
+final_recorded_timestep − t`, final timestep = `RUL=0` (grounded in
+D021's own "run to actual physical failure" language), in **seconds**
+(numerically identical to 1Hz timesteps). HealthState will use
+**bearing-relative/proportional RUL bands** (not fixed-second bands,
+given the ~17× lifetime variation across usable bearings) — **exact
+Warning/Critical proportions are NOT resolved**, pending a later,
+evidence-based decision. Cross-bearing statistics used in target
+generation must be fit training-bearings-only. No training, windowing,
+loss/optimizer/hyperparameters, acceptance metrics, RL, or pump
+validation authorized; D021's methodology-validation-only scope
+preserved; D021–D024 unchanged; no code/label/dataset file created or
+modified by D025. **Since then, `DECISIONS.md` D026 (2026-08-31,
+documentation-only) resolved D025's two remaining numeric HealthState
+proportions as explicit modeling-policy values**: Healthy = RUL > 20% of
+lifetime, Warning = 5% < RUL <= 20%, Critical = RUL <= 5%. Neither is
+empirically derived or PRONOSTIA ground truth — 5% is loosely,
+qualitatively informed by a read-only investigation of the 4 training
+bearings' own late-life behavior (not statistically proven); 20% has no
+empirical support at all (onset timing was found genuinely inconsistent
+across the four bearings) and is pure policy. D025's RUL/failure_eta
+methodology, leakage discipline, and label-semantics requirement remain
+entirely unchanged and apply in full to these numbers. D026 authorizes
+no windowing/sampling, loss, optimizer, hyperparameters, training,
+acceptance metrics, RL, pump validation, or Validation_Set/Full_Test_Set
+use; no code/label/dataset file created or modified by D026.
+**Hardware-free
+P2 still
 has no remaining mandatory software implementation** (unchanged from the
 prior session — see `P2_RESUME.md` §10 for that handoff). See
 `DECISIONS.md` D013–D019 and `P2_RESUME.md` §1a/§3a/§7a/§9/§10/§14 for
@@ -452,24 +521,68 @@ D022 (2026-08-31) then resolved the temperature-downsampling method
 (1-second block mean), the vibration-burst-summary statistic (RMS of
 Euclidean magnitude), and a missing-vibration `vibration_observed`
 indicator (widening the future input contract to `len(CHANNELS)+1`, LSTM
-shape unchanged) — but **none of this is implemented as code yet** (D022 is
-documentation-only), and prognosis training is still blocked in every
-practical sense: pressure/humidity/gas/current have no data source at all;
-HealthState thresholds, failure_eta horizon/units, loss, and optimizer
-remain fully open; no PRONOSTIA preprocessing/dataset-loader code exists.
+shape unchanged). A preprocessing/loader layer implementing D022 now
+exists (`edge/eval/pronostia_prep.py`/`test_pronostia_prep.py`, 20 tests,
+**not yet committed** — still untracked). Real-data testing against all 17
+bearings, followed by a full read-only audit, found genuine raw-data
+quality problems (5 bearings with zero temperature files; 11 bearings with
+leading-edge vibration bursts before temperature coverage begins; `Bearing1_1`'s
+2 corrupted-timestamp files). `DECISIONS.md` D023 (2026-08-31) then
+authorized three purely subtractive treatments for exactly these findings
+(exclude the 5 zero-temperature bearings; a general leading-edge-burst-
+trimming rule; a `Bearing1_1`-only exclusion of its 2 named corrupted
+files, explicitly not a general corruption-detection capability) — no
+fabrication/interpolation/reconstruction of any kind authorized, no bearing
+changes split membership, expecting 12/17 bearings loadable (4 training + 8
+test) once implemented. **The three D023 treatments were subsequently
+implemented and verified against the real dataset**: `edge/eval/
+pronostia_prep.py` now loads exactly 12/17 real bearings (4/6 training,
+8/11 test), matching the audit exactly. `DECISIONS.md` D024 (2026-08-31)
+authorized the eventual four-channel availability-indicator representation
+for pressure/humidity/gas/current (Option B, per-channel, `0.0`
+placeholders + explicit per-timestep availability indicators, extending
+D022's `vibration_observed` mechanism) — establishing the eventual
+resulting prognosis input width as 11. **This widening was subsequently
+implemented and committed** (`edge/models/lstm_prognosis.py`, `8b7aa6c`:
+`build_prognosis_input`, `PROGNOSIS_INPUT_WIDTH_D024=11`), and the
+PRONOSTIA-to-prognosis glue layer was implemented and committed
+(`edge/eval/pronostia_prognosis_input.py`, `c425de0`,
+`pronostia_sequence_to_prognosis_input`) — both real, tested code, no
+training performed. `DECISIONS.md` D025 (2026-08-31) then established the
+RUL/HealthState target-generation methodology (training-bearings-only RUL
+in seconds, proportional HealthState bands). A series of read-only
+investigations of the 4 training bearings' vibration-RMS trajectories
+followed (baseline-window/statistic/dispersion sensitivity, degradation-
+metric comparison, temporal-stability characterization, operating-
+condition dependency, final decision-readiness assessment) — all
+concluded D025's methodology should be kept, and that the two remaining
+numeric proportions should be adopted as explicit policy rather than
+claimed as empirically derived, given n=4 and the genuinely inconsistent
+Warning-onset timing found across bearings. `DECISIONS.md` D026
+(2026-08-31) then recorded those two numbers: Healthy = RUL > 20% of
+lifetime, Warning = 5% < RUL <= 20%, Critical = RUL <= 5% — both
+explicit policy, 5% loosely qualitatively informed by the investigation,
+20% with no empirical support at all. **HealthState methodology AND
+numeric thresholds are both now resolved on paper, and target-generation
+code implementing D025/D026 now exists and is tested** (`compute_prognosis_targets`,
+`edge/eval/pronostia_prognosis_targets.py`) **— real-dataset label
+generation has not yet been performed.** Training methodology itself
+(loss, optimizer, windowing/sampling, and training) remains fully
+unresolved and not started.
 Real pump/bench validation remains required regardless. The next session
 should explicitly ask the user whether to: (a) obtain or scope a path to
 real bench data for `divergence_threshold`, (b) scope the deterministic
 rule-based RL fallback (FR-RL4) — noting it itself needs `health`/
-`failure_eta` from the still-substantively-blocked prognosis, so scoping it
-will likely surface that dependency again, (c) resolve one of the standing
-P2 decision-required items (λ=0.7 sign-off/U01, `c`'s redefinition, FR-A4's
-payload/U14), (d) implement the D022-specified PRONOSTIA preprocessing/
-input-building code (or resolve one of D022's own still-open follow-ons:
-four-channel treatment, HealthState thresholds, failure_eta horizon/units),
-or (e) something else entirely. Do not default to further P3 implementation,
-and do not create a new decision (D023+) without the same propose-then-
-approve sequence used for D014–D022. P2 work otherwise remains blocked on
+`failure_eta` from the still-substantively-blocked prognosis, so scoping
+it will likely surface that dependency again, (c) resolve one of the
+standing P2 decision-required items (λ=0.7 sign-off/U01, `c`'s
+redefinition, FR-A4's payload/U14), (d) generate real-dataset RUL/HealthState
+labels for the 4 D025 training bearings using the now-implemented
+`compute_prognosis_targets` (`edge/eval/pronostia_prognosis_targets.py`),
+or scope windowing/sampling/loss/optimizer/training methodology, or (e) something else
+entirely. Do not default to further P3 implementation, and do not create
+a new decision (D027+) without the same propose-then-approve sequence
+used for D014–D026. P2 work otherwise remains blocked on
 real bench hardware (also the only path that could unblock D014's deferred
 current↔temperature candidate).
 
