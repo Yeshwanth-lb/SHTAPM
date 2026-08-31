@@ -43,6 +43,12 @@
 - [ ] Gate close-out (formal): measure sensor→UI E2E latency (<2s) under load; browser GUI render on a workstation — nice-to-have, hardware-free
 
 ### P0 hardware-blocked (need Raspberry Pi + bench rig — DO NOT fake)
+> **Physical hardware note (2026-08-31, `DECISIONS.md` D027):** the spikes
+> below target the hardware actually in hand — **BMP280** (not the
+> originally-documented BMP180) and **Raspberry Pi 5** (not the
+> originally-documented Raspberry Pi 4). Six-channel design, the other four
+> sensor parts (DS18B20, ADXL335, DHT22, MQ-135), and MCP3008/INA219 are
+> unchanged. Neither substitution has been physically verified yet.
 - [ ] SPIKE (Pi): read one sensor per interface; INA219 resolves pump current  🔒 hardware-blocked
 - [ ] SPIKE (Pi): time LSTM + Isolation Forest forward pass (<500ms budget)  🔒 hardware-blocked
 

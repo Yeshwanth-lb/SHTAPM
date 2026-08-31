@@ -366,3 +366,42 @@ Diagnostic-only tooling under `edge/eval/` — NOT production, NOT a P2 acceptan
 - **P4 (backend DB/auth/REST/ledger), P5 (Aurora dashboard), P6 (demo hardening), P7 (quantitative SWaT/WADI evaluation): NOT STARTED.** No claim of completion for any of these phases.
 - **Outstanding = hardware-only (P0/P1/P2/P3 shared):** physical sensor reads, INA219 current, physical relay safe-stop, watchdog-on-real-death, real clean-baseline data for IF/threshold retuning (U07), real bench data for `divergence_threshold` (U05), real pump data for prognosis/dry-run validation. None of this is faked anywhere in the codebase.
 - Local branch was ahead of `origin/main` by 10 commits as of `6787299`; verified directly (`git status -sb`) that these have since been pushed.
+
+## 2026-08-31 — D027: physical hardware substitution approved (BMP280/Pi 5), documentation sync
+- The physical hardware actually acquired differs from two parts named in
+  the original planning documents (`docs/SHTAPM_PRD-4.md` §12.1/BOM,
+  `docs/SHTAPM_Doc02_TRD.md`): **BMP280** in hand vs. documented **BMP180**
+  (Pressure channel); **Raspberry Pi 5** in hand vs. documented
+  **Raspberry Pi 4** (edge node). A read-only compatibility analysis (this
+  session) found: BMP180/BMP280 are NOT register-compatible (different
+  chip-ID register, calibration-data layout, and compensation algorithm)
+  but share the identical atmospheric-pressure-proxy limitation D010/D014
+  already established; Pi 5 is electrically pin-compatible with Pi 4 for
+  all six sensors/MCP3008/INA219/relay, with the one concrete software
+  implication being `gpiozero`'s pin factory needing to target `lgpio`
+  instead of the Pi-5-incompatible `RPi.GPIO`.
+- **`DECISIONS.md` D027 approved both substitutions** (recorded in the
+  working tree; not yet committed at the time of this entry): logical
+  `pressure` channel and its atmospheric-proxy semantics unchanged; six-
+  channel design, order, and names entirely unchanged; no new sensor
+  added; D010/D014's own historical text explicitly preserved untouched
+  (D027 documents the substitution as a new, separate entry, not a
+  retroactive edit); `docs/SHTAPM_PRD-4.md`/`docs/SHTAPM_Doc02_TRD.md`
+  explicitly NOT modified by D027 — they remain the original planning
+  record, with D027 in `DECISIONS.md` as the authoritative current-
+  hardware layer on top of it.
+- **This entry's own scope:** `project-state/CURRENT_STATE.md` and
+  `project-state/TODO.md` were synced with a brief D027 summary (matching
+  this project's established per-decision sync convention), so a reader
+  of either file now sees BMP280/Pi 5 as the current target hardware
+  without any docs/ file being touched. `project-state/DECISIONS.md`'s
+  D010 and D014 entries, and this log's own earlier entries describing
+  them, were **not** altered.
+- **Status: APPROVED/DOCUMENTED SUBSTITUTION ONLY — NOT PHYSICALLY
+  VERIFIED.** No driver code was written, no hardware was wired or
+  powered, and no sensor was read. A separate attempt at physical
+  verification this session was stopped before any hardware claim was
+  made, because this working environment has no physical or network path
+  to the actual Raspberry Pi (confirmed directly: this session runs on a
+  Windows/x86 machine, no SSH configured, no reachable Pi host) — reported
+  as a hard environment limitation, not simulated or guessed.

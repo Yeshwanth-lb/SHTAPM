@@ -1285,6 +1285,107 @@
 - **Status:** documentation-only; no implementation, label generation, or
   training is performed or authorized by this entry.
 
+### D027 — Physical hardware substitution: BMP280 replaces BMP180 (Pressure), Raspberry Pi 5 replaces Raspberry Pi 4 (edge node)
+- **Date:** 2026-08-31
+- **Decision:** The physical hardware inventory actually available differs
+  from the parts named in `docs/SHTAPM_PRD-4.md` §12.1/BOM and
+  `docs/SHTAPM_Doc02_TRD.md` in two places. Both are approved as physical
+  substitutions, on the following explicit terms:
+
+  1. **Pressure channel: BMP280 replaces the documented BMP180.** The
+     logical telemetry channel remains `pressure` (`Channel.pressure` in
+     the frozen contract, `backend/app/schemas/contracts.py` —
+     unchanged). The measurement semantics remain exactly the
+     atmospheric-pressure proxy already established by D010 and D014:
+     BMP280 is, like BMP180, a barometric/absolute-pressure sensor — it
+     reads ambient atmospheric pressure, **not** water-line/discharge
+     pressure. **This substitution does not claim, and must never be
+     described as providing, direct water-line/discharge pressure
+     measurement.** BMP180 and BMP280 are NOT register-compatible (different
+     chip-ID register value, different calibration-data layout, different
+     compensation algorithm) — any future driver must be written for
+     BMP280's own register map, not adapted from a BMP180 implementation.
+     No BMP180-specific driver code exists anywhere in this repository to
+     replace (`edge/drivers/` contains only the hardware-agnostic
+     `SensorDriver`/`Reading` abstraction and test fakes — verified by
+     direct inspection prior to this entry) — this substitution costs
+     nothing in already-written code.
+
+  2. **Edge node: Raspberry Pi 5 replaces the documented Raspberry Pi 4.**
+     The existing SHTAPM architecture, module boundaries, and interfaces
+     (`SensorDriver`/`Sensor` abstraction, GPIO/I²C/SPI/1-Wire channel
+     assignments per §12.1/TRD §"Interfaces", MQTT/contract layer, safety
+     loop running entirely at the edge) are all preserved unchanged. Pi 5
+     is electrically pin-compatible with Pi 4 at the 40-pin GPIO header
+     (same pinout, same 3.3V logic levels) for all six sensors, the
+     MCP3008 ADC, INA219, and the relay. The one concrete software
+     consideration this substitution introduces: Pi 5 uses a new GPIO
+     controller (RP1) that the classic `RPi.GPIO` library does not
+     support — any future driver/acquisition code using `gpiozero` (as
+     already named in TRD's sensor-libs table) must select a Pi-5-
+     compatible pin factory (e.g. `lgpio`) rather than relying on the
+     default. I2C (`smbus2`), SPI (`spidev`), and 1-Wire
+     (`w1thermsensor`) are expected to continue working via the standard
+     Linux kernel interfaces on Pi 5, but this has not been physically
+     verified in this repository as of this entry.
+
+  3. **The six-channel design is entirely unchanged by this entry**: same
+     six logical channels, same order, same names
+     (temperature/vibration/pressure/humidity/gas/current), same
+     remaining four physical parts (DS18B20, ADXL335, DHT22, MQ-135), same
+     MCP3008/INA219 supporting hardware. No channel is added, removed,
+     reordered, or renamed. No new sensor or channel is introduced.
+
+- **Reason:** The physical hardware actually in hand does not match two
+  named BOM items in the original planning documents. Per this project's
+  own established precedent for hardware substitution (the PRD itself
+  documents the ACS712→INA219 substitution explicitly, by name, with
+  stated rationale — PRD §12.1 note, Risk R5), and per `CLAUDE.md`'s rule
+  against silently changing approved architecture, this substitution is
+  recorded explicitly rather than absorbed silently into future driver
+  code. Both substitutions were analyzed (this session, read-only) before
+  this entry: neither changes the logical channel contract, the six-
+  channel design, or D010/D014's documented pressure-proxy reasoning —
+  which applies equally to BMP280 as it did to BMP180, since both are the
+  same class of absolute-pressure sensor.
+
+- **Affects:** any future physical driver implementation for the pressure
+  channel (must target BMP280's own register map) and any future
+  acquisition-runtime GPIO backend selection (must target a Pi-5-
+  compatible `gpiozero` pin factory). Does not affect the frozen wire
+  contract, the `SensorDriver`/`Sensor` abstraction, or any already-
+  committed code — no driver code for either BMP180 or Pi-4-specific GPIO
+  access exists anywhere in this repository to modify.
+
+- **Does NOT resolve:** actual driver implementation for BMP280 (register
+  reads, compensation formula) — not implemented by this entry; physical
+  verification of I2C/SPI/1-Wire behavior on Pi 5 — not performed by this
+  entry, still required before physical acquisition is considered
+  complete; the BMP280 breakout board's specific supply-voltage tolerance
+  — board-dependent, not verified here; any P0/P1 hardware-blocked
+  acceptance item (physical sensor reads, INA219 current resolution,
+  on-Pi `<500ms` LSTM+IF timing, physical relay safe-stop) — all remain
+  exactly as blocked as before this entry, now simply blocked on BMP280/
+  Pi 5 instead of BMP180/Pi 4.
+
+- **Does NOT change:** D001–D026, all unchanged. **D010 and D014's
+  historical text is preserved exactly as originally recorded** — both
+  entries continue to document the reasoning that was actually used at
+  the time (BMP180 named specifically, because that was the part
+  documented then); this entry does not retroactively edit either to
+  make BMP280 appear as though it were the original choice. D010/D014's
+  underlying atmospheric-pressure-proxy *finding* is reaffirmed as
+  applying equally to BMP280 (see Decision pt. 1), but their text itself
+  is untouched. `docs/SHTAPM_PRD-4.md` and `docs/SHTAPM_Doc02_TRD.md` are
+  not modified by this entry — they continue to name BMP180/Raspberry Pi
+  4 as originally written; this entry is the authoritative record of the
+  physical substitution actually in use, layered on top of, not
+  overwriting, the original documentation.
+
+- **Status:** documentation-only; no driver code, acquisition-runtime
+  change, or hardware wiring/connection is performed or authorized by
+  this entry.
+
 ---
 
 ## UNDECIDED (must not be silently resolved — see CURRENT_STATE blockers)

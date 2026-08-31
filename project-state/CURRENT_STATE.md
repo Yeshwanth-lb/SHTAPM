@@ -626,10 +626,32 @@ anytime, (c) resolve one of the standing P2 decision-required items
 real pump data exists, retrain prognosis on it using the now-implemented,
 now-debugged `edge/eval/pronostia_prognosis_training.py` harness, or
 (e) something else entirely. Do not default to further P3 implementation,
-and do not create a new decision (D027+) without the same propose-then-
-approve sequence used for D014–D026. P2 work otherwise remains blocked on
+and do not create a new decision without the same propose-then-approve
+sequence used for D014–D026. P2 work otherwise remains blocked on
 real bench hardware (also the only path that could unblock D014's deferred
 current↔temperature candidate).
+
+**Since then, `DECISIONS.md` D027 (2026-08-31, documentation-only) approved
+two physical hardware substitutions** for the hardware actually in hand:
+**BMP280 replaces the documented BMP180** for the Pressure channel (same
+atmospheric-pressure-proxy semantics already established by D010/D014 —
+never water-line/discharge pressure; BMP180 and BMP280 are NOT register-
+compatible, so any future driver targets BMP280's own register map, not a
+BMP180 implementation) and **Raspberry Pi 5 replaces the documented
+Raspberry Pi 4** as the edge node (existing architecture/interfaces
+preserved; Pi 5's GPIO access requires a `gpiozero` `lgpio` pin factory
+instead of `RPi.GPIO`, not yet physically verified). The six logical
+telemetry channels — names, order, and the remaining four physical parts
+(DS18B20, ADXL335, DHT22, MQ-135) plus MCP3008/INA219 — are entirely
+unchanged. **D010 and D014's own historical text is untouched** — D027
+documents the substitution as a new, separate entry, not a retroactive
+edit of either. `docs/SHTAPM_PRD-4.md` and `docs/SHTAPM_Doc02_TRD.md`
+remain exactly as originally written (still naming BMP180/Raspberry Pi 4)
+— D027 is the authoritative current-hardware record, layered on top of,
+not overwriting, the original planning documents. **No driver code,
+hardware wiring, or physical verification has occurred** — the P0/P1
+hardware-blocked spikes remain exactly as blocked as before, now simply
+targeting BMP280/Pi 5 instead of BMP180/Pi 4.
 
 ## Environment gates (honest — sandbox limits, not code failures)
 - **Docker image builds** (backend `pip`, frontend `npm`) fail cert-verify inside the build (gateway MITMs TLS; base images lack its CA). So the full four-service `up` can't be built here. Dockerfiles are standard/correct — no insecure workarounds added; they build on CI / a normal machine (frontend build already green in CI).
