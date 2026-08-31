@@ -659,6 +659,62 @@
 - **Status:** documentation-only; no implementation performed or
   authorized by this entry. No P3 code exists in this repo.
 
+### D019 — P3 uncertainty method: deterministic elapsed-substitution-time proxy (provisional)
+- **Date:** 2026-08-31
+- **Decision:** The digital-twin's uncertainty estimate (FR-H2) is
+  provisionally implemented as a deterministic proxy based on elapsed time
+  since the **current** substitution episode began, with the following
+  semantics:
+  - Starts at its minimum when substitution begins.
+  - Non-decreasing for the duration of that substitution episode.
+  - Bounded relative to the existing `substitution_max_seconds` (60,
+    Doc05 default, D018) — not a second, competing time constant.
+  - Resets when a new substitution episode begins (a direct consequence
+    of D018's recovery rule: once trust returns to `TRUSTED_MIN`,
+    substitution ends, and any later isolation begins a new episode).
+  - Explicitly a **provisional safety/confidence proxy — NOT a
+    statistically calibrated estimate of reconstruction error**, and not
+    claimed to be one.
+  - Reconstruction-stability and D018's divergence signal are explicitly
+    **NOT** added as additional uncertainty inputs at this stage — the
+    method is kept minimal, deterministic, and single-signal.
+  - Remains edge-internal; no `DecisionMessage` contract change
+    (consistent with D018).
+  - The exact time→uncertainty **scaling formula** (e.g. linear or
+    otherwise) is **NOT** chosen by this entry and remains open.
+  - The numeric **uncertainty-cap** and **`divergence_threshold`** are
+    **NOT** chosen by this entry.
+
+  Also approved: the P3-HEAL-E1 wording clarification — **"Uncertainty
+  flagged high (nearing cap); alert raised"** — replacing the ambiguous
+  "Confidence flagged high; alert raised," to avoid reading the outcome as
+  "confidence is high" (self-contradictory alongside raising an alert for
+  approaching a limit).
+- **Reason:** Closes FR-H2's "attached uncertainty estimate" requirement
+  with the smallest defensible hardware-free method identified this
+  session — reusing the already-approved `substitution_max_seconds`
+  reference point (D018) rather than introducing a competing time
+  constant, adding no new model architecture/training objective (unlike a
+  learned interval), and no rank/CDF scoring (which D018's own reasoning
+  already disfavored for a magnitude-style bound). Explicitly provisional,
+  consistent with this project's established pattern (D013's
+  `TrendSignPhysicsRule`) of shipping a minimal, honestly-labeled
+  placeholder pending real data or a future, more principled method
+  (PRD §22's deferred Bayesian/ensemble approaches remain available
+  later).
+- **Affects:** future `edge/pipeline/self_heal` (does not exist yet — no
+  code created by this decision); the `alerts`-mechanism usage already
+  established by D018 (wording clarification only, no schema change, no
+  new alert type).
+- **Does NOT resolve:** the time→uncertainty scaling formula, the numeric
+  uncertainty-cap value, or `divergence_threshold`'s numeric value — all
+  three remain open. U05 narrows no further, numerically, than D018 already
+  narrowed it — still exactly the same two numeric values.
+- **Does NOT change:** D005, D009–D018, the `DecisionMessage` contract, or
+  any existing code/tests. Documentation-only.
+- **Status:** documentation-only; no implementation performed or
+  authorized by this entry. No P3 code exists in this repo.
+
 ---
 
 ## UNDECIDED (must not be silently resolved — see CURRENT_STATE blockers)
@@ -675,9 +731,11 @@
   multi-seed testing found only ~50–60% attribution reliability — not a validated capability.
 - U05 — `divergence_threshold` + substitution uncertainty-cap values (P3). **Partial:**
   behavioral design resolved by D018 (divergence computation form, recovery rule,
-  60s-expiry escalation, uncertainty interface, cycle sequencing). **Still open:**
-  both numeric values themselves (data-gated), and the digital-twin's
-  uncertainty-estimation method (separate, unnumbered, unaffected by D018).
+  60s-expiry escalation, uncertainty interface, cycle sequencing); uncertainty-
+  estimation method resolved provisionally by D019 (deterministic
+  elapsed-substitution-time proxy, single-signal, no reconstruction-stability
+  or divergence input). **Still open:** both numeric values themselves
+  (data-gated), and the time→uncertainty scaling formula (D019, not chosen).
 - U06 — RL reward shaping + acceptable false-isolation rate (P3).
 - U07 — SWaT/WADI dataset access vs TEP+bench substitute (P2/P7). **Partial:**
   validation methodology frozen (D011); SWaT.A1 access obtained and the

@@ -126,8 +126,9 @@ the committed fixture seed/parameters only, not multi-seed stress-tested.
 ## P3 — Prognosis + RL + Self-Healing + Safety  ⚠ (no Doc06 phase; from PRD P3)
 > **Readiness analysis performed 2026-08-30; U03/U04 scoped 2026-08-31
 > (D016/D017); divergence/substitution behavioral design scoped 2026-08-31
-> (D018) — all documentation-only, no P3 code created.** See `P2_RESUME.md`
-> §10/§11/§12. P3 is next per the PRD build order but is still NOT
+> (D018); uncertainty-estimation method scoped 2026-08-31 (D019) — all
+> documentation-only, no P3 code created.** See `P2_RESUME.md`
+> §10/§11/§12/§13. P3 is next per the PRD build order but is still NOT
 > implementation-ready as a whole. **D016:** prognosis and digital-twin are
 > separate models; twin is single channel-agnostic model — no
 > architecture/hyperparameter detail specified. **D017:** synthetic
@@ -141,18 +142,24 @@ the committed fixture seed/parameters only, not multi-seed stress-tested.
 > `TRUSTED_MIN=0.7`; 60s expiry without recovery escalates to Safe
 > Pump-Stop; uncertainty stays edge-internal (frozen `DecisionMessage`
 > **not** modified, existing `alerts` table used instead); P2 runs before
-> P3 each cycle. **U05 now narrows to just its two numeric values** (still
-> open, data-gated). **Still open:** the uncertainty-estimation method
-> (unnumbered), **U06** (RL reward shaping). A synthetic dry-run signature
-> needs its own new spec. The rule-based fallback is only partially
-> independent (needs LSTM's `health`/`failure_eta`). Reusable now: the
-> frozen `DecisionMessage`/`RLAction` contract and `RelayController.safe_off()`
+> P3 each cycle. **D019:** uncertainty-estimation method is a deterministic
+> elapsed-substitution-time proxy (non-decreasing, bounded relative to the
+> same 60s bound, resets per episode) — an explicit safety/confidence
+> proxy, NOT a statistically calibrated error estimate; single-signal (no
+> divergence, no reconstruction-stability); P3-HEAL-E1 wording clarified to
+> *"Uncertainty flagged high (nearing cap); alert raised."* **Still open:**
+> the time→uncertainty scaling formula, **U05's two numeric values**
+> (uncertainty-cap, `divergence_threshold` — both data-gated), and **U06**
+> (RL reward shaping). A synthetic dry-run signature needs its own new
+> spec. The rule-based fallback is only partially independent (needs
+> LSTM's `health`/`failure_eta`). Reusable now: the frozen
+> `DecisionMessage`/`RLAction` contract and `RelayController.safe_off()`
 > (P1). **Do not start P3 without explicit direction.**
 - [ ] LSTM health (Healthy/Warning/Critical) + failure-ETA on trust-weighted windows  *(architecture decided: D016; still blocked — no prognosis training-data source/degradation generator specified, D017)*
-- [ ] Digital-twin: channel-agnostic reconstruction + uncertainty estimate  *(architecture decided: D016; initial synthetic data source approved for hardware-free dev, D017; uncertainty-estimation method still undecided)*
+- [ ] Digital-twin: channel-agnostic reconstruction + uncertainty estimate  *(architecture decided: D016; initial synthetic data source approved for hardware-free dev, D017; uncertainty method decided: D019 (elapsed-time proxy, provisional) — scaling formula + numeric cap still open)*
 - [ ] DQN over state `[health, anomaly_flag, T1..T6, failure_eta]` + reward  *(blocked: U06)*
 - [ ] Deterministic rule-based RL fallback (fail-safe)
-- [ ] Self-heal: isolate/re-weight + bounded uncertainty-capped virtual substitution  *(behavioral design decided: D018 — z-score divergence form, TRUSTED_MIN recovery, edge-internal uncertainty; still blocked: the two numeric values (U05) + uncertainty method)*
+- [ ] Self-heal: isolate/re-weight + bounded uncertainty-capped virtual substitution  *(behavioral design decided: D018 — z-score divergence form, TRUSTED_MIN recovery, edge-internal uncertainty; uncertainty method decided: D019 — elapsed-time proxy; still blocked: the two numeric values (U05) + scaling formula)*
 - [ ] Divergence detection → escalate to Safe Pump-Stop  *(semantics + form decided: D018 — twin-vs-isolated-sensor backstop, z-score magnitude; numeric `divergence_threshold` still data-gated)*
 - [ ] Dry-run detection → autonomous Safe Pump-Stop
 - [ ] Gate: rule fallback engages if policy missing; divergence→safe-stop (60s-expiry-without-recovery also escalates, D018); dry-run stops before damage; self-heal <500ms

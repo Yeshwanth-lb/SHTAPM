@@ -773,3 +773,30 @@ resolved as decisions, not as capability.
 **No P3 code exists in this repo.** The next actionable P3 step remains a
 decision (the numeric values — data-gated; the uncertainty method — no
 textual basis exists to choose one; U06), not code.
+
+## 13. P3 uncertainty-estimation method (2026-08-31) — D019 recorded, P3 STILL not started
+
+**`DECISIONS.md` D019** provisionally resolves the digital-twin's
+uncertainty-estimation method (FR-H2), previously separate/unnumbered:
+a **deterministic elapsed-substitution-time proxy** — starts at minimum
+when substitution begins, non-decreasing during that episode, bounded
+relative to the already-approved `substitution_max_seconds=60` (D018,
+not a new time constant), resets on each new substitution episode.
+Explicitly a **safety/confidence proxy, NOT a statistically calibrated
+estimate of reconstruction error**. Single-signal by design — D018's
+divergence and reconstruction-stability are both explicitly excluded as
+additional inputs, to keep the method minimal and deterministic.
+Edge-internal, no `DecisionMessage` change. Also approved: the
+**P3-HEAL-E1 wording clarification** — *"Uncertainty flagged high
+(nearing cap); alert raised"* — replacing the ambiguous "Confidence
+flagged high," which read as self-contradictory alongside "alert raised."
+
+**Still explicitly open, unaffected by D019:** the time→uncertainty
+**scaling formula**, the numeric **uncertainty-cap** value, the numeric
+**`divergence_threshold`** value, and **U06** (RL reward shaping). U05
+narrows no further, numerically — it was already down to exactly these
+two numeric values after D018, and D019 doesn't touch either of them.
+
+**No P3 code exists in this repo.** The next actionable P3 step remains a
+decision (the scaling formula and the two numeric values — all still
+data-gated or policy choices not yet made; U06), not code.
