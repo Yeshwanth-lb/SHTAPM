@@ -18,8 +18,11 @@ import pytest
 pytest.importorskip("torch")
 
 import torch  # noqa: E402
-from app.schemas.contracts import CHANNELS  # noqa: E402
+from app.schemas.contracts import CHANNELS, Attribution  # noqa: E402
 
+from edge.anomaly.attribution import AttributionResult  # noqa: E402
+from edge.anomaly.detector import AnomalyResult  # noqa: E402
+from edge.anomaly.pipeline import WindowOutcome  # noqa: E402
 from edge.anomaly.preprocess import Window  # noqa: E402
 from edge.models.lstm_twin import (  # noqa: E402
     LSTMTwinReconstructor,
@@ -27,8 +30,24 @@ from edge.models.lstm_twin import (  # noqa: E402
     build_masked_input,
 )
 from edge.models.twin import TwinReconstructor  # noqa: E402
+from edge.pipeline.cycle import process_isolated_channels  # noqa: E402
+from edge.pipeline.divergence import DivergenceScorer  # noqa: E402
+from edge.pipeline.self_heal import SelfHealOrchestrator  # noqa: E402
+from edge.pipeline.uncertainty import ElapsedTimeUncertaintyProxy  # noqa: E402
+from edge.trust.beta import classify  # noqa: E402
+from edge.trust.engine import TrustReading  # noqa: E402
 
 HIDDEN_SIZE_FIXTURE = 4
+# Integration-test-only fixtures: SelfHealOrchestrator/process_isolated_channels
+# require SOME divergence_threshold/uncertainty_cap to be constructed. TEST
+# FIXTURES ONLY -- not project specification values; U05 remains open.
+DIVERGENCE_THRESHOLD_FIXTURE = 3.0
+UNCERTAINTY_CAP_FIXTURE = 0.8
+
+
+def _LINEAR_SCALING_FIXTURE(elapsed_fraction: float) -> float:
+    """TEST FIXTURE ONLY -- not the approved D019 scaling formula."""
+    return elapsed_fraction
 
 
 def _window(values_by_channel: dict[str, float]) -> Window:
@@ -136,3 +155,86 @@ def test_save_and_from_checkpoint_round_trip(tmp_path):
     after = reloaded.reconstruct(window, "temperature")
 
     assert before == after
+
+
+# ---------------------------------------------------------------------------
+# Integration: real LSTMTwinReconstructor through the P3 orchestration
+# plumbing (SelfHealOrchestrator, process_isolated_channels). Proves the
+# real twin conforms to the TwinReconstructor seam and actually flows
+# through the existing orchestration -- NOT that it reconstructs anything
+# meaningful (hidden_size is a tiny, untrained-or-arbitrarily-initialized
+# fixture network; no accuracy claim is made or tested here).
+# ---------------------------------------------------------------------------
+
+
+def _make_orchestrator_with_real_twin():
+    """A real SelfHealOrchestrator wired to a real (untrained)
+    LSTMTwinReconstructor -- integration-plumbing tests only."""
+    network = _LSTMTwinNet(hidden_size=HIDDEN_SIZE_FIXTURE)
+    twin = LSTMTwinReconstructor(network)
+    divergence_scorer = DivergenceScorer()
+    divergence_scorer.fit({"temperature": [-0.1, 0.0, 0.1]})
+    uncertainty_proxy = ElapsedTimeUncertaintyProxy(scaling_fn=_LINEAR_SCALING_FIXTURE)
+    calls = {"n": 0}
+
+    def safe_stop():
+        calls["n"] += 1
+
+    orchestrator = SelfHealOrchestrator(
+        twin=twin,
+        divergence_scorer=divergence_scorer,
+        uncertainty_proxy=uncertainty_proxy,
+        divergence_threshold=DIVERGENCE_THRESHOLD_FIXTURE,
+        uncertainty_cap=UNCERTAINTY_CAP_FIXTURE,
+        safe_stop=safe_stop,
+    )
+    return orchestrator, calls
+
+
+def test_real_lstm_twin_flows_through_self_heal_orchestrator():
+    """The real LSTMTwinReconstructor (not a fixture stub) must produce a
+    well-formed SelfHealOutcome when driven directly through the real
+    SelfHealOrchestrator."""
+    orchestrator, _calls = _make_orchestrator_with_real_twin()
+    window = _window({"temperature": 0.5})
+
+    outcome = orchestrator.process_isolated_channel("temperature", window, raw_value=0.5, trust=0.2)
+
+    assert isinstance(outcome.reconstructed_value, float)
+    assert outcome.divergence is not None
+    assert outcome.uncertainty is not None
+    assert isinstance(outcome.substituted, bool)
+    assert isinstance(outcome.escalated, bool)
+
+
+def test_real_lstm_twin_flows_through_process_isolated_channels():
+    """The full P2->P3 chain (WindowOutcome -> process_isolated_channels ->
+    SelfHealOrchestrator) with a real LSTMTwinReconstructor must produce a
+    well-formed SelfHealOutcome."""
+    orchestrator, _calls = _make_orchestrator_with_real_twin()
+    window = _window({"temperature": 0.5})
+
+    trust = {ch: TrustReading(channel=ch, g=0.0, trust=0.9, band=classify(0.9)) for ch in CHANNELS}
+    trust["temperature"] = TrustReading(channel="temperature", g=0.0, trust=0.2, band=classify(0.2))
+    window_outcome = WindowOutcome(
+        window=window,
+        anomaly=AnomalyResult(flag=False, severity=0.0),
+        channel_flags={ch: False for ch in CHANNELS},
+        trust=trust,
+        attribution={ch: AttributionResult(ch, Attribution.none, "") for ch in CHANNELS},
+    )
+
+    results = process_isolated_channels(
+        window_outcome,
+        isolated_channels={"temperature"},
+        raw_values={"temperature": 0.5},
+        orchestrator=orchestrator,
+    )
+
+    assert set(results.keys()) == {"temperature"}
+    result = results["temperature"]
+    assert isinstance(result.reconstructed_value, float)
+    assert result.divergence is not None
+    assert result.uncertainty is not None
+    assert isinstance(result.substituted, bool)
+    assert isinstance(result.escalated, bool)
