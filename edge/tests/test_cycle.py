@@ -94,7 +94,9 @@ def _window_outcome(trust_overrides: Mapping[str, float]) -> WindowOutcome:
 def _make_orchestrator(twin=None):
     twin = twin if twin is not None else _FixedReconstructionTwinFixture(0.0)
     divergence_scorer = DivergenceScorer()
-    divergence_scorer.fit({"temperature": [-0.1, 0.0, 0.1]})
+    # Both channels fit identically (same tight fixture spread) so
+    # multi-channel tests can reason about either one predictably.
+    divergence_scorer.fit({"temperature": [-0.1, 0.0, 0.1], "current": [-0.1, 0.0, 0.1]})
     uncertainty_proxy = ElapsedTimeUncertaintyProxy(scaling_fn=_LINEAR_SCALING_FIXTURE)
     calls = {"n": 0}
 
@@ -171,6 +173,26 @@ def test_trust_passed_through_unchanged():
     assert result["temperature"].substituted is False
 
 
+def test_low_trust_reported_as_substituted_through_adapter():
+    """Companion to test_trust_passed_through_unchanged: a trust value
+    BELOW TRUSTED_MIN must produce substituted=True through the adapter.
+    Paired with the above (which uses an ABOVE-threshold value), this
+    proves the actual outcome.trust[channel].trust value reaches
+    process_isolated_channel -- a bug that hardcoded a fixed high trust
+    value would pass the above test alone but fail this one."""
+    orchestrator, _ = _make_orchestrator()
+    outcome = _window_outcome({"temperature": 0.2})
+
+    result = process_isolated_channels(
+        outcome,
+        isolated_channels={"temperature"},
+        raw_values={"temperature": 0.0},
+        orchestrator=orchestrator,
+    )
+
+    assert result["temperature"].substituted is True
+
+
 def test_window_passed_through_unchanged():
     twin = _CapturingTwinFixture(0.0)
     orchestrator, _ = _make_orchestrator(twin=twin)
@@ -223,6 +245,36 @@ def test_raw_value_near_reconstruction_does_not_escalate():
 
 
 # ---------------------------------------------------------------------------
+# Multiple channels in one call
+# ---------------------------------------------------------------------------
+
+
+def test_two_channels_processed_independently():
+    """Two channels named in isolated_channels together must each get
+    their own correct window/raw_value/trust routed through, with no
+    cross-contamination between the two result entries."""
+    orchestrator, calls = _make_orchestrator()
+    outcome = _window_outcome({"temperature": 0.2, "current": 0.2})
+
+    result = process_isolated_channels(
+        outcome,
+        isolated_channels={"temperature", "current"},
+        # "temperature" stays near its reconstruction (no escalation);
+        # "current" is far from it (escalates) -- proves per-channel
+        # raw_values are routed independently, not shared/averaged.
+        raw_values={"temperature": 0.0, "current": 100.0},
+        orchestrator=orchestrator,
+    )
+
+    assert set(result.keys()) == {"temperature", "current"}
+    assert result["temperature"].escalated is False
+    assert result["temperature"].substituted is True
+    assert result["current"].escalated is True
+    assert result["current"].substituted is False
+    assert calls["n"] == 1
+
+
+# ---------------------------------------------------------------------------
 # Required-input failure behavior
 # ---------------------------------------------------------------------------
 
@@ -248,6 +300,44 @@ def test_missing_raw_value_for_isolated_channel_raises():
         process_isolated_channels(
             outcome, isolated_channels={"temperature"}, raw_values={}, orchestrator=orchestrator
         )
+
+
+def test_unknown_channel_prevents_side_effects_for_valid_channel_in_same_call():
+    """isolated_channels naming one valid channel and one unknown channel
+    together must raise ValueError WITHOUT any side effect for the valid
+    channel -- proves all channels are validated before any is acted on
+    (validate-all-upfront, Item 4 / Option A)."""
+    orchestrator, calls = _make_orchestrator()
+    outcome = _window_outcome({"temperature": 0.2})
+
+    with pytest.raises(ValueError):
+        process_isolated_channels(
+            outcome,
+            isolated_channels={"temperature", "not_a_channel"},
+            raw_values={"temperature": 0.0, "not_a_channel": 0.0},
+            orchestrator=orchestrator,
+        )
+
+    assert calls["n"] == 0
+    assert orchestrator._episodes == {}
+
+
+def test_missing_raw_value_prevents_side_effects_for_valid_channel_in_same_call():
+    """Same guarantee when the second channel is missing from raw_values
+    instead of being an unknown channel name."""
+    orchestrator, calls = _make_orchestrator()
+    outcome = _window_outcome({"temperature": 0.2, "current": 0.2})
+
+    with pytest.raises(ValueError):
+        process_isolated_channels(
+            outcome,
+            isolated_channels={"temperature", "current"},
+            raw_values={"temperature": 0.0},  # "current" is missing
+            orchestrator=orchestrator,
+        )
+
+    assert calls["n"] == 0
+    assert orchestrator._episodes == {}
 
 
 def test_isolated_channels_and_raw_values_have_no_default():

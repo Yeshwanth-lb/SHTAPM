@@ -82,7 +82,9 @@ def _make_orchestrator(
     divergence_scorer = DivergenceScorer()
     # Tight residual spread around 0.0 so a raw_value far from twin_value
     # (residual far from 0) produces a large, easily-distinguishable z-score.
-    divergence_scorer.fit({"temperature": [-0.1, 0.0, 0.1]})
+    # Both channels fit identically so multi-channel tests can reason about
+    # either one predictably.
+    divergence_scorer.fit({"temperature": [-0.1, 0.0, 0.1], "current": [-0.1, 0.0, 0.1]})
     uncertainty_proxy = ElapsedTimeUncertaintyProxy(scaling_fn=_LINEAR_SCALING_FIXTURE)
 
     calls = {"n": 0}
@@ -479,6 +481,50 @@ def test_repeated_escalation_after_reset():
     assert outcome2.escalated is True
     assert outcome2.escalation_reason == EscalationReason.DIVERGENCE_EXCEEDED
     assert calls["n"] == 2
+
+
+# ---------------------------------------------------------------------------
+# Multi-channel isolation
+# ---------------------------------------------------------------------------
+
+
+def test_two_channels_processed_independently_in_same_orchestrator():
+    """Two different channels isolated at different times in the same
+    orchestrator must not share or corrupt each other's episode/divergence
+    state."""
+    clock = ManualClock()
+    orchestrator, calls = _make_orchestrator(clock=clock)
+
+    orchestrator.process_isolated_channel("temperature", _empty_window(), raw_value=0.0, trust=0.2)
+    clock.advance(10.0)
+    orchestrator.process_isolated_channel("current", _empty_window(), raw_value=0.0, trust=0.2)
+
+    # 20s elapsed total: "temperature" has been isolated 20s, "current" only
+    # 10s -- independent per-channel timers, not a shared clock/episode.
+    clock.advance(10.0)
+    outcome_temp = orchestrator.process_isolated_channel(
+        "temperature", _empty_window(), raw_value=0.0, trust=0.2
+    )
+    outcome_current = orchestrator.process_isolated_channel(
+        "current", _empty_window(), raw_value=0.0, trust=0.2
+    )
+    assert outcome_temp.uncertainty == pytest.approx(20.0 / SUBSTITUTION_MAX_SECONDS_FIXTURE)
+    assert outcome_current.uncertainty == pytest.approx(10.0 / SUBSTITUTION_MAX_SECONDS_FIXTURE)
+
+    # Escalate "temperature" via large divergence; "current" must remain
+    # unaffected -- own episode intact, not escalated.
+    outcome_temp2 = orchestrator.process_isolated_channel(
+        "temperature", _empty_window(), raw_value=100.0, trust=0.2
+    )
+    assert outcome_temp2.escalated is True
+    assert calls["n"] == 1
+
+    outcome_current2 = orchestrator.process_isolated_channel(
+        "current", _empty_window(), raw_value=0.0, trust=0.2
+    )
+    assert outcome_current2.escalated is False
+    assert outcome_current2.substituted is True
+    assert calls["n"] == 1  # unchanged -- "current"'s own call did not escalate
 
 
 # ---------------------------------------------------------------------------

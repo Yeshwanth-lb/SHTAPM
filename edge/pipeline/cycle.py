@@ -28,6 +28,13 @@ This module only reads ``WindowOutcome``/``SelfHealOrchestrator`` and calls
 ``simulator/``, ``edge/actuation/*``, or ``edge/pipeline/self_heal.py``.
 Preserves the existing monitoring-only invariant: the raw value flows in
 exactly once per call and is never returned or fed back into P2.
+
+Validation is two-pass: every channel in ``isolated_channels`` is checked
+against ``outcome.trust``/``raw_values`` BEFORE any channel is acted on. A
+single invalid/missing entry therefore fails the whole call with no
+``orchestrator.process_isolated_channel`` call -- and no resulting side
+effect, including a real Safe Pump-Stop -- for any of the other,
+individually-valid channels named in the same call.
 """
 
 from __future__ import annotations
@@ -68,9 +75,12 @@ def process_isolated_channels(
         ValueError: a channel in ``isolated_channels`` is not present in
             ``outcome.trust`` (i.e. not one of the frozen ``CHANNELS``), or
             ``raw_values`` is missing an entry for a channel in
-            ``isolated_channels``.
+            ``isolated_channels``. Validated for ALL of ``isolated_channels``
+            BEFORE any ``orchestrator.process_isolated_channel`` call is
+            made, so one invalid entry cannot trigger a real side effect
+            (e.g. a Safe Pump-Stop) for a different, valid channel named in
+            the same call -- see module docstring.
     """
-    results: dict[str, SelfHealOutcome] = {}
     for channel in isolated_channels:
         if channel not in outcome.trust:
             raise ValueError(
@@ -81,6 +91,9 @@ def process_isolated_channels(
             raise ValueError(
                 f"raw_values is missing a required entry for isolated channel {channel!r}"
             )
+
+    results: dict[str, SelfHealOutcome] = {}
+    for channel in isolated_channels:
         results[channel] = orchestrator.process_isolated_channel(
             channel=channel,
             window=outcome.window,
