@@ -16,7 +16,5 @@ scikit-learn==1.5.*
 # Reads the .xlsx dataset files; not a runtime dependency of the edge pipeline.
 openpyxl==3.1.*
 
-# P3 (active): hardware-free LSTM digital-twin plumbing
-# (edge/models/lstm_twin.py, edge/eval/twin_training.py, D016). Pins the
-# frozen TRD §02.2 version.
-torch==2.2.*
+# P3 (optional, not required for real-time acquisition):
+# See edge/requirements-p3.txt for LSTM digital-twin training dependencies.

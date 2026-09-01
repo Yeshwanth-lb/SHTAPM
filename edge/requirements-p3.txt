@@ -1,0 +1,16 @@
+# SHTAPM P3 optional dependencies — LSTM digital-twin training only.
+#
+# These are NOT required for real-time edge acquisition/deployment on the Pi.
+# Install these only when training LSTM digital twins or running P3 evaluation:
+#
+#   pip install -r edge/requirements.txt        # P1+P2 (acquisition + anomaly detection)
+#   pip install -r edge/requirements-p3.txt     # P3 (optional: LSTM training)
+#
+# Note: torch may not have wheels for all Python versions/architectures.
+# On platforms without torch wheels, P3 training is unavailable but P1+P2
+# acquisition/detection continues normally.
+
+# P3 (optional): hardware-free LSTM digital-twin plumbing
+# (edge/models/lstm_twin.py, edge/eval/twin_training.py, D016).
+# Pins the frozen TRD §02.2 version.
+torch==2.2.*
