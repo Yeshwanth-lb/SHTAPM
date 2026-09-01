@@ -1,13 +1,24 @@
 # SHTAPM edge runtime dependencies.
-# Populated in later phases from the frozen stack (TRD §02.2), NOT in P0:
-#   P1: paho-mqtt==1.6.*, gpiozero, smbus2, spidev, w1thermsensor,
-#       adafruit-circuitpython-dht
-#   P3 (RL, not yet active): stable-baselines3==2.3.*
+#
+# This file covers what edge/main.py actually imports and executes (P1
+# acquisition path) plus P2 anomaly-detection tooling. P3 (torch) is
+# deliberately kept out — see edge/requirements-p3.txt.
+#
+# Not yet needed (no driver code imports them): gpiozero, spidev,
+# w1thermsensor, adafruit-circuitpython-dht — the other five channels are
+# still fake drivers (edge/drivers/fake.py); add these only when a real
+# driver for that channel lands.
 
 # P0/M3 (active): Shared contract serialization (frozen telemetry message).
 # Edge imports app.schemas.contracts (backend Pydantic models); required to build
 # TelemetryMessage on the edge for MQTT publication. Pinned to frozen stack.
 pydantic==2.*
+
+# P1 (active): MQTT telemetry/status publishing (edge/acquisition/mqtt_publisher.py).
+# `ResilientTelemetryPublisher.start()` imports `paho.mqtt.client` — required for
+# edge/main.py to actually run (import of the module succeeds without it; calling
+# publisher.start() does not). Same pin as backend/requirements.txt.
+paho-mqtt==1.6.*
 
 # P1 (active): INA219 current sensor driver over I²C (edge/drivers/ina219.py).
 smbus2==0.4.*
