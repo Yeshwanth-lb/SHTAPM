@@ -3,7 +3,9 @@
 #   P1: paho-mqtt==1.6.*, gpiozero, smbus2, spidev, w1thermsensor,
 #       adafruit-circuitpython-dht
 #   P3 (RL, not yet active): stable-baselines3==2.3.*
-# (kept empty in P0 so nothing is installed before its phase)
+
+# P1 (active): INA219 current sensor driver over I²C (edge/drivers/ina219.py).
+smbus2==0.4.*
 
 # P2 (active): Isolation Forest detector (edge/anomaly/iforest.py, FR-A1).
 # Pulls in a compatible numpy transitively; no separate numpy pin here.
