@@ -4,6 +4,11 @@
 #       adafruit-circuitpython-dht
 #   P3 (RL, not yet active): stable-baselines3==2.3.*
 
+# P0/M3 (active): Shared contract serialization (frozen telemetry message).
+# Edge imports app.schemas.contracts (backend Pydantic models); required to build
+# TelemetryMessage on the edge for MQTT publication. Pinned to frozen stack.
+pydantic==2.*
+
 # P1 (active): INA219 current sensor driver over I²C (edge/drivers/ina219.py).
 smbus2==0.4.*
 
