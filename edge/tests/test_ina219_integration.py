@@ -23,7 +23,9 @@ def test_ina219_driver_integrates_with_sampler():
     """
     # Set up mock I²C bus for INA219
     mock_bus = MagicMock()
-    mock_bus.read_i2c_block_data.return_value = [0x00, 0x64]  # 1.0 A
+    mock_bus.write_i2c_block_data.return_value = None
+    # 0x0CCC = 3276 counts; with 5A max / 0.1Ω: ~0.5 A
+    mock_bus.read_i2c_block_data.return_value = [0x0C, 0xCC]
     mock_smbus2 = MagicMock()
     mock_smbus2.SMBus.return_value = mock_bus
 
@@ -43,7 +45,10 @@ def test_ina219_driver_integrates_with_sampler():
         drivers = fake_drivers(fake_values)
 
         # Replace the fake current driver with the real INA219 driver
-        drivers["current"] = INA219Driver(bus_num=1, address=0x40)
+        # (with typical calibration: 5A max, 0.1Ω shunt)
+        drivers["current"] = INA219Driver(
+            bus_num=1, address=0x40, max_expected_amps=5.0, shunt_ohms=0.1
+        )
 
         # Create sampler with mixed real + fake drivers
         sampler = Sampler(device_id="pump-01", drivers=drivers)
@@ -64,7 +69,7 @@ def test_ina219_driver_integrates_with_sampler():
         assert sensors.pressure == 1013.0
         assert sensors.humidity == 45.0
         assert sensors.gas == 150.0
-        assert sensors.current == 1.0  # From real INA219 driver
+        assert abs(sensors.current - 0.5) < 0.01  # From real INA219 driver (~0.5 A)
 
     finally:
         ina219_module.smbus2 = original_smbus2
@@ -76,9 +81,9 @@ def test_ina219_driver_unhealthy_read_propagates_through_sampler():
     This demonstrates the architecture's handling of hardware failures:
     no frame is produced, and the C3 publisher does not emit anything.
     """
-    # Mock I²C bus to fail
+    # Mock I²C bus to fail during calibration write
     mock_smbus2 = MagicMock()
-    mock_smbus2.SMBus.side_effect = OSError("Device not responding")
+    mock_smbus2.SMBus.return_value.write_i2c_block_data.side_effect = OSError("Device not responding")
 
     original_smbus2 = ina219_module.smbus2
     try:
@@ -93,7 +98,9 @@ def test_ina219_driver_unhealthy_read_propagates_through_sampler():
             "current": 0.0,  # placeholder; will be replaced
         }
         drivers = fake_drivers(fake_values)
-        drivers["current"] = INA219Driver(bus_num=1, address=0x40)
+        drivers["current"] = INA219Driver(
+            bus_num=1, address=0x40, max_expected_amps=5.0, shunt_ohms=0.1
+        )
 
         sampler = Sampler(device_id="pump-01", drivers=drivers)
         result = sampler.sample_once()
