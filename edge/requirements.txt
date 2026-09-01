@@ -8,8 +8,9 @@
 smbus2==0.4.*
 
 # P2 (active): Isolation Forest detector (edge/anomaly/iforest.py, FR-A1).
+# Upgraded to 1.5.* for Python 3.13 support (numpy 2.1.0+).
 # Pulls in a compatible numpy transitively; no separate numpy pin here.
-scikit-learn==1.4.*
+scikit-learn==1.5.*
 
 # P2 (active): SWaT.A1 dataset harness (edge/eval/swat_eval.py, D011/D012).
 # Reads the .xlsx dataset files; not a runtime dependency of the edge pipeline.
