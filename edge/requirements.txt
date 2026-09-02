@@ -5,9 +5,13 @@
 # deliberately kept out — see edge/requirements-p3.txt.
 #
 # Not yet needed (no driver code imports them): gpiozero, spidev,
-# w1thermsensor, adafruit-circuitpython-dht — the other five channels are
-# still fake drivers (edge/drivers/fake.py); add these only when a real
+# w1thermsensor — four channels (temperature, vibration, pressure, gas)
+# are still fake drivers (edge/drivers/fake.py); add these only when a real
 # driver for that channel lands.
+#
+# humidity (edge/drivers/dht22.py) needs no extra package: it reads the
+# kernel dht11 IIO driver's sysfs files (stdlib pathlib only) rather than a
+# userspace DHT library — see edge/drivers/dht22.py module docstring.
 
 # P0/M3 (active): Shared contract serialization (frozen telemetry message).
 # Edge imports app.schemas.contracts (backend Pydantic models); required to build
