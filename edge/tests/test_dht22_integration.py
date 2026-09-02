@@ -23,7 +23,7 @@ def _make_iio_device(root, name: str, humidity_raw: str) -> None:
 
 def test_dht22_driver_integrates_with_sampler(tmp_path):
     """DHT22Driver can be used in place of fake_drivers for the humidity channel."""
-    _make_iio_device(tmp_path, "dht11", "452")  # -> 45.2 %RH
+    _make_iio_device(tmp_path, "dht11@11", "62600")  # -> 62.6 %RH (milli-percent)
 
     fake_values = {
         "temperature": 26.0,
@@ -48,7 +48,7 @@ def test_dht22_driver_integrates_with_sampler(tmp_path):
     assert sensors.temperature == 26.0
     assert sensors.vibration == 0.03
     assert sensors.pressure == 1013.0
-    assert sensors.humidity == pytest.approx(45.2)  # from real DHT22 driver
+    assert sensors.humidity == pytest.approx(62.6)  # from real DHT22 driver
     assert sensors.gas == 150.0
     assert sensors.current == 0.0
 

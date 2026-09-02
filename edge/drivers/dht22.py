@@ -9,9 +9,21 @@ microsecond bit-banging happens in the kernel, not in userspace Python, which
 is what makes this reliable on Pi 5 (unlike userspace pulseio-based libraries).
 
 Sysfs layout (per device), e.g. for gpiopin=17:
-  /sys/bus/iio/devices/iio:deviceN/name                       -> "dht11"
-  /sys/bus/iio/devices/iio:deviceN/in_humidityrelative_input  -> integer, ×10 %RH
-  /sys/bus/iio/devices/iio:deviceN/in_temp_input               -> integer, ×10 °C (unused here)
+  /sys/bus/iio/devices/iio:deviceN/name                       -> "dht11" or "dht11@<gpio>"
+  /sys/bus/iio/devices/iio:deviceN/in_humidityrelative_input  -> integer, milli-percent %RH
+  /sys/bus/iio/devices/iio:deviceN/in_temp_input               -> integer, milli-°C (unused here)
+
+The kernel's `name` attribute is `pdev->name` — on Raspberry Pi OS this is the
+overlay-instantiated platform device name, observed as `dht11@11` (a
+`<driver>@<instance>` form, not the bare driver name `dht11`), so discovery
+matches on the `dht11` prefix rather than exact equality (verified against a
+physical DHT22 on Raspberry Pi 5).
+
+`in_humidityrelative_input` / `in_temp_input` follow the standard IIO ABI
+(Documentation/ABI/testing/sysfs-bus-iio): values are in milli-percent /
+milli-degrees Celsius, i.e. divide by 1000 (e.g. 62600 -> 62.6 %RH) — verified
+against the kernel driver's dht11_decode(), which stores the sensor's native
+0.1%-resolution count ×100 (626 ×100 = 62600), and against physical readings.
 
 This driver reads only humidity, consistent with the frozen six-channel
 contract — temperature is supplied separately by the DS18B20 channel.
@@ -24,8 +36,19 @@ from pathlib import Path
 from edge.drivers.base import RawRead, Sensor, SensorDriver
 
 _IIO_ROOT = Path("/sys/bus/iio/devices")
-_DRIVER_NAME = "dht11"  # kernel module name; handles DHT11/DHT22/AM2302 alike
+_DRIVER_NAME = "dht11"  # kernel platform-device name prefix; handles DHT11/DHT22/AM2302 alike
 _HUMIDITY_ATTR = "in_humidityrelative_input"
+_MILLI_PERCENT_PER_PERCENT = 1000.0
+
+
+def _matches_driver(name: str, driver_name: str) -> bool:
+    """True if `name` is the bare driver name or a `<driver>@<instance>` variant.
+
+    The kernel's IIO `name` attribute is the platform device name (`pdev->name`),
+    which on Raspberry Pi OS's dht11 overlay is instantiated as `dht11@<gpio>`
+    (e.g. `dht11@11`) rather than the bare `dht11` — both forms are accepted.
+    """
+    return name == driver_name or name.startswith(f"{driver_name}@")
 
 
 def _find_iio_device(root: Path, driver_name: str) -> Path:
@@ -44,19 +67,19 @@ def _find_iio_device(root: Path, driver_name: str) -> Path:
             name = (candidate / "name").read_text().strip()
         except OSError:
             continue
-        if name == driver_name:
+        if _matches_driver(name, driver_name):
             return candidate
     raise OSError(
-        f"no IIO device named {driver_name!r} found under {root}; "
-        "is dtoverlay=dht11,gpiopin=<N> enabled in config.txt?"
+        f"no IIO device matching driver {driver_name!r} (or {driver_name}@*) "
+        f"found under {root}; is dtoverlay=dht11,gpiopin=<N> enabled in config.txt?"
     )
 
 
 class DHT22HumidityReader:
     """Reads %RH from the kernel dht11 IIO driver's in_humidityrelative_input.
 
-    The kernel scales the raw integer ×10 for one-decimal precision
-    (e.g. 452 → 45.2 %RH).
+    The kernel reports the value in milli-percent per the standard IIO ABI
+    (divide by 1000, e.g. 62600 → 62.6 %RH).
     """
 
     def __init__(
@@ -100,7 +123,7 @@ class DHT22HumidityReader:
             raw_value = int(raw_text)
         except ValueError as e:
             raise OSError(f"unexpected value {raw_text!r} in {raw_file}: {e}")
-        return raw_value / 10.0
+        return raw_value / _MILLI_PERCENT_PER_PERCENT
 
 
 def dht22_raw_read(

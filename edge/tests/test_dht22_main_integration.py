@@ -73,8 +73,8 @@ def test_frozen_contract_with_dht22_humidity(tmp_path):
 
     device_dir = tmp_path / "device0"
     device_dir.mkdir(parents=True)
-    (device_dir / "name").write_text("dht11")
-    (device_dir / "in_humidityrelative_input").write_text("452")  # -> 45.2 %RH
+    (device_dir / "name").write_text("dht11@11")
+    (device_dir / "in_humidityrelative_input").write_text("62600")  # -> 62.6 %RH (milli-percent)
 
     drivers = fake_drivers(_dev_values())
     drivers["humidity"] = DHT22Driver(iio_path=device_dir)
@@ -89,7 +89,7 @@ def test_frozen_contract_with_dht22_humidity(tmp_path):
     assert sensors.temperature == 26.0
     assert sensors.vibration == 0.03
     assert sensors.pressure == 1013.0
-    assert abs(sensors.humidity - 45.2) < 0.01  # From real DHT22
+    assert abs(sensors.humidity - 62.6) < 0.01  # From real DHT22
     assert sensors.gas == 150.0
     assert sensors.current == 0.0
 
