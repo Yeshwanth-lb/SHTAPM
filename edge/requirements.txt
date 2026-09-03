@@ -4,14 +4,16 @@
 # acquisition path) plus P2 anomaly-detection tooling. P3 (torch) is
 # deliberately kept out — see edge/requirements-p3.txt.
 #
-# Not yet needed (no driver code imports them): gpiozero, spidev,
-# w1thermsensor — four channels (temperature, vibration, pressure, gas)
-# are still fake drivers (edge/drivers/fake.py); add these only when a real
-# driver for that channel lands.
+# Not yet needed (no driver code imports them): gpiozero, spidev — three
+# channels (vibration, pressure, gas) are still fake drivers
+# (edge/drivers/fake.py); add these only when a real driver for that
+# channel lands.
 #
-# humidity (edge/drivers/dht22.py) needs no extra package: it reads the
-# kernel dht11 IIO driver's sysfs files (stdlib pathlib only) rather than a
-# userspace DHT library — see edge/drivers/dht22.py module docstring.
+# humidity (edge/drivers/dht22.py) and temperature (edge/drivers/ds18b20.py)
+# need no extra package: both read kernel-driver sysfs files (stdlib pathlib
+# only) rather than a userspace library — see their module docstrings.
+# w1thermsensor specifically is NOT used for the same reason (DS18B20 reads
+# /sys/bus/w1/devices/28-*/w1_slave directly).
 
 # P0/M3 (active): Shared contract serialization (frozen telemetry message).
 # Edge imports app.schemas.contracts (backend Pydantic models); required to build

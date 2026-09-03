@@ -3,9 +3,10 @@
 Runs the C1→C2→C3 pipeline with:
   - Real INA219 current sensor over I²C (0x40 on /dev/i2c-1)
   - Real DHT22 humidity sensor via the kernel IIO interface (GPIO17)
-  - Fake drivers for the remaining channels (temperature, vibration, pressure, gas)
+  - Real DS18B20 temperature probe via the kernel 1-Wire interface (GPIO4)
+  - Fake drivers for the remaining channels (vibration, pressure, gas)
 
-    INA219 + DHT22 + fake drivers → Sampler → TelemetryMessage → ResilientTelemetryPublisher → Mosquitto
+    INA219 + DHT22 + DS18B20 + fake drivers → Sampler → TelemetryMessage → ResilientTelemetryPublisher → Mosquitto
 
 The frozen six-channel telemetry contract is preserved. Thin by design
 (env + wiring + signals) — the logic lives in the tested runtime/sampler/publisher.
@@ -23,13 +24,15 @@ from edge.acquisition.mqtt_publisher import ResilientTelemetryPublisher
 from edge.acquisition.runtime import AcquisitionRuntime
 from edge.acquisition.sampler import Sampler
 from edge.drivers.dht22 import DHT22Driver
+from edge.drivers.ds18b20 import DS18B20Driver
 from edge.drivers.fake import fake_drivers
 from edge.drivers.ina219 import INA219Driver
 
 # Plausible steady-state constants for fake sensors (dev only — not authoritative specs).
-# The "current" and "humidity" values are placeholders; replaced by real drivers below.
+# The "current", "humidity", and "temperature" values are placeholders; replaced by
+# real drivers below.
 _DEV_VALUES = {
-    "temperature": 26.0,
+    "temperature": 26.0,  # Placeholder; replaced by DS18B20Driver
     "vibration": 0.03,
     "pressure": 1013.0,
     "humidity": 45.0,  # Placeholder; replaced by DHT22Driver
@@ -44,7 +47,7 @@ def main() -> None:
     host = os.environ.get("EDGE_MQTT_HOST", "localhost")
     port = int(os.environ.get("EDGE_MQTT_PORT", "1883"))
 
-    # Create fake drivers for four channels (temperature, vibration, pressure, gas)
+    # Create fake drivers for three channels (vibration, pressure, gas)
     drivers = fake_drivers(_DEV_VALUES)
 
     # Replace the fake current driver with real INA219 (bus 1, address 0x40)
@@ -55,6 +58,9 @@ def main() -> None:
 
     # Replace the fake humidity driver with real DHT22 (kernel dht11 IIO driver, GPIO17)
     drivers["humidity"] = DHT22Driver()
+
+    # Replace the fake temperature driver with real DS18B20 (kernel 1-Wire driver, GPIO4)
+    drivers["temperature"] = DS18B20Driver()
 
     sampler = Sampler(device_id=device_id, drivers=drivers)
     publisher = ResilientTelemetryPublisher(device_id=device_id, rate_hz=rate_hz)
@@ -71,7 +77,8 @@ def main() -> None:
 
     print(
         f"[edge] MIXED HW/DEV: real INA219 (current) + real DHT22 (humidity) + "
-        f"fake drivers → {publisher.telemetry_topic} at {rate_hz} Hz (Ctrl-C to stop)"
+        f"real DS18B20 (temperature) + fake drivers → {publisher.telemetry_topic} "
+        f"at {rate_hz} Hz (Ctrl-C to stop)"
     )
     try:
         runtime.run(should_continue=lambda: running["go"], sleep=time.sleep)
