@@ -4,10 +4,9 @@
 # acquisition path) plus P2 anomaly-detection tooling. P3 (torch) is
 # deliberately kept out — see edge/requirements-p3.txt.
 #
-# Not yet needed (no driver code imports them): gpiozero, spidev — three
-# channels (vibration, pressure, gas) are still fake drivers
-# (edge/drivers/fake.py); add these only when a real driver for that
-# channel lands.
+# Not yet needed (no driver code imports them): gpiozero — two channels
+# (pressure, gas) are still fake drivers (edge/drivers/fake.py); add this
+# only when a real driver for one of them lands.
 #
 # humidity (edge/drivers/dht22.py) and temperature (edge/drivers/ds18b20.py)
 # need no extra package: both read kernel-driver sysfs files (stdlib pathlib
@@ -28,6 +27,9 @@ paho-mqtt==1.6.*
 
 # P1 (active): INA219 current sensor driver over I²C (edge/drivers/ina219.py).
 smbus2==0.4.*
+
+# P1 (active): ADXL335 vibration sensor driver over MCP3008/SPI (edge/drivers/adxl335.py).
+spidev==3.8.*
 
 # P2 (active): Isolation Forest detector (edge/anomaly/iforest.py, FR-A1).
 # Upgraded to 1.5.* for Python 3.13 support (numpy 2.1.0+).
