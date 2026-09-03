@@ -21,15 +21,28 @@ merged:
 Publish failures are NOT swallowed — an unexpected exception from
 ``publisher.publish`` propagates out of the loop rather than falsely reporting a
 successful transmission.
+
+An unhealthy tick (any channel's ``Reading.healthy`` is False) is, by design,
+silent on the wire — no frame, nothing published (C2's decision C: the frozen
+contract has no per-channel health field). ``Sensor.read()`` (P1 base.py) also
+swallows the underlying exception for the same never-throws-into-the-loop
+discipline, so without a local log line an unhealthy tick is invisible from
+the running process's output — undiagnosable without reading source and adding
+print statements. ``tick()`` logs a WARNING naming the unhealthy channel(s) so
+this is visible at the point it happens, without changing the health gate, the
+wire contract, or hiding/downgrading the underlying failure.
 """
 
 from __future__ import annotations
 
+import logging
 import time
 from collections.abc import Callable
 
 from edge.acquisition.mqtt_publisher import ResilientTelemetryPublisher
 from edge.acquisition.sampler import MAX_RATE_HZ, MIN_RATE_HZ, Sampler, SampleResult
+
+log = logging.getLogger("shtapm.edge.runtime")
 
 
 class AcquisitionRuntime:
@@ -48,10 +61,18 @@ class AcquisitionRuntime:
 
     def tick(self) -> SampleResult:
         """One sample tick: sample, and publish only if a frame was produced.
-        Publish exceptions propagate (no silent swallow)."""
+        Publish exceptions propagate (no silent swallow). An unhealthy tick logs
+        a WARNING naming the unhealthy channel(s) — see module docstring."""
         result = self._sampler.sample_once()
         if result.frame is not None:
             self._publisher.publish(result.frame)
+        else:
+            unhealthy = sorted(ch for ch, r in result.readings.items() if not r.healthy)
+            log.warning(
+                "unhealthy tick at ts=%s — no frame published; unhealthy channels=%s",
+                result.ts,
+                unhealthy,
+            )
         return result
 
     def run(

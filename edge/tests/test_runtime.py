@@ -91,6 +91,48 @@ def test_unhealthy_tick_publishes_nothing():
     assert _telemetry(client) == []  # nothing published on the unhealthy tick
 
 
+def test_unhealthy_tick_logs_unhealthy_channels(caplog):
+    """An unhealthy tick is diagnosable from the runtime's own log output —
+    Sensor.read() swallows the underlying exception (never-throws-into-the-loop
+    discipline), so this is the only place that names which channel(s) failed."""
+    drivers = fake_drivers(VALUES)
+    drivers["pressure"] = Sensor(unit="hPa", raw_read=scripted_raw([OSError("i2c")]), clock=_clock)
+    runtime, _pub, client = _wire(drivers)
+    client.fire_connect()
+
+    with caplog.at_level("WARNING", logger="shtapm.edge.runtime"):
+        runtime.tick()
+
+    assert len(caplog.records) == 1
+    message = caplog.records[0].getMessage()
+    assert "pressure" in message
+    assert FIXED_TS in message
+
+
+def test_healthy_tick_does_not_log_warning(caplog):
+    runtime, _pub, client = _wire(fake_drivers(VALUES))
+    client.fire_connect()
+
+    with caplog.at_level("WARNING", logger="shtapm.edge.runtime"):
+        runtime.tick()
+
+    assert caplog.records == []
+
+
+def test_unhealthy_tick_logs_all_unhealthy_channels_sorted(caplog):
+    drivers = fake_drivers(VALUES)
+    drivers["pressure"] = Sensor(unit="hPa", raw_read=scripted_raw([OSError("i2c")]), clock=_clock)
+    drivers["gas"] = Sensor(unit="ppm", raw_read=scripted_raw([OSError("adc")]), clock=_clock)
+    runtime, _pub, client = _wire(drivers)
+    client.fire_connect()
+
+    with caplog.at_level("WARNING", logger="shtapm.edge.runtime"):
+        runtime.tick()
+
+    assert len(caplog.records) == 1
+    assert "['gas', 'pressure']" in caplog.records[0].getMessage()
+
+
 def test_unhealthy_then_healthy_only_publishes_healthy():
     drivers = fake_drivers(VALUES)
     drivers["gas"] = Sensor(
