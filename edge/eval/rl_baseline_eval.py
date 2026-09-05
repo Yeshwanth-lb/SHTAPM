@@ -74,6 +74,20 @@ NOT A VALIDATION CLAIM: nothing in this module marks either baseline
 actuation" -- see ``EpisodeRecord``'s fixed metadata fields. Both
 baselines' entire purpose is to be a REFERENCE POINT for a future trained
 policy, not a claim about real system behavior.
+
+ACTION-DEPENDENT TRANSITION (this module's environment dependency, not
+this module's own logic): ``edge/rl/environment.py`` now applies a
+held-last-value substitution for tracked-and-isolated channels and skips
+the transition entirely on an approved safe-stop (see that module's own
+ACTION-DEPENDENT TRANSITION docstring section). Every ``TransitionRecord``
+here therefore also carries ``transition_consumed``,
+``substituted_channels``, and ``transition_substitution_mode`` -- and
+every ``EpisodeRecord`` carries ``comparison_caveat``
+(``ACTION_DEPENDENT_COMPARISON_CAVEAT``): a reward difference between two
+episodes may now reflect both decision quality and the resulting
+simulated observation path, not decision quality alone, since two
+baselines can diverge into different observed telemetry once their
+approved actions differ.
 """
 
 from __future__ import annotations
@@ -179,9 +193,32 @@ class TransitionRecord:
     reward_components: dict[str, float]
     total_reward: float | None
     done: bool
+    transition_consumed: bool
+    safe_stop_terminated_without_transition: bool
+    transition_substitution_mode: str | None
+    substituted_channels: tuple[str, ...]
     execution_mode: str = EXECUTION_MODE
     data_source: str = DATA_SOURCE
     model_status: str = MODEL_STATUS
+
+
+# Recorded on every EpisodeRecord (see requirement to record the comparison
+# caveat, not just document it in prose): once the environment's transition
+# became action-dependent (edge/rl/environment.py's ACTION-DEPENDENT
+# TRANSITION), two baselines run over the same ScenarioConfig can observe
+# DIFFERENT simulated telemetry from each other whenever their approved
+# actions differ (isolate substitutes; safe_stop skips the transition) --
+# a reward difference between two EpisodeRecords therefore reflects BOTH
+# decision quality AND the resulting simulated observation path, no longer
+# decision quality alone. This was not true before this increment, when
+# every baseline observed the identical precomputed trajectory regardless
+# of its actions.
+ACTION_DEPENDENT_COMPARISON_CAVEAT = (
+    "Reward differences between EpisodeRecords may now reflect both decision "
+    "quality and the resulting simulated observation path (substitution/"
+    "safe-stop), not decision quality alone -- see edge/rl/environment.py's "
+    "ACTION-DEPENDENT TRANSITION section."
+)
 
 
 @dataclass(frozen=True)
@@ -203,6 +240,7 @@ class EpisodeRecord:
     final_failure_eta: float | None
     reward_policy_status: str
     transitions: tuple[TransitionRecord, ...]
+    comparison_caveat: str = ACTION_DEPENDENT_COMPARISON_CAVEAT
     execution_mode: str = EXECUTION_MODE
     data_source: str = DATA_SOURCE
     model_status: str = MODEL_STATUS
@@ -313,6 +351,12 @@ def _run_episode(
                 reward_components=asdict(result.reward.components),
                 total_reward=result.reward.total,
                 done=result.done,
+                transition_consumed=bool(result.info["transition_consumed"]),
+                safe_stop_terminated_without_transition=bool(
+                    result.info["safe_stop_terminated_without_transition"]
+                ),
+                transition_substitution_mode=result.info["transition_substitution_mode"],
+                substituted_channels=tuple(result.info["substituted_channels"]),
             )
         )
         state = result.state

@@ -48,8 +48,11 @@ call now:
      valid or not; this module never second-guesses or bypasses it, and
      never raises for an invalid/unrecognized action itself (that is
      exactly the gate's job -- see the CORRECTION note below);
-  4. applies the already-defined simulation transition (advances one
-     buffered frame through the same real, unmodified P2 pipeline);
+  4. applies the action-dependent simulation transition -- see the
+     ACTION-DEPENDENT TRANSITION section below for exactly what each
+     approved action does and does not change; most actions simply
+     advance one buffered frame through the same real, unmodified P2
+     pipeline, unchanged;
   5. captures ``next_state``;
   6. calls ``compute_reward(previous_state, gate_decision, next_state,
      weights=self._reward_weights)`` -- ``weights`` is ``None`` (the
@@ -147,6 +150,73 @@ PUBLIC CONTRACT CHANGES (see the increment's own report for full detail):
     ``RewardSignal`` (removed -- it served no purpose once real reward
     wiring existed).
   - ``EnvironmentStepResult`` gains a new ``gate_decision`` field.
+
+ACTION-DEPENDENT TRANSITION (this increment's addition) -- the SMALLEST
+defensible model, deliberately not a hardware simulation:
+
+  - ``continue_``, ``alert``, ``reduce_weight``: NO trajectory effect.
+    ``reduce_weight`` is a no-op specifically because no approved
+    magnitude/formula for down-weighting exists anywhere in this project
+    (FR-H1 names the requirement, not a number) -- inventing one here
+    would be exactly the kind of unapproved research value this pathway
+    must not introduce.
+  - ``isolate``: for each channel in the persistent, already-existing
+    ``IsolationFallbackTracker``'s ``tracked_channels`` (never a new
+    channel-selection rule, never RL-chosen, never widening ``RLAction``),
+    substitute that channel's raw value in the NEXT frame with its own
+    HELD LAST PRE-ISOLATION VALUE (``TRANSITION_SUBSTITUTION_MODE =
+    "hold_last_value"``) before it reaches the real, unmodified P2
+    pipeline. This is a bare freeze, not a reconstruction -- it is NOT
+    digital-twin behavior (``edge/models/lstm_twin.py`` is untouched and
+    uninvolved), NOT divergence-scored, and NOT proportional. The
+    original generated frame in ``self._frames`` is never mutated (frames
+    are immutable pydantic models regardless); a NEW, separate
+    ``TelemetryMessage`` is built in memory via the same shared
+    ``build_telemetry`` helper ``edge/injection/injections.py`` already
+    uses for its own frame rebuilding, and only that new object is fed to
+    the monitor. Substitution only happens on a step whose
+    ``gate_decision.approved_action`` IS ``isolate`` -- if the gate
+    approves a different action (e.g. ``alert``) on a step where a
+    channel is still tracked, no substitution occurs that step, even
+    though the channel remains tracked for future steps. This is a
+    direct, deliberate consequence of "only ``isolate`` has a transition
+    effect" -- not a bug.
+  - ``safe_stop``: the transition is SKIPPED entirely -- no frame is fed,
+    the cursor does not advance, and the returned "next" state is
+    literally the same ``RLState`` object as ``previous_state`` (nothing
+    changed, because nothing ran). This also fixes a real bug this
+    increment corrects: the prior version still fed one more frame after
+    approving ``safe_stop`` before terminating (a "phantom" tick the pump
+    kept running through after the stop decision) -- ``step()`` now
+    checks ``gate_decision.approved_action`` BEFORE touching the frame
+    stream, exactly restoring the "gate decision before transition"
+    ordering FR-RL4 requires.
+
+HELD-VALUE BOOKKEEPING: ``self._held_values`` captures, once, the raw
+value a channel had (from ``self._latest_raw``, the same already-existing
+raw-value plumbing ``edge/pipeline/monitor.py`` built) at the exact moment
+it FIRST appears in the tracker's ``tracked_channels`` -- never updated
+again afterward (the tracker's own ``tracked_channels`` is itself
+monotonically non-shrinking, per ``edge/pipeline/isolation_tracker.py``'s
+documented "no confirmed recovery" stance, so a channel needs exactly one
+freeze point for the rest of the episode).
+
+HEALTH AND PROGNOSIS ARE UNCHANGED BY ISOLATION: ``_build_state()``'s
+``health`` still comes only from the generator's own ground truth
+(``self._health[raw.sample_seq]``), regardless of any substitution --
+isolating a SENSOR does not repair the simulated equipment's physical
+condition, so health must not react to it. ``failure_eta`` is still
+either a real model inference (when a ``PrognosisRuntime`` is supplied)
+or honestly ``None`` -- substitution changes what the NEXT window's raw
+values are, which can influence a real trust/prognosis computation
+indirectly (exactly as a real substituted sensor would), but nothing here
+fabricates or overrides those outputs directly.
+
+NOT ADDED (explicitly out of scope for this increment): twin
+reconstruction, divergence scoring, any proportional/graded isolation
+effect, any ``reduce_weight`` numeric scaling, any health-recovery model,
+any failure-ETA override, any new ``RLAction`` member, and any per-channel
+RL action targeting.
 """
 
 from __future__ import annotations
@@ -155,7 +225,8 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from app.schemas.contracts import RLAction
+from app.schemas.build import build_telemetry
+from app.schemas.contracts import CHANNELS, RLAction, TelemetryMessage
 
 from edge.anomaly.pipeline import P2Pipeline, WindowOutcome
 from edge.anomaly.preprocess import Preprocessor
@@ -177,6 +248,7 @@ if TYPE_CHECKING:  # pragma: no cover - import-time-only, avoids a hard torch
 EXECUTION_MODE = "simulation"
 DATA_SOURCE = "synthetic"
 MODEL_STATUS = "diagnostic_unvalidated"
+TRANSITION_SUBSTITUTION_MODE = "hold_last_value"
 
 
 @dataclass(frozen=True)
@@ -239,6 +311,8 @@ class SHTAPMSimulationEnvironment:
         self._has_reset = False
         self._done = False
         self._last_state: RLState | None = None
+        self._currently_isolated: frozenset[str] = frozenset()
+        self._held_values: dict[str, float] = {}
 
     def _capture_outcome(self, outcome: WindowOutcome) -> None:
         self._latest_outcome = outcome
@@ -246,10 +320,34 @@ class SHTAPMSimulationEnvironment:
     def _capture_raw(self, _outcome: WindowOutcome, raw: RawChannelValues) -> None:
         self._latest_raw = raw
 
-    def _feed_next_frame(self) -> None:
+    def _update_held_values(self, tracked_channels: frozenset[str]) -> None:
+        """Freeze each newly-tracked channel's raw value, ONCE, at the
+        moment it first appears in the tracker's own persistent set -- see
+        module docstring's HELD-VALUE BOOKKEEPING section."""
+        if self._latest_raw is None:
+            return
+        newly_tracked = tracked_channels - self._held_values.keys()
+        for channel in newly_tracked:
+            self._held_values[channel] = self._latest_raw.values[channel]
+
+    def _substituted_frame(
+        self, frame: TelemetryMessage, channels: frozenset[str]
+    ) -> TelemetryMessage:
+        """A NEW ``TelemetryMessage`` with each of ``channels`` replaced by
+        its held value -- ``frame`` itself is never mutated (see module
+        docstring's ACTION-DEPENDENT TRANSITION section)."""
+        values = {ch: getattr(frame.sensors, ch) for ch in CHANNELS}
+        for channel in channels:
+            if channel in self._held_values:
+                values[channel] = self._held_values[channel]
+        return build_telemetry(frame.device_id, frame.ts, values, frame.sample_seq)
+
+    def _feed_next_frame(self, *, substitute_channels: frozenset[str] = frozenset()) -> None:
         if self._cursor >= len(self._frames):
             raise RuntimeError("no more frames in this episode's trajectory")
         frame = self._frames[self._cursor]
+        if substitute_channels:
+            frame = self._substituted_frame(frame, substitute_channels)
         self._cursor += 1
         self._monitor.on_frame(frame)
 
@@ -312,6 +410,9 @@ class SHTAPMSimulationEnvironment:
         assert self._latest_outcome is not None  # same guarantee
 
         isolation_status = self._isolation_tracker.update(self._latest_outcome)
+        self._update_held_values(isolation_status.tracked_channels)
+        self._currently_isolated = isolation_status.tracked_channels
+
         gate_decision = evaluate_rl_action(
             requested_action=action,
             state=previous_state,
@@ -323,8 +424,24 @@ class SHTAPMSimulationEnvironment:
             already_safe_stopped=False,  # see module docstring
         )
 
-        self._feed_next_frame()  # the already-defined simulation transition
-        next_state = self._build_state()
+        substituted_channels: frozenset[str] = frozenset()
+        transition_consumed: bool
+        safe_stop_terminated_without_transition: bool
+
+        if gate_decision.approved_action is RLAction.safe_stop:
+            # Skip the transition entirely -- see module docstring's
+            # ACTION-DEPENDENT TRANSITION section. "Next" state is exactly
+            # the state we already had; nothing ran.
+            next_state = previous_state
+            transition_consumed = False
+            safe_stop_terminated_without_transition = True
+        else:
+            if gate_decision.approved_action is RLAction.isolate:
+                substituted_channels = self._currently_isolated & self._held_values.keys()
+            self._feed_next_frame(substitute_channels=substituted_channels)
+            next_state = self._build_state()
+            transition_consumed = True
+            safe_stop_terminated_without_transition = False
 
         reward = compute_reward(
             previous_state=previous_state,
@@ -355,6 +472,12 @@ class SHTAPMSimulationEnvironment:
             "deterministic_fallback_would_isolate": sorted(isolation_status.candidates_this_cycle),
             "persistent_isolation_tracked_channels": sorted(isolation_status.tracked_channels),
             "trajectory_exhausted": exhausted,
+            "transition_consumed": transition_consumed,
+            "safe_stop_terminated_without_transition": safe_stop_terminated_without_transition,
+            "transition_substitution_mode": (
+                TRANSITION_SUBSTITUTION_MODE if substituted_channels else None
+            ),
+            "substituted_channels": sorted(substituted_channels),
         }
         return EnvironmentStepResult(
             state=next_state, reward=reward, done=done, info=info, gate_decision=gate_decision

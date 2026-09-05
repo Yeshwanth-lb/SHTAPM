@@ -8,6 +8,7 @@ from __future__ import annotations
 from app.schemas.contracts import RLAction
 
 from edge.eval.rl_baseline_eval import (
+    ACTION_DEPENDENT_COMPARISON_CAVEAT,
     DATA_SOURCE,
     EXECUTION_MODE,
     MODEL_STATUS,
@@ -228,6 +229,42 @@ def test_transition_record_carries_simulation_metadata():
         assert t.execution_mode == "simulation"
         assert t.data_source == "synthetic"
         assert t.model_status == "diagnostic_unvalidated"
+
+
+# ---------------------------------------------------------------------------
+# Action-dependent transition info is recorded (edge/rl/environment.py's
+# ACTION-DEPENDENT TRANSITION -- this harness only records it, never
+# duplicates the underlying logic)
+# ---------------------------------------------------------------------------
+
+
+def test_transition_record_carries_substitution_fields():
+    record = run_baseline_policy_episode(SCENARIO)
+    for t in record.transitions:
+        assert isinstance(t.transition_consumed, bool)
+        assert isinstance(t.safe_stop_terminated_without_transition, bool)
+        assert isinstance(t.substituted_channels, tuple)
+        assert t.transition_substitution_mode in (None, "hold_last_value")
+
+
+def test_no_substitution_occurs_on_clean_untracked_data():
+    """Neither baseline should have anything to substitute on this
+    scenario -- no injections, no forced tracking."""
+    for record in (run_baseline_policy_episode(SCENARIO), run_pure_fallback_episode(SCENARIO)):
+        assert all(t.substituted_channels == () for t in record.transitions)
+        assert all(t.transition_substitution_mode is None for t in record.transitions)
+
+
+def test_transition_consumed_is_false_only_when_safe_stop_terminates_without_transition():
+    for record in (run_baseline_policy_episode(SCENARIO), run_pure_fallback_episode(SCENARIO)):
+        for t in record.transitions:
+            assert t.transition_consumed != t.safe_stop_terminated_without_transition
+
+
+def test_episode_record_carries_the_comparison_caveat():
+    record = run_baseline_policy_episode(SCENARIO)
+    assert record.comparison_caveat == ACTION_DEPENDENT_COMPARISON_CAVEAT
+    assert "decision quality" in record.comparison_caveat
 
 
 def test_scenario_config_is_explicit_and_reproducible():
