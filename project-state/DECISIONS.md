@@ -1410,7 +1410,10 @@
   (policy decision, not data-gated). **Still open:** `divergence_threshold`'s
   numeric value only — data-gated, needs real reconstruction-error and
   fault/attack-separation statistics.
-- U06 — RL reward shaping + acceptable false-isolation rate (P3).
+- U06 — RL reward shaping + acceptable false-isolation rate (P3). **Status: fully
+  open, zero partial resolution.** A specification PROPOSAL (not a decision, not
+  a partial resolution) exists below — see "U06 — RL REWARD SHAPING
+  SPECIFICATION PROPOSAL" at the end of this file.
 - U07 — SWaT/WADI dataset access vs TEP+bench substitute (P2/P7). **Partial:**
   validation methodology frozen (D011); SWaT.A1 access obtained and the
   six-tag mapping selected (D012). **Still open:** building/running the
@@ -1422,3 +1425,222 @@
 - U12 — Primary graded artifact: live demo vs paper (shifts P6/P7 weighting).
 - U13 — White-box adaptive-adversary evaluation in submission scope or future (P7).
 - U14 — `…/command` (scenario-inject) message payload is UNSPECIFIED in all docs (TRD §02.3 names the topic only). Blocks P4 injection (FR-A4/FR-D7). Not part of the M2 telemetry/decision/ledger freeze; do not invent.
+
+---
+
+## U06 — RL REWARD SHAPING SPECIFICATION PROPOSAL
+**(PROPOSAL ONLY — NOT A DECISION. U06 REMAINS FULLY UNDECIDED/OPEN. Nothing in
+this section resolves, partially resolves, or authorizes implementation of any
+item it discusses. No numeric threshold named below is approved, final, or
+production-usable. This section exists to define terms and evidence
+requirements precisely enough that a future, separate decision entry could
+resolve U06 — it is not that entry.)**
+
+- **Date drafted:** 2026-09-06
+- **Author's own status for this section:** documentation-only planning,
+  produced by a read-only architecture review (`edge/rl/reward.py`,
+  `edge/rl/environment.py`, `edge/rl/fallback_gate.py`, `edge/rl/policy.py`,
+  `edge/eval/rl_training.py`, `edge/eval/rl_baseline_eval.py`, and their
+  tests, as committed at `1702b666f19540b8a51ffb932661fa56c64cf5dd`). No
+  code, test, fixture, or configuration file is created, modified, or
+  implied to change by this section.
+
+### 1. Proposed definitions (terms only — not thresholds)
+
+- **False isolation (proposed definition):** a step where the deterministic
+  ground-truth safety condition (`edge.rl.fallback_gate.GateDecision.
+  safety_status == "nominal"`) holds, but the action *requested* to the gate
+  was `RLAction.isolate` or `RLAction.reduce_weight`. This mirrors exactly
+  the condition `edge/rl/reward.py`'s `isolation_appropriateness` component
+  already scores as `-PENALTY_MAGNITUDE_FIXTURE` — the proposal is to name
+  and count this condition as a rate, not to change how it is scored.
+- **Missed critical fault (proposed definition):** a step where
+  `safety_status == "isolation_active"` (the deterministic tracker already
+  holds a channel as a candidate) but the action *requested* was
+  `RLAction.continue_`. Again, this is the existing second branch of
+  `isolation_appropriateness`, proposed to be named and counted separately
+  from false isolation rather than left merged into one signed component
+  value.
+- Both definitions are evaluated against `requested_action`, matching the
+  reward module's own existing anti-gate-exploitation choice (see
+  `edge/rl/reward.py`'s "REUSE, NOT RE-DERIVATION" section) — using
+  `approved_action` instead would hide a policy's true intent behind the
+  gate's own corrections and understate both rates.
+
+### 2. Proposed denominator and unit for each rate
+
+- **False-isolation rate (proposed):** (count of false-isolation steps, as
+  defined above) ÷ (count of steps where `safety_status == "nominal"` AND a
+  request was made) — i.e., false isolations as a fraction of nominal-state
+  opportunities to (wrongly) isolate, not a fraction of all steps. A per-
+  all-steps denominator would understate the rate on scenarios dominated by
+  non-nominal conditions.
+- **Missed-critical-fault rate (proposed):** (count of missed-fault steps)
+  ÷ (count of steps where `safety_status == "isolation_active"`) — misses
+  as a fraction of actual fault-opportunity steps, for the same reason.
+- **Unit:** a dimensionless proportion in `[0, 1]` per evaluation episode,
+  additionally proposed to be reported per-scenario (never pooled silently
+  across scenarios of different generator/injection configurations, which
+  would conflate distinct fault mixes into one number).
+- Neither denominator can be zero-guarded away silently: a scenario with
+  zero nominal steps, or zero isolation-active steps, would need its rate
+  reported as `None`/undefined for that scenario, not as `0.0` (which would
+  misrepresent "no opportunity to fail" as "never failed").
+
+### 3. Proposed scenario coverage requirements
+
+- At minimum, coverage proportional to what already exists structurally:
+  every held-out `EVALUATION_SCENARIOS` entry (`SCENARIO_CLEAN_DEGRADATION`,
+  `SCENARIO_INJECTED_CURRENT_SPIKE`) plus at least one scenario per
+  currently-implemented injection type in `edge/injection/injections.py`
+  that has not yet been exercised in any RL evaluation scenario — an
+  incomplete injection-type census would leave false-isolation/missed-fault
+  rates measured on an arbitrary, unstated subset of fault types.
+- Any new scenario added for this purpose must remain in a held-out set,
+  never added to `TRAINING_SCENARIOS`, preserving the leakage discipline
+  `edge/eval/rl_training.py` already documents.
+- Coverage claims must state which injection types were and were not
+  exercised — proposed as an explicit table in whatever evidence report is
+  eventually produced, not a single pooled number.
+
+### 4. Proposed seed/repetition requirements
+
+- Proposed minimum: each scenario evaluated across a fixed, documented set
+  of at least 5 distinct seeds (distinct from any seed already used in
+  `TRAINING_SCENARIOS`/`EVALUATION_SCENARIOS`, to avoid conflating training
+  determinism with evaluation robustness), following the same "one shared
+  `random.Random(seed)` + `torch.manual_seed(seed)`" determinism convention
+  `edge/eval/rl_training.py` already uses.
+- Proposed rationale for 5 (illustrative, not derived from any statistical
+  power calculation): enough to observe whether a rate is stable or highly
+  seed-sensitive, without implying a specific confidence level — an actual
+  power/sample-size calculation is listed as still-needed evidence in
+  §5/§8 below, not supplied here.
+
+### 5. Proposed confidence-interval / uncertainty reporting
+
+- Proposed: report each rate as a point estimate plus a Wilson or
+  Clopper-Pearson binomial confidence interval (appropriate for a
+  proportion-of-successes measurement with a small step/episode count),
+  computed per scenario, never a bare point estimate presented alone.
+- Proposed: explicitly report the denominator size (number of
+  opportunity-steps) alongside every rate — a rate computed from a small
+  denominator (e.g., a short episode with few `isolation_active` steps)
+  must not be presented with the same apparent precision as one from a
+  large denominator.
+- None of the above interval methodology is implemented, chosen as final,
+  or applied to any existing number in this repo by this proposal.
+
+### 6. Whether synthetic data is diagnostic only (proposed answer: yes)
+
+- Proposed position: every rate computed under the current synthetic
+  generator/injection framework is **diagnostic only** — informative about
+  this codebase's own internal consistency (does the reward/gate/tracker
+  pipeline behave as designed on manufactured trajectories), and NOT
+  evidence of real-world false-isolation or fault-detection performance.
+  This mirrors the same diagnostic-only stance already established for P2
+  SWaT work (`CURRENT_STATE.md`'s "P2 SWaT DIAGNOSTICS: DIAGNOSTICALLY
+  COMPLETE (probes, not acceptance)") and for prognosis
+  (`edge/eval/pronostia_prognosis_training.py`'s proxy-validation framing) —
+  applying the same discipline here, not inventing a new one.
+
+### 7. Proposed real hardware/bench evidence requirements
+
+Proposed as necessary (not sufficient — see §8) before any false-isolation
+or missed-fault rate could be treated as more than diagnostic:
+- Real telemetry from the actual pump/bench rig covering both nominal
+  operation and at least one real fault condition per channel category
+  the project claims to detect (mirroring D021/D022's own "same-failure-
+  mode-class proxy, real pump/bench validation still required" stance for
+  prognosis — U06 should not be held to a lower evidentiary bar than
+  prognosis already is).
+- A real (or at minimum, real-telemetry-replayed) run through the
+  unmodified `SHTAPMSimulationEnvironment`/fallback-gate/reward pipeline,
+  not a re-implementation — to isolate "does the existing pipeline's
+  behavior generalize" from "does a new pipeline behave differently."
+- Resolution of the environment's own documented "world-inert" limitation
+  (see §9) for at least `reduce_weight`, since a real false-isolation-rate
+  claim that never exercises a real down-weighting effect cannot speak to
+  whether down-weighting is an appropriate response at all.
+
+### 8. Proposed evidence required before selecting any reward weights
+
+Proposed, cumulative (each item is necessary, none alone is sufficient):
+1. A committed, repeatable (not one-off/informal) simulation diagnostic
+   comparing all four existing named fixtures
+   (`SIMULATION_REWARD_WEIGHTS_FIXTURE`, `SAFETY_PRIORITY_WEIGHTS_FIXTURE`,
+   `DECISION_ONLY_WEIGHTS_FIXTURE`, `BALANCED_SURVIVAL_WEIGHTS_FIXTURE`)
+   across the scenario/seed coverage in §3/§4, reporting rates per §2 with
+   uncertainty per §5 — turning the current one-off "~150x" observation
+   into reproducible, committed evidence.
+2. An explicit statement of what the false-isolation/missed-fault rate
+   *should* be traded off against (e.g., downtime cost, sensor-recovery
+   cost) — no such tradeoff has been specified anywhere in `docs/` or
+   `DECISIONS.md`; without it, "acceptable rate" has no objective function
+   to be acceptable *with respect to*.
+3. Real bench/hardware evidence per §7, at least at the "does the direction
+   of the effect hold outside synthetic data" level — full production
+   validation is a separate, later bar.
+4. A named, dated decision-log entry (a future D0xx, not this section)
+   that a specific rate/tradeoff and a specific weight configuration were
+   chosen, with #1-#3 cited as its basis.
+- Absent all four, selecting any weight configuration as "the" answer would
+  be exactly the "silently resolving U06" outcome `DECISIONS.md`'s own
+  header (line 5) forbids.
+
+### 9. World-inert limitation: present results are not fault-detection evidence
+
+Restating and binding forward, for U06 specifically, what
+`edge/eval/rl_training.py`'s own module docstring already documents: the
+current `SHTAPMSimulationEnvironment` action-dependent transition model
+gives `continue_`, `alert`, and `reduce_weight` **no trajectory effect
+whatsoever** — only `isolate` (held-last-value substitution) and
+`safe_stop` (episode termination) change what happens next. A direct
+consequence, proposed here as an explicit constraint on any U06 evidence
+claim: **no false-isolation or missed-critical-fault rate measured under
+the current environment can be interpreted as evidence about real
+fault-detection or false-isolation behavior** — it can only measure
+whether the reward/gate/tracker bookkeeping is internally consistent on a
+world that does not react to three of five possible actions. Any future
+evidence report under this proposal must carry this caveat verbatim or
+equivalent, not as a footnote but as a scope-defining statement alongside
+any reported rate.
+
+### 10. Distinguishing five related levers (proposed terminology, for future
+entries to reference precisely rather than conflating them)
+
+- **Reward-weight tuning:** choosing a `RewardWeights` instance to combine
+  the seven already-computed, unchanged `RewardComponents` into `total`
+  (exactly what `SIMULATION_REWARD_WEIGHTS_FIXTURE` and its three sibling
+  fixtures already do). Does not touch component definitions, the
+  environment, the gate, or episode length.
+- **Reward normalization:** rescaling or bounding components/`total` (e.g.,
+  per-step averaging, min-max, z-scoring) so magnitudes are comparable
+  across episodes/configurations. Not implemented anywhere in this repo;
+  would change `RewardResult`'s numeric meaning, not merely its weighting.
+- **Discount-factor (γ) selection:** the existing `train_dqn(gamma=...)`
+  hyperparameter controlling how much a Bellman update values future
+  reward during training. Orthogonal to reward-weight tuning — it affects
+  what the DQN target network learns to value, never what
+  `compute_reward()` returns for a given step.
+- **Episode-length-normalized reporting:** computing a derived, additive
+  reporting metric (e.g., mean reward per step) alongside existing
+  `cumulative_reward`, without changing `cumulative_reward` itself or what
+  the policy is trained against. Purely an aggregation/reporting-layer
+  concern.
+- **Real-world validation:** confirming any of the above against actual
+  hardware/bench telemetry (see §7) — categorically separate from, and not
+  substitutable by, any amount of further simulation-only work under §6/§9.
+
+### 11. Explicitly not done by this proposal
+
+- No reward weight is selected, recommended, ranked, or implied to be
+  closer to final than any other.
+- No numeric false-isolation or missed-critical-fault rate is presented as
+  an approved, acceptable, or target threshold — every number named above
+  (5 seeds, a specific interval method) is proposed methodology, not a
+  result or a threshold.
+- No code, test, fixture, environment behavior, training logic, or
+  configuration is created or modified by this entry.
+- U06's status in the UNDECIDED list above is unchanged: fully open, zero
+  partial resolution.
