@@ -57,6 +57,15 @@ adds no threshold/cooldown/cap, and — like everything else in this
 section — never calls process_isolated_channels/SelfHealOrchestrator/
 actuation/ledger/MQTT/dashboard code.
 
+RAW-VALUE PLUMBING (integration-readiness prep, still observe-only): each
+outcome is also paired with the exact raw per-channel values for that same
+window (edge/pipeline/monitor.py's ``RawChannelValues``, sourced from the
+buffered ``TelemetryMessage`` — never reconstructed/normalized) and logged
+concisely. This is preparatory only: nothing here calls
+process_isolated_channels or SelfHealOrchestrator, and no twin, divergence
+threshold, uncertainty policy, cooldown, hysteresis, isolation cap,
+actuation, GPIO, relay, ledger, MQTT, or dashboard logic is added by it.
+
     PYTHONPATH=backend:. python -m edge
 """
 
@@ -82,7 +91,7 @@ from edge.drivers.ds18b20 import DS18B20Driver
 from edge.drivers.fake import fake_drivers
 from edge.pipeline.isolation_fallback import decide_isolation
 from edge.pipeline.isolation_tracker import IsolationFallbackTracker
-from edge.pipeline.monitor import LiveP2Monitor
+from edge.pipeline.monitor import LiveP2Monitor, RawChannelValues
 from edge.trust.c_consistency import ConsistencyProvider
 from edge.trust.engine import TrustEngine
 from edge.trust.h_reliability import HReliabilityProvider
@@ -149,6 +158,7 @@ def _build_p2_monitor(*, fit_window_count: int) -> LiveP2Monitor:
         c_provider=c_provider,
         fit_window_count=fit_window_count,
         on_outcome=_on_outcome,
+        on_raw_values=_log_raw_values,
     )
 
 
@@ -190,6 +200,22 @@ def _log_window_outcome(
         sorted(tracked.tracked_channels) or "none",
         ", ".join(f"{ch}: {tracked.reasons[ch]}" for ch in CHANNELS if ch in tracked.reasons)
         or "none",
+    )
+
+
+def _log_raw_values(outcome: WindowOutcome, raw: RawChannelValues) -> None:
+    """Monitoring-only: log the exact raw (pre-normalization) per-channel
+    values for the same window that produced `outcome`, for traceability.
+    Not consumed by anything -- no isolation, actuation, or publish. See
+    edge/pipeline/monitor.py's RawChannelValues docstring."""
+    values_summary = ", ".join(f"{ch}={raw.values[ch]:.3f}" for ch in CHANNELS)
+    log.info(
+        "P2 raw values[%d:%d] (ts=%s, seq=%d): {%s}",
+        outcome.window.start_index,
+        outcome.window.end_index,
+        raw.ts,
+        raw.sample_seq,
+        values_summary,
     )
 
 

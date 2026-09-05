@@ -51,6 +51,23 @@ reading it), not a workaround invented for this module.
 ``ConsistencyProvider`` itself is untouched — this fix only changes how much
 data ``LiveP2Monitor`` collects before calling its existing, unmodified
 ``fit()`` method.
+
+RAW-VALUE PLUMBING (integration-readiness prep, still observe-only): each
+emitted ``WindowOutcome`` is optionally paired with the exact raw (pre-
+normalization) per-channel values from the SAME buffered frames that
+produced it, via the separate ``on_raw_values`` callback below.
+``Preprocessor``/``P2Pipeline`` discard raw values while building a
+``Window`` (min-max normalized only) — this is the one place upstream of
+that where the true ``TelemetryMessage.sensors`` values are still available.
+This is preparatory plumbing only: nothing in this module (or anywhere it
+is called from) consumes these values for isolation, substitution,
+divergence, or actuation — see the investigation record for why that
+remains blocked on a genuinely validated digital-twin and a real numeric
+divergence-comparison value, neither of which exists yet. ``on_outcome``'s
+existing single-argument shape is completely unchanged for compatibility;
+``on_raw_values`` is a new,
+independent, optional hook (default ``None``, meaning existing callers see
+byte-identical behavior).
 """
 
 from __future__ import annotations
@@ -58,14 +75,33 @@ from __future__ import annotations
 import logging
 from collections import deque
 from collections.abc import Callable
+from dataclasses import dataclass
 
-from app.schemas.contracts import TelemetryMessage
+from app.schemas.contracts import CHANNELS, TelemetryMessage
 
 from edge.anomaly.pipeline import P2Pipeline, WindowOutcome
 from edge.anomaly.preprocess import Preprocessor
 from edge.trust.c_consistency import ConsistencyProvider
 
 log = logging.getLogger("shtapm.edge.p2monitor")
+
+
+@dataclass(frozen=True)
+class RawChannelValues:
+    """The most recent raw (pre-normalization) per-channel sensor values
+    for the EXACT window that produced the paired ``WindowOutcome`` —
+    sourced directly from the last buffered ``TelemetryMessage`` in that
+    window, never reconstructed, renormalized, or otherwise derived.
+
+    ``ts``/``sample_seq`` are the originating frame's own wire-contract
+    fields (already published telemetry, not sensitive) — included so a
+    caller/log line can verify correspondence to the paired outcome without
+    re-deriving it.
+    """
+
+    ts: str
+    sample_seq: int
+    values: dict[str, float]
 
 
 class LiveP2Monitor:
@@ -88,6 +124,7 @@ class LiveP2Monitor:
         c_provider: ConsistencyProvider,
         fit_window_count: int,
         on_outcome: Callable[[WindowOutcome], None] = lambda outcome: None,
+        on_raw_values: Callable[[WindowOutcome, RawChannelValues], None] | None = None,
     ) -> None:
         if fit_window_count <= 0:
             raise ValueError(f"fit_window_count must be > 0, got {fit_window_count}")
@@ -95,6 +132,7 @@ class LiveP2Monitor:
         self._pipeline = pipeline
         self._c_provider = c_provider
         self._on_outcome = on_outcome
+        self._on_raw_values = on_raw_values
         self._fit_buffer_size = (
             preprocessor.window_size + (fit_window_count - 1) * preprocessor.step
         )
@@ -133,3 +171,16 @@ class LiveP2Monitor:
     def _emit(self, frames: list[TelemetryMessage]) -> None:
         for outcome in self._pipeline.process(frames):  # exactly one, len(frames) == window_size
             self._on_outcome(outcome)
+            if self._on_raw_values is not None:
+                self._on_raw_values(outcome, self._raw_values_for(frames))
+
+    @staticmethod
+    def _raw_values_for(frames: list[TelemetryMessage]) -> RawChannelValues:
+        """The exact window's most recent (last-buffered) raw sample —
+        never the normalized ``Window.features``."""
+        latest = frames[-1]
+        return RawChannelValues(
+            ts=latest.ts,
+            sample_seq=latest.sample_seq,
+            values={ch: getattr(latest.sensors, ch) for ch in CHANNELS},
+        )

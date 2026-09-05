@@ -83,23 +83,30 @@ def test_live_wiring_publishes_telemetry_and_invokes_p2_processing(caplog):
     # P2 processing was genuinely invoked (real, non-stub components,
     # exactly as edge/main.py composes them) and logged -- proving the
     # wiring is live, not re-implementing/stubbing it for this test.
-    # Each outcome now logs three lines: the P2 window itself, the
-    # (stateless, log-only) FR-RL4 isolation decision, and the (persistent,
-    # log-only) FR-RL4 isolation tracking result derived from it.
+    # Each outcome now logs four lines: the P2 window itself, the
+    # (stateless, log-only) FR-RL4 isolation decision, the (persistent,
+    # log-only) FR-RL4 isolation tracking result, and the exact raw
+    # per-channel values for that same window.
     all_records = [r for r in caplog.records if r.name == "shtapm.edge.main"]
     p2_records = [r for r in all_records if "P2 window" in r.getMessage()]
     isolation_records = [r for r in all_records if "FR-RL4 isolation decision" in r.getMessage()]
     tracking_records = [r for r in all_records if "FR-RL4 isolation tracking" in r.getMessage()]
-    assert len(all_records) == 9
+    raw_value_records = [r for r in all_records if "P2 raw values" in r.getMessage()]
+    assert len(all_records) == 12
     assert len(p2_records) == 3  # 1 at the fit/transition tick + 2 more sliding ticks
     assert len(isolation_records) == 3
     assert len(tracking_records) == 3
+    assert len(raw_value_records) == 3
     assert all("anomaly=False" in r.getMessage() for r in p2_records)  # NullDetector
     # FR-RL4 logging must never claim a real isolation/actuation/recovery --
     # it only reports candidates/tracked channels for the caller to log (see
     # edge/pipeline/{isolation_fallback,isolation_tracker}.py).
     assert all("stateless, log-only" in r.getMessage() for r in isolation_records)
     assert all("persistent, log-only" in r.getMessage() for r in tracking_records)
+    # Raw values must reflect the fake driver's exact constant VALUES --
+    # never reconstructed, normalized, or derived.
+    assert all("temperature=26.000" in r.getMessage() for r in raw_value_records)
+    assert all("current=0.420" in r.getMessage() for r in raw_value_records)
 
 
 def test_live_wiring_never_isolates_actuates_or_publishes_a_decision():
