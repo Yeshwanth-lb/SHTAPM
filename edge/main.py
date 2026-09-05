@@ -43,9 +43,19 @@ deterministic classification of each channel's current ``TrustBand``
 (MALICIOUS -> isolation candidate; Suspicious/Trusted -> not). This is
 logged alongside the P2 outcome and nothing else: it does NOT call
 ``process_isolated_channels``, ``SelfHealOrchestrator``, actuation, ledger,
-or MQTT/decision publishing, and it does NOT track state across cycles
-(see the module's own docstring for exactly why recovery tracking is
-deliberately not implemented yet).
+or MQTT/decision publishing.
+
+FR-RL4 FOLLOW-UP — PERSISTENT TRACKING (still decision-only, still
+observe-only): a single ``IsolationFallbackTracker`` (edge/pipeline/
+isolation_tracker.py) wraps the stateless decision above with cross-cycle
+memory — a channel seen Malicious once stays reported as a persistent
+isolation candidate in later cycles even if its trust recovers, since no
+real ``SelfHealOutcome`` recovery confirmation is wired into the live path
+(no digital-twin reconstruction or divergence threshold exists yet — see
+the tracker module's own docstring). This NEVER claims recovery occurred,
+adds no threshold/cooldown/cap, and — like everything else in this
+section — never calls process_isolated_channels/SelfHealOrchestrator/
+actuation/ledger/MQTT/dashboard code.
 
     PYTHONPATH=backend:. python -m edge
 """
@@ -71,6 +81,7 @@ from edge.anomaly.preprocess import Preprocessor
 from edge.drivers.ds18b20 import DS18B20Driver
 from edge.drivers.fake import fake_drivers
 from edge.pipeline.isolation_fallback import decide_isolation
+from edge.pipeline.isolation_tracker import IsolationFallbackTracker
 from edge.pipeline.monitor import LiveP2Monitor
 from edge.trust.c_consistency import ConsistencyProvider
 from edge.trust.engine import TrustEngine
@@ -124,19 +135,30 @@ def _build_p2_monitor(*, fit_window_count: int) -> LiveP2Monitor:
         h_provider=HReliabilityProvider(),
         flag_policy=SeverityThresholdFlagPolicy(),
     )
+    # One tracker per LiveP2Monitor instance (edge/pipeline/isolation_tracker.py)
+    # -- persistent, cross-cycle isolation-candidate memory for THIS pipeline
+    # only; a fresh _build_p2_monitor() call gets a fresh, independent tracker.
+    isolation_tracker = IsolationFallbackTracker()
+
+    def _on_outcome(outcome: WindowOutcome) -> None:
+        _log_window_outcome(outcome, isolation_tracker)
+
     return LiveP2Monitor(
         preprocessor=preprocessor,
         pipeline=pipeline,
         c_provider=c_provider,
         fit_window_count=fit_window_count,
-        on_outcome=_log_window_outcome,
+        on_outcome=_on_outcome,
     )
 
 
-def _log_window_outcome(outcome: WindowOutcome) -> None:
-    """Monitoring-only: log preprocessing/anomaly/trust/attribution plus the
-    stateless FR-RL4 isolation decision. Never isolates a channel for real,
-    actuates, or publishes anything — see edge/pipeline/isolation_fallback.py."""
+def _log_window_outcome(
+    outcome: WindowOutcome, isolation_tracker: IsolationFallbackTracker
+) -> None:
+    """Monitoring-only: log preprocessing/anomaly/trust/attribution, the
+    stateless FR-RL4 isolation decision, and the persistent FR-RL4 tracking
+    result. Never isolates a channel for real, actuates, or publishes
+    anything — see edge/pipeline/{isolation_fallback,isolation_tracker}.py."""
     trust_summary = ", ".join(
         f"{ch}={outcome.trust[ch].trust:.3f}/{outcome.trust[ch].band.value}" for ch in CHANNELS
     )
@@ -158,6 +180,16 @@ def _log_window_outcome(outcome: WindowOutcome) -> None:
         "FR-RL4 isolation decision (stateless, log-only): candidates=%s reasons={%s}",
         sorted(decision.isolated_channels) or "none",
         ", ".join(f"{ch}: {reason}" for ch, reason in decision.reasons.items()),
+    )
+
+    tracked = isolation_tracker.update(outcome)
+    log.info(
+        "FR-RL4 isolation tracking (persistent, log-only): "
+        "candidates_this_cycle=%s tracked_channels=%s reasons={%s}",
+        sorted(tracked.candidates_this_cycle) or "none",
+        sorted(tracked.tracked_channels) or "none",
+        ", ".join(f"{ch}: {tracked.reasons[ch]}" for ch in CHANNELS if ch in tracked.reasons)
+        or "none",
     )
 
 
