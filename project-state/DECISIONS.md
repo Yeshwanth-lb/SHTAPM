@@ -1644,3 +1644,206 @@ entries to reference precisely rather than conflating them)
   configuration is created or modified by this entry.
 - U06's status in the UNDECIDED list above is unchanged: fully open, zero
   partial resolution.
+
+---
+
+## U06 — Operational Definitions Proposal: False Isolation and Missed Critical Faults
+**(PROPOSAL ONLY — NOT A DECISION. U06 REMAINS FULLY UNDECIDED/OPEN. This is a
+follow-up scoping subsection to the "U06 — RL REWARD SHAPING SPECIFICATION
+PROPOSAL" section above, narrowed to the smallest concrete U06 decision item:
+operational definitions and measurement units for "false isolation" and
+"missed critical fault." Nothing in this subsection resolves, partially
+resolves, or authorizes implementation of any item it discusses. No numeric
+threshold named below is approved, final, or production-usable.)**
+
+- **Date drafted:** 2026-09-06
+- **Author's own status for this subsection:** documentation-only planning,
+  produced by a read-only review of `edge/rl/reward.py`,
+  `edge/rl/environment.py`, `edge/rl/fallback_gate.py`,
+  `edge/eval/rl_baseline_eval.py`, `edge/eval/rl_training.py`,
+  `edge/injection/injections.py`, and their tests, as committed at
+  `6e42c0d86804f78ce00855835eda6d481bbe665a`. No code, test, fixture, or
+  configuration file is created, modified, or implied to change by this
+  subsection.
+
+### A. Proposed definition — false isolation
+
+A step is proposed to count as a **false isolation** iff:
+- `gate_decision.safety_status == "nominal"`, **and**
+- `gate_decision.requested_action ∈ {RLAction.isolate, RLAction.reduce_weight}`.
+
+Counted by **requested action**, never `approved_action` — matching
+`edge/rl/reward.py`'s own existing anti-gate-exploitation choice (scoring the
+gate-approved outcome instead would hide a policy's true intent behind the
+gate's own correction and understate the rate). This is exactly the first
+branch of `_compute_components()`'s `isolation_appropriateness`
+(`edge/rl/reward.py`) — the proposal only names and counts it as a rate, it
+does not change how it is scored.
+
+### B. Proposed definition — missed critical fault
+
+A step is proposed to count as a **missed critical fault** iff:
+- `gate_decision.safety_status == "isolation_active"`, **and**
+- `gate_decision.requested_action is RLAction.continue_`.
+
+**`safety_status` is explicitly labeled a proxy, not independent fault
+ground truth**: it reflects `IsolationFallbackTracker`'s own derived
+response to whatever the anomaly/attribution pipeline already flagged, not
+an independent, injection-level record of whether a fault was actually
+present in that frame. No code anywhere currently cross-references
+`safety_status` against `edge.injection.injections.Injection`'s own onset/
+duration/amplitude parameters — this is a known gap, not a solved problem
+(see §D below).
+
+### C. Proposed opportunity denominators
+
+| Rate | Numerator | Denominator |
+|---|---|---|
+| False-isolation rate | steps meeting §A | `safety_status == "nominal"` steps with `requested_action is not None` |
+| Missed-critical-fault rate | steps meeting §B | `safety_status == "isolation_active"` steps |
+
+Both denominators are opportunity counts, never total step counts. **A
+zero-denominator scenario/episode (no nominal steps, or no isolation-active
+steps) must report the rate as undefined/`None` for that scenario — never
+as `0%`**, which would misrepresent "no opportunity to fail" as "never
+failed."
+
+### D. Distinguishing four layers already present in the code
+
+- **Requested action** (`gate_decision.requested_action`) — what the
+  policy/baseline wanted; §A/§B are evaluated here.
+- **Gate-approved action** (`gate_decision.approved_action`) — what the
+  fallback gate actually let through; termination and the simulation
+  transition key off this, never off the request.
+- **Executed simulation transition** — what `edge/rl/environment.py`'s
+  `step()` actually did: held-last-value substitution (only if
+  `approved_action is RLAction.isolate`), skip-entirely (only if
+  `approved_action is RLAction.safe_stop`), or no trajectory effect at all
+  (`continue_`/`alert`/`reduce_weight`, regardless of what was requested or
+  approved).
+- **Scenario/injection ground truth** — the synthetic generator's `health`
+  array plus whatever `edge.injection.injections.Injection` was configured.
+  This is the only layer that could, in principle, independently confirm
+  whether a fault was actually present at a given frame, and it is not
+  currently compared against `safety_status` anywhere (see §B's proxy
+  caveat).
+
+### E. Reporting granularity: per scenario, per episode, then cross-seed
+
+- Rates are proposed to be computed **per scenario** (never pooled across
+  scenarios — `clean_degradation` and `injected_current_spike` are
+  structurally different fault mixes; pooling would conflate them with no
+  way to attribute a rate change to either).
+- Within a scenario, **per-episode raw rates and opportunity counts are the
+  base unit**, reported before any cross-seed summary — a single episode's
+  opportunity count can be small enough (e.g., a 40-step scenario) that a
+  bare summary statistic would hide instability.
+- Scenario identity (`scenario_name`) must be preserved at every stage of
+  aggregation, never collapsed into an unlabeled combined number.
+
+### F. Cases requiring separate reporting (not silently folded into the rate)
+
+- **`safe_stop` requests** — never scored as a false isolation or missed
+  fault by §A/§B (the conditions cannot co-occur with
+  `requested_action is RLAction.safe_stop`), but must be reported as their
+  own row (count/rate of `safe_stop` requests) — a policy that always
+  safe-stops would trivially show 0% false isolation while being useless.
+- **Policy fallback / unvalidated status**
+  (`policy_status ∈ {"unavailable", "unvalidated", "validated_low_confidence"}`)
+  — §A/§B still evaluate the *requester's* intent on these steps, but a
+  `policy_status` breakdown must be reported alongside every rate, since a
+  policy that is almost always fallback-overridden (e.g. `BaselinePolicy`,
+  which is always `policy_validated=False`) would otherwise look
+  misleadingly clean.
+- **World-inert approved actions** (`continue_`, `alert`, `reduce_weight`
+  when *approved*) — these produce no trajectory effect; report the count
+  of opportunity-steps with a world-inert approved action separately so a
+  reader can see how much of the denominator carries no environmental
+  feedback.
+- **Clean degradation** vs. **injected current spike** scenarios — always
+  reported as fully separate rows, never merged (per §E).
+- **Early safe-stop termination** (`termination_cause == "safe_stop"` on
+  `EpisodeRecord`) — report `step_count` and `termination_cause` alongside
+  every rate; an episode terminated early contributes a smaller opportunity
+  count than one that runs to exhaustion, and pooling without this context
+  would bias the rate toward whichever termination pattern yields more
+  opportunity-steps.
+
+### G. What current code can and cannot measure
+
+**Can measure reliably today**, using already-existing, deterministic,
+reproducible fields (`TransitionRecord`/`GateDecision`/`RewardComponents`
+in `edge/eval/rl_baseline_eval.py`/`edge/eval/rl_training.py`): every
+quantity in §A–§F, exactly as defined, for the two existing scenarios.
+
+**Cannot measure, because of the world-inert simulation limitation**:
+- Whether a false isolation or missed fault actually cost anything in
+  simulation — since `continue_`/`alert`/`reduce_weight` have no trajectory
+  effect, a "missed" fault looks identical going forward to a correct
+  `continue_`, except for that one step's reward penalty; there is no
+  compounding consequence to observe.
+- Whether `safety_status == "isolation_active"` (§B's proxy) actually
+  corresponds to a real fault frame from the injection's own ground truth —
+  no cross-reference against injection onset/duration exists yet.
+- **Anything about real sensors, real faults, or real attacks. The current
+  world-inert simulation cannot establish real fault-detection consequences
+  or real-world false-isolation/missed-fault rates** — every number
+  obtainable today is a property of this codebase's own internal
+  consistency on manufactured trajectories, restated here for this specific
+  definitions item, consistent with the "U06 — RL REWARD SHAPING
+  SPECIFICATION PROPOSAL" section's own §6/§9 above.
+
+### H. Proposed minimum scenario taxonomy before any rate is calculated
+
+Currently exactly two named RL scenarios exist
+(`SCENARIO_CLEAN_DEGRADATION`, `SCENARIO_INJECTED_CURRENT_SPIKE`),
+exercising one of eight implemented injection types (`Spike`; the other
+seven — `Drift`, `StuckAt`, `BiasFDI`, `RampFDI`, `Replay`, `ConstantSpoof`,
+`AdaptiveStealthFDI`, all in `edge/injection/injections.py` — are never used
+in any RL-pathway scenario). Proposed minimum before any rate is treated as
+more than a two-scenario spot-check:
+1. One scenario per injection type (all eight), each held out from training
+   exactly as the current two are.
+2. At least one zero-fault (clean) scenario per distinct degradation
+   profile already used in training vs. evaluation, to measure the
+   false-isolation side without an injected fault confounding it.
+3. Explicit, per-scenario labeling of which channel(s) and which injection
+   parameters (onset, duration, amplitude) constitute "a fault is present,"
+   so a future ground-truth cross-reference (§D/§G) has something concrete
+   to compare against.
+4. A documented statement of which fault types remain untested even after
+   (1)–(3) (e.g., multi-channel simultaneous faults) — coverage gaps must
+   be stated, not left implicit.
+
+### I. Proposed evidence needed before accepting these definitions
+
+Before any future `DECISIONS.md` entry marks these *definitions themselves*
+as decided (not any rate — the definitions):
+1. A worked example, run once and included in the review, of §A/§B's
+   counts on the existing, already-committed `EpisodeRecord`/
+   `TransitionRecord` output for both existing scenarios — confirming the
+   definitions produce sensible, non-degenerate counts on real,
+   already-existing data.
+2. Explicit sign-off on whether `safety_status` is an acceptable proxy for
+   "a fault is present" (§B's known gap), or a decision to build the
+   ground-truth cross-reference first if it is not acceptable.
+3. Agreement that the opportunity-denominator convention (§C) and the
+   per-scenario/per-episode-then-cross-seed reporting convention (§E) match
+   how a future evidence report (per the "U06 — RL REWARD SHAPING
+   SPECIFICATION PROPOSAL" section's §8 above) intends to consume these
+   numbers.
+4. **No numeric threshold is required at this stage** — this evidence list
+   is only for accepting the *definitions and measurement units*, not any
+   acceptable rate.
+
+### J. Explicitly not done by this subsection
+
+- No metric, code, test, experiment, reward change, normalization, or
+  training change is implemented.
+- No acceptable numerical false-isolation or missed-critical-fault
+  threshold is chosen.
+- No current or hypothetical simulation result is claimed to be
+  real-world, validated, safe, accurate, optimal, or production-ready.
+- U06's status in the UNDECIDED list above is unchanged: fully open, zero
+  partial resolution. This subsection is a proposal for one future decision
+  item, not that decision.
