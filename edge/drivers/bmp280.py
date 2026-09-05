@@ -142,7 +142,7 @@ class BMP280Reader:
         try:
             return smbus2.SMBus(self._bus_num)
         except Exception as e:
-            raise OSError(f"failed to open I²C bus {self._bus_num}: {e}")
+            raise OSError(f"failed to open I²C bus {self._bus_num}: {e}") from e
 
     def _setup_once(self, bus: object) -> BMP280Calibration:
         """Verify chip ID and read calibration coefficients (once; cached)."""
@@ -151,7 +151,7 @@ class BMP280Reader:
         try:
             chip_id = bus.read_i2c_block_data(self._address, _REG_CHIP_ID, 1)[0]
         except Exception as e:
-            raise OSError(f"failed to read BMP280 chip ID at 0x{self._address:02x}: {e}")
+            raise OSError(f"failed to read BMP280 chip ID at 0x{self._address:02x}: {e}") from e
         if chip_id != _EXPECTED_CHIP_ID:
             raise OSError(
                 f"unexpected chip ID 0x{chip_id:02x} at 0x{self._address:02x} "
@@ -160,7 +160,7 @@ class BMP280Reader:
         try:
             raw = bus.read_i2c_block_data(self._address, _REG_CALIB_START, _CALIB_LENGTH)
         except Exception as e:
-            raise OSError(f"failed to read BMP280 calibration block: {e}")
+            raise OSError(f"failed to read BMP280 calibration block: {e}") from e
         self._calibration = BMP280Calibration(bytes(raw))
         return self._calibration
 
@@ -169,7 +169,7 @@ class BMP280Reader:
             bus.write_byte_data(self._address, _REG_CONFIG, _CONFIG_NO_FILTER_I2C)
             bus.write_byte_data(self._address, _REG_CTRL_MEAS, _CTRL_MEAS_FORCED_OSRS_X1)
         except Exception as e:
-            raise OSError(f"failed to trigger BMP280 forced measurement: {e}")
+            raise OSError(f"failed to trigger BMP280 forced measurement: {e}") from e
 
     def _wait_for_measurement(self, bus: object) -> None:
         deadline = time.monotonic() + _MEASUREMENT_TIMEOUT_S
@@ -177,7 +177,7 @@ class BMP280Reader:
             try:
                 status = bus.read_i2c_block_data(self._address, _REG_STATUS, 1)[0]
             except Exception as e:
-                raise OSError(f"failed to read BMP280 status register: {e}")
+                raise OSError(f"failed to read BMP280 status register: {e}") from e
             if not (status & _STATUS_MEASURING_BIT):
                 return
             time.sleep(_MEASUREMENT_POLL_INTERVAL_S)
@@ -200,7 +200,7 @@ class BMP280Reader:
             try:
                 data = bus.read_i2c_block_data(self._address, _REG_DATA_START, _DATA_LENGTH)
             except Exception as e:
-                raise OSError(f"failed to read BMP280 measurement data: {e}")
+                raise OSError(f"failed to read BMP280 measurement data: {e}") from e
             press_msb, press_lsb, press_xlsb, temp_msb, temp_lsb, temp_xlsb = data
             raw_pressure = (press_msb << 12) | (press_lsb << 4) | (press_xlsb >> 4)
             raw_temperature = (temp_msb << 12) | (temp_lsb << 4) | (temp_xlsb >> 4)

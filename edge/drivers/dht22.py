@@ -61,7 +61,7 @@ def _find_iio_device(root: Path, driver_name: str) -> Path:
     try:
         candidates = sorted(root.glob("iio:device*"))
     except OSError as e:
-        raise OSError(f"failed to list {root}: {e}")
+        raise OSError(f"failed to list {root}: {e}") from e
     for candidate in candidates:
         try:
             name = (candidate / "name").read_text().strip()
@@ -118,11 +118,11 @@ class DHT22HumidityReader:
         try:
             raw_text = raw_file.read_text().strip()
         except OSError as e:
-            raise OSError(f"failed to read {raw_file}: {e}")
+            raise OSError(f"failed to read {raw_file}: {e}") from e
         try:
             raw_value = int(raw_text)
         except ValueError as e:
-            raise OSError(f"unexpected value {raw_text!r} in {raw_file}: {e}")
+            raise OSError(f"unexpected value {raw_text!r} in {raw_file}: {e}") from e
         return raw_value / _MILLI_PERCENT_PER_PERCENT
 
 

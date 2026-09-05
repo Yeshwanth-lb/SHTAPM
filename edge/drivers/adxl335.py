@@ -82,7 +82,8 @@ class ADXL335MCP3008Reader:
             y_channel: MCP3008 channel wired to ADXL335 Y-OUT. Default: 1.
             z_channel: MCP3008 channel wired to ADXL335 Z-OUT. Default: 2.
         """
-        for name, channel in (("x_channel", x_channel), ("y_channel", y_channel), ("z_channel", z_channel)):
+        channels = (("x_channel", x_channel), ("y_channel", y_channel), ("z_channel", z_channel))
+        for name, channel in channels:
             if not 0 <= channel <= 7:
                 raise ValueError(f"{name}={channel!r} out of range; MCP3008 channels are 0-7")
         self._bus = bus
@@ -103,7 +104,7 @@ class ADXL335MCP3008Reader:
             spi.mode = 0
             return spi
         except Exception as e:
-            raise OSError(f"failed to open SPI bus {self._bus}.{self._device}: {e}")
+            raise OSError(f"failed to open SPI bus {self._bus}.{self._device}: {e}") from e
 
     @staticmethod
     def _read_channel(spi, channel: int) -> int:
@@ -130,7 +131,7 @@ class ADXL335MCP3008Reader:
         except OSError:
             raise
         except Exception as e:
-            raise OSError(f"SPI read failed on bus {self._bus}.{self._device}: {e}")
+            raise OSError(f"SPI read failed on bus {self._bus}.{self._device}: {e}") from e
         finally:
             try:
                 spi.close()

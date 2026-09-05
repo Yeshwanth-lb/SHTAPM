@@ -1,4 +1,5 @@
-"""Integration test: edge/main.py uses real INA219 for current, fake drivers for other channels (P1).
+"""Integration test: edge/main.py uses real INA219 for current, fake drivers
+for other channels (P1).
 
 Verifies that the main.py entry point constructs the driver set correctly:
   - Current channel: real INA219Driver (bus 1, address 0x40)
@@ -48,7 +49,7 @@ def test_main_uses_ina219_for_current_channel():
     # Verify structure: five fakes + one real INA219
     from edge.drivers.base import SensorDriver
 
-    for channel, driver in drivers.items():
+    for driver in drivers.values():
         assert isinstance(driver, SensorDriver)
 
     # Verify current is now INA219Driver (not the fake)

@@ -49,7 +49,9 @@ def _reference_compensate_temperature(adc_T, dig_T1, dig_T2, dig_T3):
     return temperature_c, t_fine
 
 
-def _reference_compensate_pressure(adc_P, t_fine, dig_P1, dig_P2, dig_P3, dig_P4, dig_P5, dig_P6, dig_P7, dig_P8, dig_P9):
+def _reference_compensate_pressure(
+    adc_P, t_fine, dig_P1, dig_P2, dig_P3, dig_P4, dig_P5, dig_P6, dig_P7, dig_P8, dig_P9
+):
     """Independently transcribed Bosch 64-bit-integer pressure formula."""
     var1 = t_fine - 128000
     var2 = var1 * var1 * dig_P6
@@ -144,7 +146,17 @@ class TestCompensationFormulas:
         _, t_fine = bmp280_module._compensate_temperature(_ADC_T, cal)
         driver_pressure_pa = bmp280_module._compensate_pressure(_ADC_P, t_fine, cal)
         ref_pressure_pa = _reference_compensate_pressure(
-            _ADC_P, t_fine, _DIG_P1, _DIG_P2, _DIG_P3, _DIG_P4, _DIG_P5, _DIG_P6, _DIG_P7, _DIG_P8, _DIG_P9
+            _ADC_P,
+            t_fine,
+            _DIG_P1,
+            _DIG_P2,
+            _DIG_P3,
+            _DIG_P4,
+            _DIG_P5,
+            _DIG_P6,
+            _DIG_P7,
+            _DIG_P8,
+            _DIG_P9,
         )
         assert driver_pressure_pa == pytest.approx(ref_pressure_pa)
         # Sanity: result is a plausible sea-level-ish atmospheric pressure
@@ -207,8 +219,9 @@ class TestBMP280Reader:
             reader.read_pressure_hpa()
             reader.read_pressure_hpa()
 
-            chip_id_reads = [c for c in mock_bus.read_i2c_block_data.call_args_list if c.args[1] == 0xD0]
-            calib_reads = [c for c in mock_bus.read_i2c_block_data.call_args_list if c.args[1] == 0x88]
+            all_reads = mock_bus.read_i2c_block_data.call_args_list
+            chip_id_reads = [c for c in all_reads if c.args[1] == 0xD0]
+            calib_reads = [c for c in all_reads if c.args[1] == 0x88]
             assert len(chip_id_reads) == 1
             assert len(calib_reads) == 1
         finally:

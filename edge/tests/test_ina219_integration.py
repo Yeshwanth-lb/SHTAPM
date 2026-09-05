@@ -83,7 +83,8 @@ def test_ina219_driver_unhealthy_read_propagates_through_sampler():
     """
     # Mock I²C bus to fail during calibration write
     mock_smbus2 = MagicMock()
-    mock_smbus2.SMBus.return_value.write_i2c_block_data.side_effect = OSError("Device not responding")
+    mock_bus = mock_smbus2.SMBus.return_value
+    mock_bus.write_i2c_block_data.side_effect = OSError("Device not responding")
 
     original_smbus2 = ina219_module.smbus2
     try:

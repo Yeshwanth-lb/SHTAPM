@@ -173,7 +173,10 @@ def compensate_pressure(adc_P: int, t_fine: int, cal: BMP280Calibration) -> floa
     var1 = ((var1 * var1 * cal.dig_P3) >> 8) + ((var1 * cal.dig_P2) << 12)
     var1 = (((1 << 47) + var1) * cal.dig_P1) >> 33
     if var1 == 0:
-        print("  [warn] dig_P1 compensation var1 == 0; cannot compute pressure (would divide by zero)")
+        print(
+            "  [warn] dig_P1 compensation var1 == 0; cannot compute pressure "
+            "(would divide by zero)"
+        )
         return 0.0
     p = 1048576 - adc_P
     p = (((p << 31) - var2) * 3125) // var1
@@ -186,7 +189,10 @@ def compensate_pressure(adc_P: int, t_fine: int, cal: BMP280Calibration) -> floa
 def main() -> int:
     if smbus2 is None:
         print("ERROR: smbus2 not importable in this environment.", file=sys.stderr)
-        print("Expected already installed per edge/requirements.txt — check the venv.", file=sys.stderr)
+        print(
+            "Expected already installed per edge/requirements.txt — check the venv.",
+            file=sys.stderr,
+        )
         return 1
 
     print(f"BMP280 hardware test — bus {I2C_BUS}, address 0x{BMP280_ADDR:02x}")

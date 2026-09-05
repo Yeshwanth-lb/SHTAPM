@@ -56,7 +56,9 @@ class TestINA219CurrentReader:
         original_smbus2 = ina219_module.smbus2
         try:
             ina219_module.smbus2 = mock_smbus2
-            reader = INA219CurrentReader(bus_num=1, address=0x40, max_expected_amps=5.0, shunt_ohms=0.1)
+            reader = INA219CurrentReader(
+                bus_num=1, address=0x40, max_expected_amps=5.0, shunt_ohms=0.1
+            )
             amps = reader.read_current_amps()
 
             assert amps == 0.0
@@ -82,7 +84,9 @@ class TestINA219CurrentReader:
         original_smbus2 = ina219_module.smbus2
         try:
             ina219_module.smbus2 = mock_smbus2
-            reader = INA219CurrentReader(bus_num=1, address=0x40, max_expected_amps=5.0, shunt_ohms=0.1)
+            reader = INA219CurrentReader(
+                bus_num=1, address=0x40, max_expected_amps=5.0, shunt_ohms=0.1
+            )
             amps = reader.read_current_amps()
 
             assert abs(amps - 0.5) < 0.001
@@ -101,7 +105,9 @@ class TestINA219CurrentReader:
         original_smbus2 = ina219_module.smbus2
         try:
             ina219_module.smbus2 = mock_smbus2
-            reader = INA219CurrentReader(bus_num=1, address=0x40, max_expected_amps=5.0, shunt_ohms=0.1)
+            reader = INA219CurrentReader(
+                bus_num=1, address=0x40, max_expected_amps=5.0, shunt_ohms=0.1
+            )
             amps = reader.read_current_amps()
 
             assert abs(amps - (-0.5)) < 0.001
@@ -121,7 +127,9 @@ class TestINA219CurrentReader:
         original_smbus2 = ina219_module.smbus2
         try:
             ina219_module.smbus2 = mock_smbus2
-            reader = INA219CurrentReader(bus_num=1, address=0x40, max_expected_amps=1.0, shunt_ohms=0.1)
+            reader = INA219CurrentReader(
+                bus_num=1, address=0x40, max_expected_amps=1.0, shunt_ohms=0.1
+            )
             amps = reader.read_current_amps()
 
             # Should be close to 0.1A with different LSB
@@ -140,7 +148,9 @@ class TestINA219CurrentReader:
         original_smbus2 = ina219_module.smbus2
         try:
             ina219_module.smbus2 = mock_smbus2
-            reader = INA219CurrentReader(bus_num=1, address=0x40, max_expected_amps=5.0, shunt_ohms=0.1)
+            reader = INA219CurrentReader(
+                bus_num=1, address=0x40, max_expected_amps=5.0, shunt_ohms=0.1
+            )
 
             # First read
             reader.read_current_amps()

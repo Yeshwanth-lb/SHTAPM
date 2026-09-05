@@ -79,7 +79,7 @@ class INA219CurrentReader:
         try:
             return smbus2.SMBus(self._bus_num)
         except Exception as e:
-            raise OSError(f"failed to open I²C bus {self._bus_num}: {e}")
+            raise OSError(f"failed to open I²C bus {self._bus_num}: {e}") from e
 
     def _calibrate_once(self, bus: object) -> None:
         """Write calibration constant to register 0x05 (one-time setup).
@@ -97,7 +97,7 @@ class INA219CurrentReader:
             bus.write_i2c_block_data(self._address, 0x05, [high, low])
             self._calibrated = True
         except Exception as e:
-            raise OSError(f"failed to calibrate INA219 at 0x{self._address:02x}: {e}")
+            raise OSError(f"failed to calibrate INA219 at 0x{self._address:02x}: {e}") from e
 
     def read_current_amps(self) -> float:
         """Read current (A) from INA219 CURRENT register (0x04).

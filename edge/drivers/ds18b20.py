@@ -49,7 +49,7 @@ def _find_w1_device(root: Path, family_prefix: str) -> Path:
     try:
         candidates = sorted(root.glob(f"{family_prefix}*"))
     except OSError as e:
-        raise OSError(f"failed to list {root}: {e}")
+        raise OSError(f"failed to list {root}: {e}") from e
     if not candidates:
         raise OSError(
             f"no 1-Wire device matching {family_prefix!r}* found under {root}; "
@@ -106,7 +106,7 @@ class DS18B20TemperatureReader:
         try:
             raw_text = slave_file.read_text()
         except OSError as e:
-            raise OSError(f"failed to read {slave_file}: {e}")
+            raise OSError(f"failed to read {slave_file}: {e}") from e
 
         lines = raw_text.strip().splitlines()
         if len(lines) < 2:
@@ -121,7 +121,7 @@ class DS18B20TemperatureReader:
         try:
             millidegrees = int(match.group(1))
         except ValueError as e:
-            raise OSError(f"unexpected temperature value in {slave_file}: {lines[1]!r}: {e}")
+            raise OSError(f"unexpected temperature value in {slave_file}: {lines[1]!r}: {e}") from e
 
         return millidegrees / _MILLIDEGREES_PER_DEGREE
 
