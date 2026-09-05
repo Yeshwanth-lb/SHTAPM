@@ -6,6 +6,7 @@ Runs the C1→C2→C3 pipeline with:
     gas, current)
 
     DS18B20 + fake drivers → Sampler → TelemetryMessage → ResilientTelemetryPublisher → Mosquitto
+                                                        ↘ LiveP2Monitor (observe-only, see below)
 
 DS18B20 is real because it's the only sensor currently wired to the Pi —
 ADXL335, BMP280, INA219, and DHT22 are implemented (edge/drivers/adxl335.py,
@@ -20,20 +21,51 @@ predating this file's docstring) — no other change needed.
 The frozen six-channel telemetry contract is preserved. Thin by design
 (env + wiring + signals) — the logic lives in the tested runtime/sampler/publisher.
 
+P2 MONITORING (P0 gap-closure item 1 — observe-only, added on top of the
+above, changes nothing about it): every healthy frame is also fed to a
+``LiveP2Monitor`` (edge/pipeline/monitor.py) via ``AcquisitionRuntime``'s
+optional ``on_healthy_frame`` hook. This runs the real, unmodified
+``P2Pipeline`` (preprocess → anomaly → trust → attribution) and logs each
+``WindowOutcome`` — it does NOT isolate a channel, does NOT actuate, does NOT
+publish a decision/ledger message, and cannot affect telemetry: the hook is
+wrapped in try/except inside the runtime, so a monitoring bug can never stop
+or crash publishing. See edge/pipeline/monitor.py's docstring for exactly
+which P2 components are used and why (NullDetector — no calibrated threshold
+exists yet; ConsistencyProvider bootstrapped on ``P2_FIT_WINDOW_COUNT`` clean
+live windows — required, no default; a single-window bootstrap was found to
+collapse the consistency signal to a binary 0.0/1.0 output even on clean
+data, see the module docstring for the fix).
+
     PYTHONPATH=backend:. python -m edge
 """
 
 from __future__ import annotations
 
+import logging
 import os
 import signal
 import time
 
+from app.schemas.contracts import CHANNELS
+
 from edge.acquisition.mqtt_publisher import ResilientTelemetryPublisher
 from edge.acquisition.runtime import AcquisitionRuntime
 from edge.acquisition.sampler import Sampler
+from edge.anomaly.attribution import AttributionEngine
+from edge.anomaly.detector import NullDetector
+from edge.anomaly.physics_rule import TrendSignPhysicsRule
+from edge.anomaly.pipeline import P2Pipeline, WindowOutcome
+from edge.anomaly.policy import SeverityThresholdFlagPolicy
+from edge.anomaly.preprocess import Preprocessor
 from edge.drivers.ds18b20 import DS18B20Driver
 from edge.drivers.fake import fake_drivers
+from edge.pipeline.monitor import LiveP2Monitor
+from edge.trust.c_consistency import ConsistencyProvider
+from edge.trust.engine import TrustEngine
+from edge.trust.h_reliability import HReliabilityProvider
+from edge.trust.k_correlation import CorrelationProvider
+
+log = logging.getLogger("shtapm.edge.main")
 
 # Plausible steady-state constants for fake sensors (dev only — not authoritative specs).
 # The "temperature" value is a placeholder; replaced by the real driver below.
@@ -49,11 +81,72 @@ _DEV_VALUES = {
 }
 
 
+def _required_env_int(name: str) -> int:
+    """Read a required integer env var — raises with a clear message if
+    unset, per TRD §02.7's "missing var → clear boot error naming it"
+    acceptance criterion. No default is invented for values this project
+    has not specified (see .env.example)."""
+    value = os.environ.get(name)
+    if value is None:
+        raise RuntimeError(f"{name} is required (see .env.example) — no default is invented")
+    return int(value)
+
+
+def _build_p2_monitor(*, fit_window_count: int) -> LiveP2Monitor:
+    """Compose the real (non-stub) P2 pipeline for observe-only live
+    monitoring. See edge/pipeline/monitor.py's docstring for exactly why
+    each component needs no invented threshold/calibration to run this way,
+    and for the ``fit_window_count`` buffer-size derivation."""
+    preprocessor = Preprocessor(median_kernel=1, low_pass_alpha=1.0)  # identity filters;
+    # median_kernel/low_pass_alpha have no documented spec value (see
+    # edge/anomaly/preprocess.py) — 1/1.0 are the module's own documented
+    # identity settings, not an invented smoothing amount.
+    c_provider = ConsistencyProvider()
+    pipeline = P2Pipeline(
+        preprocessor=preprocessor,
+        detector=NullDetector(),
+        trust_engine=TrustEngine(),
+        attribution_engine=AttributionEngine(TrendSignPhysicsRule()),
+        c_provider=c_provider,
+        k_provider=CorrelationProvider(),
+        h_provider=HReliabilityProvider(),
+        flag_policy=SeverityThresholdFlagPolicy(),
+    )
+    return LiveP2Monitor(
+        preprocessor=preprocessor,
+        pipeline=pipeline,
+        c_provider=c_provider,
+        fit_window_count=fit_window_count,
+        on_outcome=_log_window_outcome,
+    )
+
+
+def _log_window_outcome(outcome: WindowOutcome) -> None:
+    """Monitoring-only: log preprocessing/anomaly/trust/attribution. Never
+    isolates a channel, actuates, or publishes anything."""
+    trust_summary = ", ".join(
+        f"{ch}={outcome.trust[ch].trust:.3f}/{outcome.trust[ch].band.value}" for ch in CHANNELS
+    )
+    attribution_summary = ", ".join(
+        f"{ch}={outcome.attribution[ch].attribution.value}" for ch in CHANNELS
+    )
+    log.info(
+        "P2 window[%d:%d] anomaly=%s(sev=%.3f) trust={%s} attribution={%s}",
+        outcome.window.start_index,
+        outcome.window.end_index,
+        outcome.anomaly.flag,
+        outcome.anomaly.severity,
+        trust_summary,
+        attribution_summary,
+    )
+
+
 def main() -> None:
     device_id = os.environ.get("DEVICE_ID", "pump-01")
     rate_hz = float(os.environ.get("SAMPLE_RATE_HZ", "1"))
     host = os.environ.get("EDGE_MQTT_HOST", "localhost")
     port = int(os.environ.get("EDGE_MQTT_PORT", "1883"))
+    p2_fit_window_count = _required_env_int("P2_FIT_WINDOW_COUNT")
 
     # Create fake drivers for five channels (vibration, pressure, humidity, gas, current)
     drivers = fake_drivers(_DEV_VALUES)
@@ -65,7 +158,13 @@ def main() -> None:
     sampler = Sampler(device_id=device_id, drivers=drivers)
     publisher = ResilientTelemetryPublisher(device_id=device_id, rate_hz=rate_hz)
     publisher.start(host, port)
-    runtime = AcquisitionRuntime(sampler=sampler, publisher=publisher, rate_hz=rate_hz)
+    p2_monitor = _build_p2_monitor(fit_window_count=p2_fit_window_count)
+    runtime = AcquisitionRuntime(
+        sampler=sampler,
+        publisher=publisher,
+        rate_hz=rate_hz,
+        on_healthy_frame=p2_monitor.on_frame,
+    )
 
     running = {"go": True}
 
@@ -78,7 +177,8 @@ def main() -> None:
     print(
         f"[edge] MIXED HW/DEV: real DS18B20 (temperature) + fake drivers "
         f"(vibration, pressure, humidity, gas, current) → "
-        f"{publisher.telemetry_topic} at {rate_hz} Hz (Ctrl-C to stop)"
+        f"{publisher.telemetry_topic} at {rate_hz} Hz (Ctrl-C to stop) "
+        f"[P2 monitoring: observe-only, no isolation/actuation/publish]"
     )
     try:
         runtime.run(should_continue=lambda: running["go"], sleep=time.sleep)

@@ -49,11 +49,13 @@ class FakeClient:
         self.on_connect(self, None, None, 0)
 
 
-def _wire(drivers, *, fail=False, rate_hz=5.0):
+def _wire(drivers, *, fail=False, rate_hz=5.0, on_healthy_frame=None):
     client = FakeClient(fail_on_telemetry=fail)
     publisher = ResilientTelemetryPublisher(device_id="pump-01", rate_hz=rate_hz, client=client)
     sampler = Sampler(device_id="pump-01", drivers=drivers, clock=_clock)
-    runtime = AcquisitionRuntime(sampler=sampler, publisher=publisher, rate_hz=rate_hz)
+    runtime = AcquisitionRuntime(
+        sampler=sampler, publisher=publisher, rate_hz=rate_hz, on_healthy_frame=on_healthy_frame
+    )
     return runtime, publisher, client
 
 
@@ -186,3 +188,53 @@ def test_frame_is_frozen_contract():
 
     # constant_raw is exercised through fake_drivers; keep a direct smoke check
     assert constant_raw(1.5)() == 1.5
+
+
+# ---- on_healthy_frame monitoring hook (P0 gap-closure item 1) -------------
+
+
+def test_on_healthy_frame_hook_called_with_the_published_frame():
+    received = []
+    runtime, _pub, client = _wire(fake_drivers(VALUES), on_healthy_frame=received.append)
+    client.fire_connect()
+
+    runtime.tick()
+
+    assert len(received) == 1
+    assert received[0].sample_seq == 0
+    assert received[0].device_id == "pump-01"
+
+
+def test_on_healthy_frame_hook_not_called_on_unhealthy_tick():
+    drivers = fake_drivers(VALUES)
+    drivers["pressure"] = Sensor(unit="hPa", raw_read=scripted_raw([OSError("i2c")]), clock=_clock)
+    received = []
+    runtime, _pub, client = _wire(drivers, on_healthy_frame=received.append)
+    client.fire_connect()
+
+    runtime.tick()
+
+    assert received == []
+
+
+def test_on_healthy_frame_exception_does_not_block_publish(caplog):
+    def _broken_hook(frame):
+        raise RuntimeError("monitoring bug")
+
+    runtime, _pub, client = _wire(fake_drivers(VALUES), on_healthy_frame=_broken_hook)
+    client.fire_connect()
+
+    with caplog.at_level("WARNING", logger="shtapm.edge.runtime"):
+        runtime.tick()  # must not raise
+
+    assert [m["sample_seq"] for m in _telemetry(client)] == [0]
+    assert any("on_healthy_frame hook raised" in r.getMessage() for r in caplog.records)
+
+
+def test_default_on_healthy_frame_is_none_and_behavior_is_unchanged():
+    """No hook passed (the pre-existing call signature) -> byte-identical
+    behavior to before this parameter existed."""
+    runtime, _pub, client = _wire(fake_drivers(VALUES))
+    client.fire_connect()
+    runtime.tick()
+    assert [m["sample_seq"] for m in _telemetry(client)] == [0]
