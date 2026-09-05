@@ -22,6 +22,7 @@ from edge.eval.rl_baseline_eval import (
     run_baseline_policy_episode,
     run_pure_fallback_episode,
 )
+from edge.rl.reward import DECISION_ONLY_WEIGHTS_FIXTURE, SIMULATION_REWARD_WEIGHTS_FIXTURE
 
 SCENARIO = SCENARIO_CLEAN_DEGRADATION
 
@@ -265,6 +266,75 @@ def test_episode_record_carries_the_comparison_caveat():
     record = run_baseline_policy_episode(SCENARIO)
     assert record.comparison_caveat == ACTION_DEPENDENT_COMPARISON_CAVEAT
     assert "decision quality" in record.comparison_caveat
+
+
+# ---------------------------------------------------------------------------
+# reward_weights parameter: defaults and overrides (reward-weight tuning)
+# ---------------------------------------------------------------------------
+
+
+def test_baseline_policy_episode_defaults_to_simulation_fixture():
+    default_record = run_baseline_policy_episode(SCENARIO)
+    explicit_record = run_baseline_policy_episode(
+        SCENARIO, reward_weights=SIMULATION_REWARD_WEIGHTS_FIXTURE
+    )
+    assert default_record.cumulative_reward == explicit_record.cumulative_reward
+
+
+def test_pure_fallback_episode_defaults_to_simulation_fixture():
+    default_record = run_pure_fallback_episode(SCENARIO)
+    explicit_record = run_pure_fallback_episode(
+        SCENARIO, reward_weights=SIMULATION_REWARD_WEIGHTS_FIXTURE
+    )
+    assert default_record.cumulative_reward == explicit_record.cumulative_reward
+
+
+def test_baseline_policy_episode_reward_weights_override_is_applied():
+    default_record = run_baseline_policy_episode(SCENARIO)
+    override_record = run_baseline_policy_episode(
+        SCENARIO, reward_weights=DECISION_ONLY_WEIGHTS_FIXTURE
+    )
+    assert default_record.cumulative_reward != override_record.cumulative_reward
+
+
+def test_pure_fallback_episode_with_decision_only_weights_is_exactly_zero():
+    """pure_fallback always requests None, which never matches any
+    RLAction comparison in _compute_components -- so on a scenario where
+    anomaly_impact also never fires, DECISION_ONLY_WEIGHTS_FIXTURE (which
+    zeroes health/trust/recovery) must produce an exact 0.0 total."""
+    record = run_pure_fallback_episode(SCENARIO, reward_weights=DECISION_ONLY_WEIGHTS_FIXTURE)
+    assert record.cumulative_reward == 0.0
+
+
+def test_run_all_baselines_defaults_to_simulation_fixture():
+    default_records = run_all_baselines([SCENARIO])
+    explicit_records = run_all_baselines(
+        [SCENARIO], reward_weights=SIMULATION_REWARD_WEIGHTS_FIXTURE
+    )
+    assert [r.cumulative_reward for r in default_records] == [
+        r.cumulative_reward for r in explicit_records
+    ]
+
+
+def test_run_all_baselines_reward_weights_override_is_applied():
+    default_records = run_all_baselines([SCENARIO])
+    override_records = run_all_baselines([SCENARIO], reward_weights=DECISION_ONLY_WEIGHTS_FIXTURE)
+    assert [r.cumulative_reward for r in default_records] != [
+        r.cumulative_reward for r in override_records
+    ]
+
+
+def test_reward_weights_override_does_not_change_scenario_or_methodology():
+    """Overriding reward_weights must never change which scenario ran, how
+    many steps it took, or its termination cause -- only the reward math."""
+    default_record = run_baseline_policy_episode(SCENARIO)
+    override_record = run_baseline_policy_episode(
+        SCENARIO, reward_weights=DECISION_ONLY_WEIGHTS_FIXTURE
+    )
+    assert default_record.scenario_config == override_record.scenario_config
+    assert default_record.step_count == override_record.step_count
+    assert default_record.termination_cause == override_record.termination_cause
+    assert default_record.approved_action_histogram == override_record.approved_action_histogram
 
 
 def test_scenario_config_is_explicit_and_reproducible():

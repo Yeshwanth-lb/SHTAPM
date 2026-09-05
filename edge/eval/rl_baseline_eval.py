@@ -112,7 +112,7 @@ from edge.models.degradation_generator import (
 from edge.rl.environment import SHTAPMSimulationEnvironment
 from edge.rl.fallback_gate import RL_CONFIDENCE_THRESHOLD_FIXTURE
 from edge.rl.policy import BASELINE_CRITICAL_HEALTH_FIXTURE, BaselinePolicy
-from edge.rl.reward import SIMULATION_REWARD_WEIGHTS_FIXTURE
+from edge.rl.reward import SIMULATION_REWARD_WEIGHTS_FIXTURE, RewardWeights
 from edge.rl.state import RLState
 from edge.trust.c_consistency import ConsistencyProvider
 from edge.trust.engine import TrustEngine
@@ -273,7 +273,11 @@ def _build_p2_pipeline() -> tuple[Preprocessor, P2Pipeline, ConsistencyProvider]
     return preprocessor, pipeline, c_provider
 
 
-def _build_environment(scenario: ScenarioConfig) -> SHTAPMSimulationEnvironment:
+def _build_environment(
+    scenario: ScenarioConfig,
+    *,
+    reward_weights: RewardWeights = SIMULATION_REWARD_WEIGHTS_FIXTURE,
+) -> SHTAPMSimulationEnvironment:
     generator = SyntheticDegradationGenerator(
         length=scenario.length,
         start_health=scenario.start_health,
@@ -292,7 +296,7 @@ def _build_environment(scenario: ScenarioConfig) -> SHTAPMSimulationEnvironment:
         fit_window_count=FIT_WINDOW_COUNT_FIXTURE,
         confidence_threshold=RL_CONFIDENCE_THRESHOLD_FIXTURE,
         injections=scenario.injections,
-        reward_weights=SIMULATION_REWARD_WEIGHTS_FIXTURE,
+        reward_weights=reward_weights,
     )
 
 
@@ -312,14 +316,20 @@ def _run_episode(
     baseline_name: str,
     *,
     propose_action: _ProposeFn,
+    reward_weights: RewardWeights = SIMULATION_REWARD_WEIGHTS_FIXTURE,
 ) -> EpisodeRecord:
     """Shared episode-driving loop for both baselines. ``propose_action``
     is called once per step with the CURRENT ``RLState`` and must return
     ``(action, policy_available, policy_validated, confidence)`` -- the
     exact keyword shape ``SHTAPMSimulationEnvironment.step()`` already
     accepts. Neither baseline's own action-selection logic lives here;
-    this function only drives the loop and records results."""
-    env = _build_environment(scenario)
+    this function only drives the loop and records results.
+
+    ``reward_weights`` defaults to ``SIMULATION_REWARD_WEIGHTS_FIXTURE`` --
+    passing a different ``edge.rl.reward.RewardWeights`` (e.g. one of the
+    named candidate configurations) changes only how this episode's reward
+    totals are computed, never the scenario, the transition, or the gate."""
+    env = _build_environment(scenario, reward_weights=reward_weights)
     state = env.reset()
 
     transitions: list[TransitionRecord] = []
@@ -392,9 +402,15 @@ def _run_episode(
     )
 
 
-def run_baseline_policy_episode(scenario: ScenarioConfig) -> EpisodeRecord:
+def run_baseline_policy_episode(
+    scenario: ScenarioConfig,
+    *,
+    reward_weights: RewardWeights = SIMULATION_REWARD_WEIGHTS_FIXTURE,
+) -> EpisodeRecord:
     """Run ``edge.rl.policy.BaselinePolicy`` (the existing, unmodified
-    deterministic rule set) through one scenario."""
+    deterministic rule set) through one scenario. ``reward_weights``
+    defaults to ``SIMULATION_REWARD_WEIGHTS_FIXTURE`` -- unchanged existing
+    behavior when not overridden."""
     policy = BaselinePolicy(critical_health_threshold=BASELINE_CRITICAL_HEALTH_FIXTURE)
 
     def _propose(state):
@@ -406,32 +422,46 @@ def run_baseline_policy_episode(scenario: ScenarioConfig) -> EpisodeRecord:
             decision.confidence,
         )
 
-    return _run_episode(scenario, "baseline_policy", propose_action=_propose)
+    return _run_episode(
+        scenario, "baseline_policy", propose_action=_propose, reward_weights=reward_weights
+    )
 
 
-def run_pure_fallback_episode(scenario: ScenarioConfig) -> EpisodeRecord:
+def run_pure_fallback_episode(
+    scenario: ScenarioConfig,
+    *,
+    reward_weights: RewardWeights = SIMULATION_REWARD_WEIGHTS_FIXTURE,
+) -> EpisodeRecord:
     """Run with NO policy at all -- ``policy_available=False`` on every
     step (FR-RL4 / P3-RL-S1's own scenario). ``None`` is passed as the
     requested action -- see module docstring's REQUESTED ACTION section
-    for why this is not a fabrication or a gate bypass."""
+    for why this is not a fabrication or a gate bypass. ``reward_weights``
+    defaults to ``SIMULATION_REWARD_WEIGHTS_FIXTURE`` -- unchanged existing
+    behavior when not overridden."""
 
     def _propose(_state):
         return (None, False, False, None)
 
-    return _run_episode(scenario, "pure_fallback", propose_action=_propose)
+    return _run_episode(
+        scenario, "pure_fallback", propose_action=_propose, reward_weights=reward_weights
+    )
 
 
 def run_all_baselines(
     scenarios: Sequence[ScenarioConfig] | None = None,
+    *,
+    reward_weights: RewardWeights = SIMULATION_REWARD_WEIGHTS_FIXTURE,
 ) -> list[EpisodeRecord]:
     """Run both baselines over every scenario (default: ``default_scenarios()``).
     Small callable diagnostic entry point -- NOT a production composition-root
-    integration."""
+    integration. ``reward_weights`` defaults to
+    ``SIMULATION_REWARD_WEIGHTS_FIXTURE`` -- unchanged existing behavior
+    when not overridden."""
     scenarios = scenarios if scenarios is not None else default_scenarios()
     records: list[EpisodeRecord] = []
     for scenario in scenarios:
-        records.append(run_baseline_policy_episode(scenario))
-        records.append(run_pure_fallback_episode(scenario))
+        records.append(run_baseline_policy_episode(scenario, reward_weights=reward_weights))
+        records.append(run_pure_fallback_episode(scenario, reward_weights=reward_weights))
     return records
 
 

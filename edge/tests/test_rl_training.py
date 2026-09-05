@@ -38,6 +38,10 @@ from edge.eval.rl_training import (  # noqa: E402
     train_dqn,
 )
 from edge.rl.policy import Policy, PolicyDecision  # noqa: E402
+from edge.rl.reward import (  # noqa: E402
+    DECISION_ONLY_WEIGHTS_FIXTURE,
+    SIMULATION_REWARD_WEIGHTS_FIXTURE,
+)
 from edge.rl.state import STATE_WIDTH, RLState  # noqa: E402
 
 
@@ -237,8 +241,9 @@ def test_train_dqn_raises_if_environment_reward_is_unweighted(monkeypatch):
 
     original_build = module._build_environment
 
-    def _build_without_weights(scenario):
-        env = original_build(scenario)
+    def _build_without_weights(scenario, *, reward_weights=None):
+        weights = reward_weights or SIMULATION_REWARD_WEIGHTS_FIXTURE
+        env = original_build(scenario, reward_weights=weights)
         env._reward_weights = None  # force unweighted mode for this test only
         return env
 
@@ -329,8 +334,9 @@ def test_evaluate_greedy_raises_if_reward_unweighted(monkeypatch):
 
     original_build = module._build_environment
 
-    def _build_without_weights(scenario):
-        env = original_build(scenario)
+    def _build_without_weights(scenario, *, reward_weights=None):
+        weights = reward_weights or SIMULATION_REWARD_WEIGHTS_FIXTURE
+        env = original_build(scenario, reward_weights=weights)
         env._reward_weights = None
         return env
 
@@ -339,6 +345,63 @@ def test_evaluate_greedy_raises_if_reward_unweighted(monkeypatch):
 
     with pytest.raises(ValueError, match="RewardResult"):
         evaluate_greedy(net, SCENARIO_CLEAN_DEGRADATION)
+
+
+# ---------------------------------------------------------------------------
+# reward_weights: optional, additive, defaults to the original fixture.
+#
+# None of these tests claim any candidate weight configuration is better,
+# safer, optimal, validated, or representative of real-world priorities --
+# they only verify that the parameter is wired through correctly and that
+# not passing it reproduces prior behavior exactly.
+# ---------------------------------------------------------------------------
+
+
+def test_train_dqn_defaults_to_the_simulation_fixture():
+    default_result = _tiny_train(seed=11)
+    explicit_result = _tiny_train(seed=11, reward_weights=SIMULATION_REWARD_WEIGHTS_FIXTURE)
+    assert default_result.hyperparameters == explicit_result.hyperparameters
+    for ep_a, ep_b in zip(default_result.episodes, explicit_result.episodes, strict=True):
+        assert ep_a.cumulative_reward == ep_b.cumulative_reward
+
+
+def test_train_dqn_reward_weights_override_changes_reward_totals():
+    default_result = _tiny_train(seed=11)
+    override_result = _tiny_train(seed=11, reward_weights=DECISION_ONLY_WEIGHTS_FIXTURE)
+    default_rewards = [ep.cumulative_reward for ep in default_result.episodes]
+    override_rewards = [ep.cumulative_reward for ep in override_result.episodes]
+    assert default_rewards != override_rewards
+
+
+def test_evaluate_greedy_defaults_to_the_simulation_fixture():
+    result = _tiny_train()
+    default_record = evaluate_greedy(result.final_policy_net, SCENARIO_CLEAN_DEGRADATION)
+    explicit_record = evaluate_greedy(
+        result.final_policy_net,
+        SCENARIO_CLEAN_DEGRADATION,
+        reward_weights=SIMULATION_REWARD_WEIGHTS_FIXTURE,
+    )
+    assert default_record.cumulative_reward == explicit_record.cumulative_reward
+    assert default_record.step_count == explicit_record.step_count
+    assert default_record.approved_action_histogram == explicit_record.approved_action_histogram
+
+
+def test_evaluate_greedy_reward_weights_override_changes_reward_total_only():
+    result = _tiny_train()
+    default_record = evaluate_greedy(result.final_policy_net, SCENARIO_CLEAN_DEGRADATION)
+    override_record = evaluate_greedy(
+        result.final_policy_net,
+        SCENARIO_CLEAN_DEGRADATION,
+        reward_weights=DECISION_ONLY_WEIGHTS_FIXTURE,
+    )
+    # The frozen network is run greedily (epsilon=0) on the same scenario in
+    # both cases, so its chosen actions and the fallback gate's decisions
+    # cannot depend on reward_weights -- only the reward total may differ.
+    assert default_record.step_count == override_record.step_count
+    assert default_record.termination_cause == override_record.termination_cause
+    assert default_record.approved_action_histogram == override_record.approved_action_histogram
+    assert default_record.requested_action_histogram == override_record.requested_action_histogram
+    assert default_record.cumulative_reward != override_record.cumulative_reward
 
 
 # ---------------------------------------------------------------------------

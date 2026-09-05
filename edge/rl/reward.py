@@ -48,6 +48,18 @@ uniform 1.0-per-component placeholder, NOT a tuned or research value)
 computes ``total`` and sets ``reward_policy_status=
 "simulation_fixture_weighted"``. No weight is ever assumed silently.
 
+CANDIDATE WEIGHT CONFIGURATIONS (below ``SIMULATION_REWARD_WEIGHTS_
+FIXTURE``'s own definition): ``SAFETY_PRIORITY_WEIGHTS_FIXTURE``,
+``DECISION_ONLY_WEIGHTS_FIXTURE``, ``BALANCED_SURVIVAL_WEIGHTS_FIXTURE`` --
+three additional, equally-illustrative, equally-unvalidated named
+``RewardWeights`` values, added to investigate (never to resolve) the
+episode-length accumulation effect ``SIMULATION_REWARD_WEIGHTS_FIXTURE``'s
+own uniform weighting exhibits. See each one's own docstring for its
+specific rationale. None is the default anywhere in this codebase, none
+changes ``SIMULATION_REWARD_WEIGHTS_FIXTURE``'s own values, and none is
+presented as better, safer, optimal, validated, or representative of
+real-world priorities than any other.
+
 SIDE-EFFECT FREE: this module isolates nothing, actuates nothing,
 publishes nothing, and writes nothing -- it only reads the already-
 computed ``RLState``/``GateDecision`` values it is given and returns a new
@@ -166,6 +178,78 @@ SIMULATION_REWARD_WEIGHTS_FIXTURE = RewardWeights(
     recovery_stabilization=1.0,
     safe_stop_behavior=1.0,
 )
+
+# ---- Candidate weight configurations (ALL simulation-only, illustrative) --
+#
+# These exist because SIMULATION_REWARD_WEIGHTS_FIXTURE's uniform weighting
+# has a documented, empirically-observed property: health_maintenance and
+# trust_preservation fire on EVERY step and are always >= 0, while the other
+# five components are sparse, one-off, and <= 0 (except safe_stop_behavior's
+# +REWARD_MAGNITUDE_FIXTURE case). Over a long episode this means cumulative
+# reward is dominated by episode LENGTH rather than by decision quality --
+# see this increment's own read-only analysis for the full investigation
+# (a diagnostic training run showed ~150x higher cumulative reward for a
+# 29-step episode than a 1-step episode, driven almost entirely by step
+# count, not by whether stopping was actually warranted).
+#
+# NONE of the three configurations below resolve U06 (RL reward shaping +
+# acceptable false-isolation rate, fully open in DECISIONS.md). Each is a
+# candidate for analysis/comparison only. Every weight value is a round,
+# illustrative number chosen for this candidate's own stated rationale --
+# NOT derived from data, NOT tuned by any search process, NOT validated,
+# and NOT a claim about correct real-world priorities. None is presented,
+# here or anywhere this project's tests check, as better, safer, optimal,
+# validated, or representative of real-world operation than any other.
+
+SAFETY_PRIORITY_WEIGHTS_FIXTURE = RewardWeights(
+    health_maintenance=1.0,
+    anomaly_impact=5.0,
+    trust_preservation=1.0,
+    isolation_appropriateness=5.0,
+    unsafe_action_penalty=5.0,
+    recovery_stabilization=1.0,
+    safe_stop_behavior=5.0,
+)
+"""Upweights the four decision/safety components (anomaly_impact,
+isolation_appropriateness, unsafe_action_penalty, safe_stop_behavior) by a
+round 5x factor relative to the always-on components, directly emphasizing
+FR-RL3's three named penalties over passive per-step accumulation. The 5x
+figure is illustrative only -- chosen to be large enough to visibly counter
+the accumulation effect in a short synthetic episode, not derived from any
+data or search."""
+
+DECISION_ONLY_WEIGHTS_FIXTURE = RewardWeights(
+    health_maintenance=0.0,
+    anomaly_impact=1.0,
+    trust_preservation=0.0,
+    isolation_appropriateness=1.0,
+    unsafe_action_penalty=1.0,
+    recovery_stabilization=0.0,
+    safe_stop_behavior=1.0,
+)
+"""Zeroes the three components a policy cannot causally influence through
+its own action choice alone (health_maintenance is pure generator ground
+truth; trust_preservation and recovery_stabilization are almost entirely
+determined by the same action-independent trajectory), isolating the
+learning signal to exactly the four decision-relevant components. This
+removes the episode-length accumulation effect entirely, at the cost of
+giving the policy no reward signal at all from the resulting system
+state."""
+
+BALANCED_SURVIVAL_WEIGHTS_FIXTURE = RewardWeights(
+    health_maintenance=0.2,
+    anomaly_impact=1.0,
+    trust_preservation=0.2,
+    isolation_appropriateness=1.0,
+    unsafe_action_penalty=1.0,
+    recovery_stabilization=0.2,
+    safe_stop_behavior=1.0,
+)
+"""A middle ground between SIMULATION_REWARD_WEIGHTS_FIXTURE and
+DECISION_ONLY_WEIGHTS_FIXTURE: keeps a reduced (0.2x), round, illustrative
+weight on the three always-on components so the resulting state still
+contributes something, without letting it dominate cumulative reward over
+a long episode the way the uniform 1.0 weighting does."""
 
 
 @dataclass(frozen=True)

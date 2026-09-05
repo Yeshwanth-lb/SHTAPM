@@ -122,7 +122,7 @@ from edge.models.degradation_generator import (
 from edge.rl.environment import SHTAPMSimulationEnvironment
 from edge.rl.fallback_gate import RL_CONFIDENCE_THRESHOLD_FIXTURE
 from edge.rl.policy import PolicyDecision
-from edge.rl.reward import SIMULATION_REWARD_WEIGHTS_FIXTURE
+from edge.rl.reward import SIMULATION_REWARD_WEIGHTS_FIXTURE, RewardWeights
 from edge.rl.state import STATE_WIDTH, RLState
 from edge.trust.c_consistency import ConsistencyProvider
 from edge.trust.engine import TrustEngine
@@ -213,7 +213,11 @@ def _build_p2_pipeline() -> tuple[Preprocessor, P2Pipeline, ConsistencyProvider]
     return preprocessor, pipeline, c_provider
 
 
-def _build_environment(scenario: ScenarioConfig) -> SHTAPMSimulationEnvironment:
+def _build_environment(
+    scenario: ScenarioConfig,
+    *,
+    reward_weights: RewardWeights = SIMULATION_REWARD_WEIGHTS_FIXTURE,
+) -> SHTAPMSimulationEnvironment:
     generator = SyntheticDegradationGenerator(
         length=scenario.length,
         start_health=scenario.start_health,
@@ -232,7 +236,7 @@ def _build_environment(scenario: ScenarioConfig) -> SHTAPMSimulationEnvironment:
         fit_window_count=FIT_WINDOW_COUNT_FIXTURE,
         confidence_threshold=RL_CONFIDENCE_THRESHOLD_FIXTURE,
         injections=scenario.injections,
-        reward_weights=SIMULATION_REWARD_WEIGHTS_FIXTURE,  # required for training -- see docstring
+        reward_weights=reward_weights,  # required for training -- see docstring
     )
 
 
@@ -420,18 +424,30 @@ def train_dqn(
     batch_size: int,
     target_update_interval: int,
     seed: int,
+    reward_weights: RewardWeights = SIMULATION_REWARD_WEIGHTS_FIXTURE,
 ) -> TrainingRunResult:
     """Run ``episodes`` of DQN training, cycling through
-    ``training_scenarios``. Every argument is REQUIRED -- no default
-    anywhere in this function (see module docstring). Raises ``ValueError``
-    if any transition's reward total is ``None`` (see module docstring's
-    REWARD HANDLING section) -- this indicates a misconfigured environment,
-    not a condition to route around silently.
+    ``training_scenarios``. Every argument except ``reward_weights`` is
+    REQUIRED -- no default anywhere else in this function (see module
+    docstring). Raises ``ValueError`` if any transition's reward total is
+    ``None`` (see module docstring's REWARD HANDLING section) -- this
+    indicates a misconfigured environment, not a condition to route around
+    silently.
+
+    ``reward_weights`` defaults to ``SIMULATION_REWARD_WEIGHTS_FIXTURE`` --
+    existing call sites that don't pass it see identical behavior. Passing
+    one of ``edge.rl.reward``'s other named candidate configurations (e.g.
+    ``SAFETY_PRIORITY_WEIGHTS_FIXTURE``) changes only how reward totals are
+    computed for this run -- it does not alter the DQN architecture,
+    training logic, fallback-gate behavior, the training/evaluation
+    scenario split, or any transition rule.
 
     Hardware-free plumbing verification ONLY: proves the training loop
     runs, loss is finite, and the policy's action distribution changes
     over episodes on SYNTHETIC data. Establishes NO real-world accuracy,
-    safety, or validation claim whatsoever -- see module docstring.
+    safety, or validation claim whatsoever -- see module docstring. No
+    weight configuration passed here is claimed better, safer, optimal,
+    validated, or representative of real-world priorities than any other.
     """
     if not training_scenarios:
         raise ValueError("training_scenarios must not be empty")
@@ -452,7 +468,7 @@ def train_dqn(
         epsilon = _epsilon_for_episode(
             episode_index, epsilon_start, epsilon_end, epsilon_decay_episodes
         )
-        env = _build_environment(scenario)
+        env = _build_environment(scenario, reward_weights=reward_weights)
         policy = DQNPolicy(policy_net, epsilon=epsilon, rng=rng)
 
         state = env.reset()
@@ -554,13 +570,20 @@ def train_dqn(
     )
 
 
-def evaluate_greedy(network: _DQNNet, scenario: ScenarioConfig) -> TrainingEpisodeRecord:
+def evaluate_greedy(
+    network: _DQNNet,
+    scenario: ScenarioConfig,
+    *,
+    reward_weights: RewardWeights = SIMULATION_REWARD_WEIGHTS_FIXTURE,
+) -> TrainingEpisodeRecord:
     """Run one fully-greedy (epsilon=0) episode of ``network`` against
     ``scenario`` -- for comparing a trained network against the baselines
     on a HELD-OUT scenario (see module docstring). No exploration, no
-    training update -- diagnostic evaluation only."""
+    training update -- diagnostic evaluation only. ``reward_weights``
+    defaults to ``SIMULATION_REWARD_WEIGHTS_FIXTURE`` -- unchanged existing
+    behavior when not overridden."""
     rng = random.Random(0)  # only used if state is ever None; greedy path never draws from it
-    env = _build_environment(scenario)
+    env = _build_environment(scenario, reward_weights=reward_weights)
     policy = DQNPolicy(network, epsilon=0.0, rng=rng)
 
     state = env.reset()

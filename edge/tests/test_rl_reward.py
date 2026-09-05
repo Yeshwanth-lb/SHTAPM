@@ -10,9 +10,12 @@ from app.schemas.contracts import CHANNELS, RLAction
 
 from edge.rl.fallback_gate import GateDecision
 from edge.rl.reward import (
+    BALANCED_SURVIVAL_WEIGHTS_FIXTURE,
+    DECISION_ONLY_WEIGHTS_FIXTURE,
     EXECUTION_MODE,
     PENALTY_MAGNITUDE_FIXTURE,
     REWARD_MAGNITUDE_FIXTURE,
+    SAFETY_PRIORITY_WEIGHTS_FIXTURE,
     SIMULATION_REWARD_WEIGHTS_FIXTURE,
     RewardComponents,
     RewardResult,
@@ -351,6 +354,161 @@ def test_fixture_weights_are_uniform_and_labeled_simulation_only():
         w.safe_stop_behavior,
     }
     assert values == {1.0}
+
+
+# ---------------------------------------------------------------------------
+# Candidate weight configurations (reward-weight tuning increment)
+# ---------------------------------------------------------------------------
+
+
+def test_original_fixture_still_has_seven_values_of_one():
+    """Guards against accidental drift: SIMULATION_REWARD_WEIGHTS_FIXTURE
+    itself must remain exactly as it was before candidate configs existed."""
+    w = SIMULATION_REWARD_WEIGHTS_FIXTURE
+    assert (
+        w.health_maintenance,
+        w.anomaly_impact,
+        w.trust_preservation,
+        w.isolation_appropriateness,
+        w.unsafe_action_penalty,
+        w.recovery_stabilization,
+        w.safe_stop_behavior,
+    ) == (1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0)
+
+
+def test_safety_priority_fixture_has_documented_values():
+    w = SAFETY_PRIORITY_WEIGHTS_FIXTURE
+    assert w.health_maintenance == 1.0
+    assert w.anomaly_impact == 5.0
+    assert w.trust_preservation == 1.0
+    assert w.isolation_appropriateness == 5.0
+    assert w.unsafe_action_penalty == 5.0
+    assert w.recovery_stabilization == 1.0
+    assert w.safe_stop_behavior == 5.0
+
+
+def test_decision_only_fixture_has_documented_values():
+    w = DECISION_ONLY_WEIGHTS_FIXTURE
+    assert w.health_maintenance == 0.0
+    assert w.anomaly_impact == 1.0
+    assert w.trust_preservation == 0.0
+    assert w.isolation_appropriateness == 1.0
+    assert w.unsafe_action_penalty == 1.0
+    assert w.recovery_stabilization == 0.0
+    assert w.safe_stop_behavior == 1.0
+
+
+def test_balanced_survival_fixture_has_documented_values():
+    w = BALANCED_SURVIVAL_WEIGHTS_FIXTURE
+    assert w.health_maintenance == 0.2
+    assert w.anomaly_impact == 1.0
+    assert w.trust_preservation == 0.2
+    assert w.isolation_appropriateness == 1.0
+    assert w.unsafe_action_penalty == 1.0
+    assert w.recovery_stabilization == 0.2
+    assert w.safe_stop_behavior == 1.0
+
+
+def test_candidate_fixtures_are_distinct_objects_from_the_original():
+    candidates = (
+        SAFETY_PRIORITY_WEIGHTS_FIXTURE,
+        DECISION_ONLY_WEIGHTS_FIXTURE,
+        BALANCED_SURVIVAL_WEIGHTS_FIXTURE,
+    )
+    for candidate in candidates:
+        assert candidate is not SIMULATION_REWARD_WEIGHTS_FIXTURE
+        assert candidate != SIMULATION_REWARD_WEIGHTS_FIXTURE
+
+
+def test_candidate_fixtures_are_mutually_distinct():
+    candidates = (
+        SIMULATION_REWARD_WEIGHTS_FIXTURE,
+        SAFETY_PRIORITY_WEIGHTS_FIXTURE,
+        DECISION_ONLY_WEIGHTS_FIXTURE,
+        BALANCED_SURVIVAL_WEIGHTS_FIXTURE,
+    )
+    assert len(set(candidates)) == len(candidates)
+
+
+def test_original_fixture_is_not_mutated_by_the_existence_of_candidates():
+    """Constructing/importing the new candidates must never have altered
+    the original fixture object in place (RewardWeights is frozen, so this
+    also guards against any future accidental in-place-mutation attempt)."""
+    before = (1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0)
+    w = SIMULATION_REWARD_WEIGHTS_FIXTURE
+    after = (
+        w.health_maintenance,
+        w.anomaly_impact,
+        w.trust_preservation,
+        w.isolation_appropriateness,
+        w.unsafe_action_penalty,
+        w.recovery_stabilization,
+        w.safe_stop_behavior,
+    )
+    assert after == before
+
+
+def test_candidate_fixtures_are_real_reward_weights_instances():
+    for candidate in (
+        SAFETY_PRIORITY_WEIGHTS_FIXTURE,
+        DECISION_ONLY_WEIGHTS_FIXTURE,
+        BALANCED_SURVIVAL_WEIGHTS_FIXTURE,
+    ):
+        assert isinstance(candidate, RewardWeights)
+
+
+def test_candidate_fixture_docstrings_do_not_claim_superiority():
+    """No candidate's own docstring may claim it is better, safer, optimal,
+    validated, or representative of real-world priorities than another."""
+    import edge.rl.reward as module
+
+    with open(module.__file__, encoding="utf-8") as f:
+        content = f.read()
+    forbidden_phrases = (
+        "is better than",
+        "is safer than",
+        "is optimal",
+        "is validated",
+        "is representative of real-world",
+        "recommended weight",
+        "the correct weight",
+    )
+    for phrase in forbidden_phrases:
+        assert phrase not in content.lower()
+
+
+def test_candidate_fixtures_compute_a_different_total_than_the_original():
+    """Sanity check that the candidates are actually functionally distinct
+    when used, not just distinct by name -- uses a transition where BOTH
+    an always-on component (health/trust) AND the components the
+    candidates specifically differ on (isolation_appropriateness/
+    unsafe_action_penalty, via a missed-fault + tracked-continue-violation
+    scenario) are simultaneously nonzero."""
+    trust = {ch: 0.9 for ch in CHANNELS}
+    state_a = RLState(health=0.5, anomaly_flag=False, trust=trust, failure_eta=None)
+    state_b = RLState(health=0.6, anomaly_flag=False, trust=trust, failure_eta=None)
+    gate_decision = GateDecision(
+        requested_action=RLAction.continue_,  # missed fault + unsafe (tracked-continue) violation
+        approved_action=RLAction.isolate,  # gate overrides
+        fallback_used=True,
+        fallback_reason="channel remains a tracked isolation candidate",
+        safety_status="isolation_active",
+        policy_status="unvalidated",
+        confidence=None,
+        confidence_threshold=0.8,
+    )
+    totals = {}
+    for name, weights in (
+        ("uniform", SIMULATION_REWARD_WEIGHTS_FIXTURE),
+        ("safety_priority", SAFETY_PRIORITY_WEIGHTS_FIXTURE),
+        ("decision_only", DECISION_ONLY_WEIGHTS_FIXTURE),
+        ("balanced_survival", BALANCED_SURVIVAL_WEIGHTS_FIXTURE),
+    ):
+        result = compute_reward(
+            previous_state=state_a, gate_decision=gate_decision, next_state=state_b, weights=weights
+        )
+        totals[name] = result.total
+    assert len(set(totals.values())) == len(totals)  # all four totals differ
 
 
 def test_magnitude_fixtures_are_distinct_named_values_not_reused_from_other_modules():
