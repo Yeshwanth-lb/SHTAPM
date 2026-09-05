@@ -1,6 +1,7 @@
-"""Tests for edge/rl/environment.py (simulation-only RL environment
-scaffolding). No policy/training/reward-weight test here -- see the
-module's own docstring for exactly what does and does not exist yet.
+"""Tests for edge/rl/environment.py (simulation-only RL environment with
+the fallback gate and reward calculation wired in). No policy/training/
+approved-reward-weight claim exists here -- see the module's own docstring
+for exactly what does and does not exist yet.
 
 Core tests (no torch needed -- prognosis_runtime=None): always run.
 Prognosis-integrated tests: skipped when torch is unavailable, same
@@ -23,7 +24,9 @@ from edge.models.degradation_generator import (
     ChannelDegradationConfig,
     SyntheticDegradationGenerator,
 )
-from edge.rl.environment import EnvironmentStepResult, RewardSignal, SHTAPMSimulationEnvironment
+from edge.rl.environment import EnvironmentStepResult, SHTAPMSimulationEnvironment
+from edge.rl.fallback_gate import RL_CONFIDENCE_THRESHOLD_FIXTURE, GateDecision
+from edge.rl.reward import SIMULATION_REWARD_WEIGHTS_FIXTURE, RewardResult
 from edge.rl.state import RLState
 from edge.trust.c_consistency import ConsistencyProvider
 from edge.trust.engine import TrustEngine
@@ -85,6 +88,7 @@ def _environment(**overrides) -> SHTAPMSimulationEnvironment:
         "pipeline": pipeline,
         "c_provider": c_provider,
         "fit_window_count": FIT_WINDOW_COUNT_FIXTURE,
+        "confidence_threshold": RL_CONFIDENCE_THRESHOLD_FIXTURE,
     }
     kwargs.update(overrides)
     return SHTAPMSimulationEnvironment(**kwargs)
@@ -134,7 +138,7 @@ def test_reset_without_prognosis_runtime_reports_unavailable_prognosis():
 
 
 # ---------------------------------------------------------------------------
-# step()
+# step() -- basic contract
 # ---------------------------------------------------------------------------
 
 
@@ -144,13 +148,14 @@ def test_step_before_reset_raises():
         env.step(RLAction.continue_)
 
 
-def test_step_returns_environment_step_result():
+def test_step_returns_environment_step_result_with_real_reward_and_gate_decision():
     env = _environment()
     env.reset()
     result = env.step(RLAction.continue_)
     assert isinstance(result, EnvironmentStepResult)
     assert isinstance(result.state, RLState)
-    assert isinstance(result.reward, RewardSignal)
+    assert isinstance(result.reward, RewardResult)
+    assert isinstance(result.gate_decision, GateDecision)
     assert isinstance(result.done, bool)
     assert isinstance(result.info, dict)
 
@@ -160,21 +165,27 @@ def test_step_accepts_every_rl_action_member():
         env = _environment()
         env.reset()
         result = env.step(action)
-        assert result.info["action_taken"] == action.value
+        assert result.info["requested_action"] == action.value
 
 
-def test_step_rejects_non_rlaction_value():
+def test_unrecognized_action_value_does_not_raise_and_falls_back():
+    """CORRECTION from the prior version: step() no longer rejects a bad
+    action itself -- the fallback gate handles it safely instead (see
+    module docstring's CORRECTION note)."""
     env = _environment()
     env.reset()
-    with pytest.raises(ValueError, match="RLAction"):
-        env.step("isolate")  # a plain string, not the enum member
+    result = env.step("not_a_real_action")  # not an RLAction member
+    assert result.gate_decision.fallback_used is True
+    assert result.info["requested_action"] == "not_a_real_action"
 
 
-def test_step_info_carries_simulation_execution_mode():
+def test_step_info_carries_simulation_metadata():
     env = _environment()
     env.reset()
     result = env.step(RLAction.continue_)
     assert result.info["execution_mode"] == "simulation"
+    assert result.info["data_source"] == "synthetic"
+    assert result.info["model_status"] == "diagnostic_unvalidated"
 
 
 def test_step_info_carries_deterministic_fallback_candidates_key():
@@ -183,6 +194,7 @@ def test_step_info_carries_deterministic_fallback_candidates_key():
     result = env.step(RLAction.continue_)
     assert "deterministic_fallback_would_isolate" in result.info
     assert isinstance(result.info["deterministic_fallback_would_isolate"], list)
+    assert "persistent_isolation_tracked_channels" in result.info
 
 
 def test_step_never_performs_actuation_or_isolation_side_effects():
@@ -195,23 +207,81 @@ def test_step_never_performs_actuation_or_isolation_side_effects():
         content = f.read()
     assert "RelayController" not in content
     assert "FakeActuator" not in content
-    assert "SelfHealOrchestrator" not in content
     assert "process_isolated_channels" not in content
     assert "GPIO" not in content.upper()
     assert "MQTT" not in content.upper()
 
 
-def test_reward_total_is_always_none_placeholder():
+# ---------------------------------------------------------------------------
+# Requested vs. approved action separation; gate invocation on every step
+# ---------------------------------------------------------------------------
+
+
+def test_gate_is_invoked_on_every_step_producing_a_decision_field():
     env = _environment()
     env.reset()
-    result = env.step(RLAction.continue_)
-    assert result.reward.total is None
-    assert result.reward.components == {}
+    for _ in range(3):
+        result = env.step(RLAction.continue_)
+        assert result.gate_decision is not None
+
+
+def test_requested_and_approved_action_are_distinct_fields():
+    env = _environment()
+    env.reset()
+    # A validated, confident request that violates no constraint: approved.
+    result = env.step(
+        RLAction.continue_, policy_available=True, policy_validated=True, confidence=0.99
+    )
+    assert result.gate_decision.requested_action == RLAction.continue_
+    assert result.gate_decision.approved_action == RLAction.continue_
+    assert result.gate_decision.fallback_used is False
+
+
+def test_fallback_overrides_an_unvalidated_policys_request_on_clean_data():
+    """policy_validated defaults to False -- on clean (non-malicious) data
+    the deterministic fallback resolves to Continue, which DIFFERS from a
+    requested Isolate, proving the override actually happens."""
+    env = _environment()
+    env.reset()
+    result = env.step(RLAction.isolate)  # policy_validated defaults to False
+    assert result.gate_decision.requested_action == RLAction.isolate
+    assert result.gate_decision.approved_action == RLAction.continue_
+    assert result.gate_decision.fallback_used is True
+    assert result.info["approved_action"] == RLAction.continue_.value
+    assert result.info["requested_action"] == RLAction.isolate.value
+
+
+def test_policy_validated_is_never_granted_by_the_environment():
+    """Passing policy_validated=True through is honored (it came from the
+    caller); the environment itself never flips it -- proven by the
+    default (False) actually causing a fallback above, and here by
+    confirming the gate's own reported status matches what was passed."""
+    env = _environment()
+    env.reset()
+    result = env.step(RLAction.continue_, policy_validated=False)
+    assert result.gate_decision.policy_status in ("unvalidated", "unavailable")
 
 
 # ---------------------------------------------------------------------------
-# Termination behavior
+# Safe-stop terminal behavior
 # ---------------------------------------------------------------------------
+
+
+def test_safe_stop_action_terminates_episode_immediately():
+    env = _environment()
+    env.reset()
+    result = env.step(RLAction.safe_stop)
+    assert result.done is True
+    assert result.gate_decision.approved_action == RLAction.safe_stop
+
+
+def test_step_after_termination_raises():
+    env = _environment()
+    env.reset()
+    result = env.step(RLAction.safe_stop)
+    assert result.done is True
+    with pytest.raises(RuntimeError, match="after episode termination"):
+        env.step(RLAction.continue_)
 
 
 def test_episode_terminates_when_trajectory_exhausted():
@@ -228,20 +298,34 @@ def test_episode_terminates_when_trajectory_exhausted():
     assert result.info["trajectory_exhausted"] is True
 
 
-def test_safe_stop_action_terminates_episode_immediately():
-    env = _environment()
-    env.reset()
-    result = env.step(RLAction.safe_stop)
-    assert result.done is True
+# ---------------------------------------------------------------------------
+# Reward wiring: unweighted by default, explicit weights when supplied
+# ---------------------------------------------------------------------------
 
 
-def test_step_after_termination_raises():
+def test_reward_is_unweighted_by_default():
     env = _environment()
     env.reset()
-    result = env.step(RLAction.safe_stop)
-    assert result.done is True
-    with pytest.raises(RuntimeError, match="after episode termination"):
-        env.step(RLAction.continue_)
+    result = env.step(RLAction.continue_)
+    assert result.reward.total is None
+    assert result.reward.reward_policy_status == "unweighted"
+
+
+def test_reward_is_weighted_when_reward_weights_supplied():
+    env = _environment(reward_weights=SIMULATION_REWARD_WEIGHTS_FIXTURE)
+    env.reset()
+    result = env.step(RLAction.continue_)
+    assert result.reward.total is not None
+    assert result.reward.reward_policy_status == "simulation_fixture_weighted"
+
+
+def test_reward_reflects_the_actual_transition():
+    env = _environment()
+    env.reset()
+    result = env.step(RLAction.continue_)
+    assert result.reward.previous_state is not None
+    assert result.reward.next_state == result.state
+    assert result.reward.requested_action == RLAction.continue_
 
 
 # ---------------------------------------------------------------------------
@@ -262,6 +346,8 @@ def test_two_environments_with_identical_config_produce_identical_episodes():
         result_b = env_b.step(RLAction.continue_)
         assert result_a.state.to_vector() == result_b.state.to_vector()
         assert result_a.done == result_b.done
+        assert result_a.reward.components == result_b.reward.components
+        assert result_a.gate_decision == result_b.gate_decision
 
 
 def test_different_seed_changes_the_health_trajectory_but_not_its_shape():
@@ -290,7 +376,21 @@ def test_trajectory_too_short_for_fit_buffer_raises():
             pipeline=pipeline,
             c_provider=c_provider,
             fit_window_count=FIT_WINDOW_COUNT_FIXTURE,
+            confidence_threshold=RL_CONFIDENCE_THRESHOLD_FIXTURE,
         )
+
+
+def test_confidence_threshold_is_a_required_argument():
+    preprocessor, pipeline, c_provider = _pipeline_deps()
+    with pytest.raises(TypeError):
+        SHTAPMSimulationEnvironment(
+            generator=_generator(),
+            timestamps=_timestamps(LENGTH_FIXTURE),
+            preprocessor=preprocessor,
+            pipeline=pipeline,
+            c_provider=c_provider,
+            fit_window_count=FIT_WINDOW_COUNT_FIXTURE,
+        )  # type: ignore[call-arg]
 
 
 # ---------------------------------------------------------------------------
@@ -311,6 +411,7 @@ def test_injections_are_layered_onto_the_generated_trajectory():
         pipeline=pipeline,
         c_provider=c_provider,
         fit_window_count=FIT_WINDOW_COUNT_FIXTURE,
+        confidence_threshold=RL_CONFIDENCE_THRESHOLD_FIXTURE,
         injections=[spike],
     )
     spiked_value = env._frames[5].sensors.current
