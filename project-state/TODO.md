@@ -338,21 +338,29 @@ the committed fixture seed/parameters only, not multi-seed stress-tested.
 - [ ] Dry-run detection → autonomous Safe Pump-Stop
 - [ ] Gate: rule fallback engages if policy missing; divergence→safe-stop (60s-expiry-without-recovery also escalates, D018); dry-run stops before damage; self-heal <500ms
 
-## P4 — Backend + Ledger
-- [ ] SQLAlchemy models (all Doc05 tables) + Alembic migration
-- [ ] TimescaleDB hypertables (`sensor_readings`, `decisions`) + continuous aggregates + retention
-- [ ] `devices.health_state` rollup on decision insert
-- [ ] Auth: register/login/refresh/logout; bcrypt; JWT access+refresh; RBAC dependency
-- [ ] Row-Level Security + per-request `app.user_id`/`app.role`
-- [ ] Seed: 3 roles + device + thresholds + 6 sensors (with `display_hue`)
-- [ ] Mosquitto config (auth/topics/persistence)
-- [ ] Subscriber tasks (telemetry/decision/ledger/status) Pydantic→DB (off hot path)
-- [ ] WebSocket gateway + connection manager (per-device scope, token auth), immediate fan-out
-- [ ] `system_health` WS frame (Aurora feed)
-- [ ] REST endpoints (Doc05 §05.7)
-- [ ] Define `…/command` inject payload — 🔒 BLOCKED U14 (unspecified in docs; do not invent)
-- [ ] Ledger verify service (walk chain, report `broken_at`)
-- [ ] Gate: MQTT→WS <1s; role checks pass; tamper caught; malformed input never downs a service
+## P4 — Backend + Ledger (2026-09-05, M1–M6 implemented + tested; see CURRENT_STATE.md)
+> Hardware-free, fully tested (841 passed / 0 failed / 13 skipped (MQTT-broker-
+> gated) / 4 xfailed (pre-existing P2 limitations) — full `pytest` suite).
+> No live Postgres/Docker in this dev sandbox: models use portable SQLAlchemy
+> 2.0 types and are unit-tested against SQLite; the Alembic migration targets
+> Postgres/TimescaleDB only and has NOT been run against a real database —
+> only config-load-and-list-history verified. RLS (DB-level) deliberately
+> deferred; app-level ownership scoping implemented instead (see below).
+- [x] SQLAlchemy models (all 10 Doc05 §05.2 tables) + one Alembic migration (`0001_initial_schema`) — untested against real Postgres (no instance available here)
+- [x] TimescaleDB hypertable conversion for `sensor_readings`/`decisions` (migration-only, unverified against real Postgres)
+- [ ] Continuous aggregates (`readings_1min`/`decisions_5min`) + retention policies — deliberately deferred: Doc05 §05.3 only describes them in prose, no consumer exists yet (Analytics page is P5), exact column shape unspecified
+- [ ] `devices.health_state` rollup on decision insert — not done: nothing writes to `decisions` yet (no P2/P3 MQTT producer exists), so there's nothing to roll up from
+- [x] Auth: login/refresh/logout (rotating+revocable refresh, reuse-detection revokes all of a user's tokens — Doc05's flat schema has no lineage column, see `services/auth_service.py` docstring); bcrypt (pinned `bcrypt==4.0.1` — `passlib` 1.7.4 is incompatible with `bcrypt>=4.1`); JWT access token; `require_role()` RBAC dependency. No public self-register endpoint (Doc05 §05.7 doesn't list one — users are admin-created via `POST /api/users`)
+- [ ] Row-Level Security (DB-level) — deferred to a follow-up (needs a real Postgres to verify policies against); app-level ownership scoping implemented instead (`api/deps.py`: `require_device_access`/`scope_devices_query` — unowned/not-owned devices return 404, never 403)
+- [~] Seed: admin user only (`core/seed.py`, idempotent, password from `SEED_ADMIN_PASSWORD` env, never hardcoded) — operator/analyst/device/thresholds/sensors seeding not scripted; `thresholds` rows are lazily created on first GET/PATCH with Doc05's documented defaults instead
+- [ ] Mosquitto config (auth/topics/persistence) — infra config, out of this backend-code slice
+- [~] Subscriber → DB: telemetry only (`services/telemetry_persistence.py`, wired via the existing `TelemetryConsumer.add_sink()` seam, off the WS hot path). Decision/ledger/status MQTT ingestion NOT built — no producer publishes those topics yet (P2/P3 don't write them); building consumers for topics nothing publishes to was explicitly ruled out as dead code
+- [x] WebSocket gateway: `/ws?token=<jwt>&device_id=<id>` now requires a valid JWT (rejects before `accept()` — no frame can leak); non-admin scoped to their owned devices (all of them when no `device_id` filter given, not just one); admin unrestricted
+- [ ] `system_health` WS push frame (Doc05 §05.8, Aurora feed) — NOT built; only the REST `GET /api/system/health` poll endpoint was implemented this slice. `e2e_latency_ms` is honestly `null` there (no continuous latency measurement exists in the running backend to report a real number from)
+- [x] REST endpoints (Doc05 §05.7) — full surface except `/inject`
+- [ ] Define `…/command` inject payload — still 🔒 BLOCKED U14 (unspecified in docs; not invented; `POST /api/devices/:id/inject` was not built)
+- [x] Ledger verify service (SHA-256 hash chain per D004; walk chain, report `broken_at`) — `services/ledger.py` + `api/ledger.py` (list/verify/export JSON+CSV); wired to threshold-PATCH config changes (`event_type="config_update"`). RBAC denials stay in `audit_log` only (Doc05's own `audit_log.action` examples already list `"rbac_denied"` there, not in `ledger_blocks`, and most RBAC-checked endpoints have no device to chain against)
+- [x] Gate (hardware-free portion): role checks pass + audited; tamper caught (`verify()`, including a real SQLite-tzinfo-round-trip bug found and fixed before it could false-positive); malformed input never downs a service (existing MQTT consumer behavior preserved + re-tested). MQTT→WS <1s already established at P0, unaffected by this phase.
 
 ## P5 — Dashboard / Aurora
 - [ ] Vite + TS app; Tailwind + Aurora tokens (Doc04 §04.2); shadcn/Radix restyled glass; Framer presets

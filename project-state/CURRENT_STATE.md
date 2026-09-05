@@ -137,7 +137,8 @@ unchanged and still accurate as of 2026-08-10.)
 ---
 
 ## Snapshot
-- **Current phase:** P2 — Anomaly / Trust / Attribution (hardware-free FOUNDATIONS complete, incl. c/k/h + `ChannelFlagPolicy` + a minimal `PhysicsRule`; formal P2 acceptance suite now exists and has partially passed — see below). P0 + P1 hardware-free paths complete + verified. P3 — hardware-free self-healing plumbing **plus a concrete LSTM digital twin, both integration-tested** (D016–D019 implementation, the P2→P3 cycle adapter, and `LSTMTwinReconstructor`; numeric values, scaling formula, real reconstruction validation, prognosis, and RL all still open — see below).
+- **Current phase:** P4 — Backend + Ledger, hardware-free implementation + tests COMPLETE across all six planned milestones (M1–M6: DB models/migration, auth core, telemetry persistence, REST API, ledger service, WS auth — see the dedicated "P4" section near the end of this file for full detail). **Not yet committed.** P0–P3 status below is unchanged from the prior session and still accurate.
+- **P0–P3 phase summary (unchanged since 2026-08-31):** P2 — Anomaly / Trust / Attribution (hardware-free FOUNDATIONS complete, incl. c/k/h + `ChannelFlagPolicy` + a minimal `PhysicsRule`; formal P2 acceptance suite now exists and has partially passed — see below). P0 + P1 hardware-free paths complete + verified. P3 — hardware-free self-healing plumbing **plus a concrete LSTM digital twin, both integration-tested** (D016–D019 implementation, the P2→P3 cycle adapter, and `LSTMTwinReconstructor`; numeric values, scaling formula, real reconstruction validation, prognosis, and RL all still open — see below).
 - **Current milestone:** `66f790e` (LSTM digital-twin implementation + its `SelfHealOrchestrator`/`process_isolated_channels` integration tests, 2026-08-31 — **local `main` only, 2 commits ahead of `origin/main`**; see the new P3 sections below for full detail). Previous P2 milestone, still accurate: D013 (`DECISIONS.md`, committed at `1c784e5`) — `ChannelFlagPolicy` redesigned ("Candidate B": per-channel own-baseline two-sided test) and a minimal provisional `PhysicsRule` (`TrendSignPhysicsRule`, reusing D010's `k` heuristic) implemented to unblock `AttributionEngine`. Since then (2026-08-29), the one remaining hardware-free P2 acceptance gap was closed: a new `AdaptiveStealthFDI` injection type + its P2-ANOM-S1 scenario, **committed and pushed as `b82f935`** (verified 2026-08-30 — `main`/`origin/main` identical at `b82f935`). The formal P2 acceptance suite (`edge/tests/test_p2_acceptance.py`) now attempts 11/14 Doc06 scenarios: **7/11 PASS** (full matrix: `P2_RESUME.md` §1a). The broader-`PhysicsRule` scoping decision was closed and recorded as **D014** (2026-08-30, documentation-only — no new code): no new channel coverage added; `current`↔`temperature` deferred as the sole future candidate, gated on real bench data. The P2-TRUST-H2 root cause was re-analyzed and recorded as **D015** (2026-08-30, documentation-only): the gap is a joint D009/D010 structural limitation, not primarily GAMMA — both decisions left unchanged, H2 remains FAIL.
 - **Overall completion:**
   - **P0 hardware-free: VERIFIED** — offline four-service stack (simulator→Mosquitto→backend→WebSocket→frontend) + E2E latency probe (p95 3–5 ms).
@@ -148,6 +149,7 @@ unchanged and still accurate as of 2026-08-10.)
   - **P3 hardware-free: PLUMBING + CONCRETE LSTM TWIN COMPLETE, integration-tested** (2026-08-31, local `main` `66f790e`, 2 commits ahead of pushed `origin/main`) — `DivergenceScorer` (D018 pt.1), `ElapsedTimeUncertaintyProxy` (D019), `SelfHealOrchestrator` wired to the existing `RelayController.safe_off()`, the P2→P3 adapter `process_isolated_channels` (`edge/pipeline/cycle.py`, takes `isolated_channels`/`raw_values` as REQUIRED caller-supplied inputs, never derives isolation from trust/band), and a concrete `LSTMTwinReconstructor` (`edge/models/lstm_twin.py` — single-layer unidirectional LSTM → final hidden state → Linear → scalar, `hidden_size` required no default) satisfying the unmodified `TwinReconstructor` Protocol, now integration-tested end-to-end with the orchestrator/adapter. `divergence_threshold`, `uncertainty_cap`, and the scaling formula remain required parameters/injectable seams — no values chosen (U05 unchanged). **No meaningful reconstruction accuracy or real-world validation is claimed** — the simulator's clean baseline has no cross-channel/temporal structure beyond each channel's own fitted mean. Prognosis/LSTM-health (blocked, D017), RL/DQN + its deterministic fallback (U06, FR-RL2/RL4 — also the still-missing source of *which* channels get isolated for real) are all NOT started.
   - **BLOCKED / PENDING (need Pi/rig — not faked):** **on-Pi LSTM+IF <500 ms** timing, **physical relay safe-stop**, and **physical sensor→DOM / under-load latency**. Real P2 accuracy validation (O2/O3/O4 on real sensors) is also gated here.
   - **P1 physical hardware: PARTIALLY VERIFIED (2026-09-03, commit `7007411f19d1159344ea30e8bed465d808a269ef`).** Real drivers exist and were individually hardware-validated for all four physical-sensor channels — `edge/drivers/ina219.py` (current), `edge/drivers/dht22.py` (humidity), `edge/drivers/ds18b20.py` (temperature), `edge/drivers/adxl335.py` (vibration) — but **only ADXL335 is currently physically connected** to the Raspberry Pi 5; INA219, DHT22, and DS18B20 are implemented and were each previously validated on hardware, but are currently disconnected from this bench. `edge/main.py` is wired to match: `vibration` uses the real `ADXL335Driver`; `temperature`, `humidity`, `pressure`, `gas`, and `current` all use `fake_drivers()` (temperature/humidity/current because their sensors are unplugged right now; pressure/gas because those drivers don't exist yet). **First real end-to-end MQTT telemetry confirmed:** `PYTHONPATH=backend:. python edge/main.py` on the Pi publishes `shtapm/pump-01/telemetry` at 1 Hz with contiguous `sample_seq`, and the real `vibration` value visibly responds to physically handling the sensor (captured samples: 0.527 → 0.645 → 0.625 → 0.625 g while the other five channels hold their fake constants) — full captured payloads in `IMPLEMENTATION_LOG.md`'s 2026-09-03 entry. Neither P0 nor P1 is *fully* physically done until INA219/DHT22/DS18B20 are reconnected and pressure/gas drivers are implemented.
+  - **P4 hardware-free: M1–M6 IMPLEMENTED + TESTED (2026-09-05, not yet committed)** — DB models/migration, auth (JWT+RBAC), telemetry persistence, REST API (Doc05 §05.7 minus `/inject`, U14-blocked), ledger hash-chain service + verify + export, WS auth/scoping. 841 passed / 0 failed on the full suite. Deliberately NOT done this slice: continuous aggregates/retention, DB-level RLS (app-level scoping instead), `health_state` rollup (no decision producer exists), decision/ledger/status MQTT ingestion (no producer exists), the `system_health` WS push frame (REST poll only), Mosquitto broker config. No live Postgres/Docker in this dev sandbox — migration is Postgres-only and unverified against a real database; unit tests use portable SQLite. Full detail: the "P4" section near the end of this file.
 
 ## Hardware-free E2E latency — VERIFIED (2026-08-10)
 - Probe: `frontend/scripts/latency_probe.mjs` (no deps). Measures **simulator publish timestamp (`ts`) → WebSocket client receipt** — NOT physical sensor→DOM.
@@ -704,3 +706,132 @@ None of these block P0.
 - Offline-demo golden rule: whole stack runs on one machine via `docker-compose`, no internet, fonts self-hosted.
 - Aurora aesthetic is subordinate to the 1 Hz live stream + <2s sensor→UI + <500ms self-heal budgets; effects auto-downgrade before the data path (TRD §02.9).
 - Tech stack frozen by TRD §02.2 (changes require a version bump + a DECISIONS.md entry).
+
+## P4 — Backend + Ledger (2026-09-05, M1–M6, hardware-free implementation + tests)
+Full `backend/` build across six milestones, each run-tested against the
+whole `pytest` suite before moving to the next (final: **841 passed, 0
+failed, 13 skipped (MQTT-broker-gated), 4 xfailed (pre-existing P2
+limitations)**). No Docker/Postgres available in this dev sandbox — see
+testing-strategy note below. Not yet committed as of this writing (see
+`git status`).
+- **M1 — DB models + migration**: all 10 Doc05 §05.2 tables
+  (`backend/app/models/`) using portable SQLAlchemy 2.0 types (`Uuid`,
+  generic `Enum`, generic `JSON`) so the same models run against SQLite in
+  unit tests and Postgres in prod; one hand-written Alembic migration
+  (`0001_initial_schema`) using native `postgresql.ENUM`/`JSONB` and
+  converting `sensor_readings`/`decisions` to TimescaleDB hypertables —
+  **Postgres-only, not run against a real database here** (only
+  config-load + `alembic history` verified). **Deliberately deferred**:
+  `readings_1min`/`decisions_5min` continuous aggregates + retention
+  policies (Doc05 §05.3 is prose-only, no consumer exists, exact column
+  shape unspecified — building them now would be inventing an unverified
+  shape).
+- **M2 — Auth core**: `core/security.py` (bcrypt via passlib, JWT access
+  tokens, opaque SHA-256-hashed refresh tokens), `services/auth_service.py`
+  (login/issue/rotate/revoke — reuse of an already-rotated refresh token
+  revokes every token belonging to that user, since Doc05's flat
+  `refresh_tokens` schema has no lineage/family column to do a narrower
+  revocation), `api/deps.py` (`get_current_user`, `require_role(...)` RBAC
+  dependency that audits denials to `audit_log`), `api/auth.py`
+  (login/refresh/logout), `core/seed.py` (idempotent admin-user seed,
+  password from `SEED_ADMIN_PASSWORD` env, never hardcoded). **Real
+  ecosystem bug found and fixed**: `passlib` 1.7.4 (last release,
+  unmaintained since 2020) is incompatible with `bcrypt>=4.1` (dropped
+  `__about__`; 4.1+ raises instead of silently truncating >72-byte inputs
+  during passlib's own self-test) — pinned `bcrypt==4.0.1`.
+- **M3 — Telemetry persistence**: `services/telemetry_persistence.py`
+  registers as a second sink on the *existing*
+  `TelemetryConsumer.add_sink()` seam (no consumer code changed) alongside
+  the WS broadcaster, writing each validated `TelemetryMessage` to
+  `sensor_readings` off the live-delivery hot path. Device
+  auto-registration on first-seen `device_id`. `healthy_mask` is always
+  `0b111111` — the frozen wire contract carries no per-channel health at
+  all (`edge/acquisition/sampler.py` only ever emits a frame when all six
+  channels are healthy), so anything else would be fabricated. **Real bug
+  found and fixed**: querying the `Device` row *after* `add()`-ing a
+  `SensorReading` triggered an early SQLAlchemy autoflush that raised
+  `IntegrityError` on a duplicate sample outside the intended
+  `try/except` — fixed by reordering (fetch/update `Device` before
+  `add()`-ing the reading).
+- **M4 — REST API**: `api/{devices,alerts,users,system}.py` — full Doc05
+  §05.7 surface **except** `POST /api/devices/:id/inject` (U14 — payload
+  unspecified in any doc, not invented). App-level device-ownership
+  scoping (`api/deps.py`: `require_device_access`/`scope_devices_query`) —
+  a device that exists but isn't owned by the caller returns 404, exactly
+  like one that doesn't exist, never 403 (the RLS "empty, not error"
+  behavior, done at the app layer since DB-level RLS is deferred — see
+  below). `readings`/`decisions` are honest about gaps: `agg` only accepts
+  `"raw"` (continuous aggregates deferred at M1) and any other value is a
+  clear 400; `decisions` returns an empty list (no P2/P3 producer exists
+  yet) rather than fabricating rows. `thresholds` lazily creates the
+  Doc05-documented 1–1 row with its column defaults on first access;
+  `divergence_threshold` stays `NULL` (U05, never silently defaulted,
+  matching the edge-side convention in `edge/pipeline/divergence.py`).
+  `app/main.py` now wires DB + auth + every router; `DATABASE_URL`/
+  `JWT_SECRET_KEY` are required at boot (raise clearly if unset, per TRD
+  §02.7's own "missing var → clear boot error" acceptance criterion) —
+  the pre-existing app-boot tests (`test_app_health.py`, `test_ws_endpoint
+  .py`, `test_integration_ws.py`) were updated to set both via
+  `monkeypatch`, same pattern as the pre-existing `MQTT_HOST`/`MQTT_PORT`.
+  **Real bug found and fixed**: `ThresholdOut.updated_by` was declared
+  `str` but validated directly against the ORM's raw `uuid.UUID` attribute
+  via `from_attributes=True`, which pydantic-core does not auto-coerce —
+  fixed with an explicit `_to_threshold_out()` converter (matching the
+  pattern already used for every other UUID-bearing response model).
+- **M5 — Ledger service**: `services/ledger.py` implements D004's SHA-256
+  hash chain literally (`this_hash = sha256(index+ts+payload_hash+
+  prev_hash)`); `api/ledger.py` — list/verify/export (JSON+CSV), scoped
+  like devices/alerts. Threshold `PATCH` now also appends a
+  `config_update` ledger block (only when a field actually changed).
+  **Scope note (a deviation from the original plan, found while
+  implementing, not a shortcut)**: RBAC denials are NOT chained into the
+  ledger — `ledger_blocks.device_id` is `NOT NULL` but most RBAC-checked
+  endpoints (e.g. `/api/users`) have no device context at all, and Doc05's
+  own `audit_log.action` example list already places `"rbac_denied"`
+  there, not in `ledger_blocks`. RBAC denials stay in `audit_log` only
+  (implemented at M2). **Real, potentially serious bug found and fixed
+  before it shipped**: SQLite silently drops a `datetime`'s `tzinfo` on
+  round-trip while preserving the wall-clock value (verified empirically);
+  `verify()` recomputing a block's hash from a freshly DB-read timestamp
+  would therefore have produced a different string than `append()`
+  originally hashed, **falsely reporting tampering on untouched data**.
+  Fixed by normalizing to UTC before hashing in both `append()` and
+  `verify()`; covered by a regression test that forces a fresh session
+  (fresh DB read) before verifying.
+- **M6 — WS auth**: `/ws?token=<jwt>&device_id=<id>` now requires a valid
+  JWT access token (same validation as REST) and applies the same
+  ownership scoping as the REST API — an admin sees everything; anyone
+  else is scoped to ALL of their owned devices when no `device_id` filter
+  is given (not just literally everything, which was the pre-auth P0
+  behavor) and rejected outright if they request a `device_id` they don't
+  own. An invalid/missing token, or a disallowed `device_id`, closes the
+  connection **before** `accept()` is ever called (ASGI permits
+  `websocket.close` while still in the CONNECTING state to reject the
+  handshake outright) — no frame can leak to an unauthorized client.
+  `frontend/scripts/ws_smoke.mjs` updated to log in via
+  `POST /api/auth/login` first (credentials from `SMOKE_EMAIL`/
+  `SMOKE_PASSWORD` env vars, never hardcoded) and pass the resulting token.
+- **Not built in this P4 slice** (flagged, not silently skipped):
+  continuous aggregates + retention (M1, above); DB-level RLS (app-level
+  scoping used instead); `devices.health_state` rollup-on-decision-insert
+  (nothing writes `decisions` yet); Mosquitto broker auth/topic config
+  (infra, not backend code); decision/ledger/status MQTT ingestion (no
+  producer exists for those topics yet — building consumers for them now
+  would be untestable dead code); the Doc05 §05.8 `system_health` **WS
+  push frame** (only the REST `GET /api/system/health` poll endpoint was
+  built — its `e2e_latency_ms` is honestly `null`, since no continuous
+  latency measurement exists in the running backend to report a real
+  number from); the `…/command` scenario-inject payload (still U14-
+  blocked, not invented).
+- **Testing strategy** (agreed before implementation, held throughout):
+  SQLAlchemy models use portable types so unit tests run against an
+  in-memory SQLite engine; a new `db_integration` pytest marker exists
+  (mirroring the pre-existing MQTT `integration` marker) for future
+  real-Postgres-only tests, self-skipping here since neither Docker nor
+  Postgres is available in this sandbox.
+- New/changed dependencies: `sqlalchemy==2.0.*`, `alembic==1.13.*`,
+  `psycopg[binary]==3.*`, `python-jose[cryptography]==3.3.*`,
+  `passlib[bcrypt]==1.7.*`, `bcrypt==4.0.1` (pinned, see M2), `email-
+  validator` (transitively via `pydantic[email]`, needed for `EmailStr` in
+  the users API) — all added to `backend/requirements.txt` and the root
+  `pyproject.toml` dev extras.

@@ -25,8 +25,12 @@ dev = [
   "ruff==0.6.*",
   "black==24.*",
   "pytest==8.*",
-  "pydantic==2.*",  # required by the shared-contract test suite (D006/D007)
+  "pydantic[email]==2.*",  # required by the shared-contract test suite (D006/D007); [email] for P4-M4 users API
   "httpx",          # FastAPI TestClient (M3.3 app health test)
+  "sqlalchemy==2.0.*",  # P4 ORM models (backend/tests/test_models.py, SQLite-portable)
+  "python-jose[cryptography]==3.3.*",  # P4-M2 JWT access tokens
+  "passlib[bcrypt]==1.7.*",            # P4-M2 password hashing
+  "bcrypt==4.0.1",                     # pinned: passlib 1.7.4 breaks on bcrypt>=4.1
 ]
 
 [tool.ruff]
@@ -36,6 +40,13 @@ extend-exclude = ["frontend", ".venv", "venv"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "W", "UP", "B"]
+
+[tool.ruff.lint.per-file-ignores]
+# FastAPI's own documented DI idiom is `Depends(...)` as an argument default —
+# not the footgun B008 targets (a fresh mutable default). Applies to routers,
+# dependency modules, and tests that define inline probe routes.
+"backend/app/api/*.py" = ["B008"]
+"backend/tests/test_auth_api.py" = ["B008"]
 
 [tool.black]
 line-length = 100
@@ -51,4 +62,5 @@ pythonpath = ["backend", "."]
 addopts = "--import-mode=importlib"
 markers = [
   "integration: requires a running MQTT broker (skips if none reachable)",
+  "db_integration: requires a running Postgres/TimescaleDB (skips if none reachable)",
 ]

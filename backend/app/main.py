@@ -1,15 +1,26 @@
-"""SHTAPM FastAPI backend (P0 M3.4) — MQTT telemetry ingestion + WebSocket fan-out.
+"""SHTAPM FastAPI backend (P0 M3.4 MQTT/WS; P4 adds DB + auth + REST).
 
 Lifespan starts the MQTT telemetry consumer (paho's own thread) and a
-``TelemetryBroadcaster`` (the seam to WebSocket clients), wiring the consumer's
-sink to the broadcaster so each validated telemetry message is pushed live to
-connected ``/ws`` clients. The in-memory ``TelemetryStore`` remains the latest
-state. Broker downtime is tolerated: the consumer connects async and retries, so
-the app still starts and stays up (TRD principle: degrade gracefully).
+``TelemetryBroadcaster`` (the seam to WebSocket clients), wiring the
+consumer's sink to the broadcaster so each validated telemetry message is
+pushed live to connected ``/ws`` clients — and, since P4-M3, to a second
+sink (``TelemetryPersistence``) that writes it to ``sensor_readings`` off
+that same live-delivery hot path. The in-memory ``TelemetryStore`` remains
+the latest state. Broker downtime is tolerated: the consumer connects async
+and retries, so the app still starts and stays up.
 
-Scope: NO persistence, auth, REST history, decisions, or ledger. ``/healthz`` is
-a minimal liveness/observability endpoint (no auth, no data history). ``/ws``
-serves live telemetry frames only.
+``DATABASE_URL``/``JWT_SECRET_KEY`` are REQUIRED (raise at startup if
+unset, per TRD §02.7 "missing var → clear boot error naming it") — tests
+that boot this app now set both via monkeypatch, same as the pre-existing
+``MQTT_HOST``/``MQTT_PORT`` pattern. A SQLite ``DATABASE_URL`` gets its
+tables created here directly (``Base.metadata.create_all``) for
+tests/dev convenience; a real Postgres URL does NOT — that schema comes
+only from Alembic (``backend/alembic/``), never from an app-side create_all.
+
+Scope still excluded from this P4 slice (see project-state plan): decision/
+ledger MQTT ingestion (no producer exists yet), Postgres RLS (app-level
+scoping only — see ``app.api.deps``), and scenario injection (``U14``,
+unspecified payload).
 """
 
 from __future__ import annotations
@@ -19,8 +30,17 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from app.core.config import MqttSettings
+from app.api.alerts import router as alerts_router
+from app.api.auth import router as auth_router
+from app.api.devices import router as devices_router
+from app.api.ledger import router as ledger_router
+from app.api.system import router as system_router
+from app.api.users import router as users_router
+from app.core.config import AuthSettings, DatabaseSettings, MqttSettings
+from app.core.db import make_engine, make_session_factory
+from app.models import Base
 from app.mqtt.consumer import TelemetryConsumer
+from app.services.telemetry_persistence import TelemetryPersistence
 from app.services.telemetry_store import TelemetryStore
 from app.ws.broadcaster import TelemetryBroadcaster
 from app.ws.routes import router as ws_router
@@ -28,10 +48,21 @@ from app.ws.routes import router as ws_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    db_settings = DatabaseSettings.from_env()
+    auth_settings = AuthSettings.from_env()
+    engine = make_engine(db_settings.url)
+    if db_settings.url.startswith("sqlite"):
+        Base.metadata.create_all(engine)  # prod/Postgres schema comes from Alembic only
+    session_factory = make_session_factory(engine)
+    app.state.db_sessionmaker = session_factory
+    app.state.auth_settings = auth_settings
+
     store = TelemetryStore()
     broadcaster = TelemetryBroadcaster(asyncio.get_running_loop())
+    persistence = TelemetryPersistence(session_factory)
     consumer = TelemetryConsumer(store)
     consumer.add_sink(broadcaster.publish_from_thread)  # MQTT → WS seam
+    consumer.add_sink(persistence.persist)  # MQTT → DB seam (off the WS hot path)
     settings = MqttSettings.from_env()
     consumer.start(settings.host, settings.port)  # non-blocking; tolerates broker down
     app.state.telemetry_store = store
@@ -41,10 +72,17 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         consumer.stop()
+        engine.dispose()
 
 
-app = FastAPI(title="SHTAPM backend (P0 M3.4)", lifespan=lifespan)
+app = FastAPI(title="SHTAPM backend", lifespan=lifespan)
 app.include_router(ws_router)
+app.include_router(auth_router)
+app.include_router(devices_router)
+app.include_router(alerts_router)
+app.include_router(users_router)
+app.include_router(system_router)
+app.include_router(ledger_router)
 
 
 @app.get("/healthz")

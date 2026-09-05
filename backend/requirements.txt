@@ -1,10 +1,20 @@
 # SHTAPM backend runtime dependencies (frozen stack, TRD §02.2).
 # Active from P0/M3.3 (contract + MQTT telemetry ingestion):
-pydantic==2.*        # shared contract (D006/D007)
+pydantic[email]==2.*  # shared contract (D006/D007); [email] adds email-validator for EmailStr (P4-M4 users API)
 fastapi==0.110.*     # backend framework + lifespan
 uvicorn==0.29.*      # ASGI server
 websockets==12.*     # WS protocol for uvicorn to serve /ws (FastAPI-native WS)
 paho-mqtt==1.6.*     # MQTT telemetry consumer
 
-# Deferred to P4 (persistence + auth), pinned then:
-# sqlalchemy==2.0.*, alembic, psycopg[binary], python-jose, passlib[bcrypt]
+# Active from P4-M1 (persistence):
+sqlalchemy==2.0.*     # ORM + Core (portable models; Postgres/TimescaleDB in prod)
+alembic==1.13.*       # migrations
+psycopg[binary]==3.*  # Postgres driver
+
+# Active from P4-M2 (auth):
+python-jose[cryptography]==3.3.*  # JWT access tokens
+passlib[bcrypt]==1.7.*            # password hashing
+# passlib 1.7.4 (last release, unmaintained) breaks on bcrypt>=4.1 (removed
+# `__about__`; 4.1+ raises instead of truncating >72-byte inputs during
+# passlib's own self-test) — pin bcrypt to the last compatible release.
+bcrypt==4.0.1

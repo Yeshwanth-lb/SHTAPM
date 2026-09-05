@@ -18,6 +18,8 @@ def test_healthz_ok_without_broker(monkeypatch):
     # point at an almost-certainly-dead port so no broker is required
     monkeypatch.setenv("MQTT_HOST", "127.0.0.1")
     monkeypatch.setenv("MQTT_PORT", "1")
+    monkeypatch.setenv("DATABASE_URL", "sqlite://")
+    monkeypatch.setenv("JWT_SECRET_KEY", "test-secret-not-real")
     with TestClient(app) as client:  # triggers lifespan start/stop
         r = client.get("/healthz")
     assert r.status_code == 200

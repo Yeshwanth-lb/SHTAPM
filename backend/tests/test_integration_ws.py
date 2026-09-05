@@ -15,7 +15,10 @@ pytest.importorskip("fastapi")
 pytest.importorskip("httpx")
 pytest.importorskip("paho.mqtt.client")
 
+from app.core.security import create_access_token  # noqa: E402
 from app.main import app  # noqa: E402
+from app.models import User  # noqa: E402
+from app.models.enums import UserRole  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
 from simulator.generator import TelemetrySimulator  # noqa: E402
@@ -42,6 +45,8 @@ def test_mqtt_to_backend_to_ws(broker, monkeypatch):
     host, port = broker
     monkeypatch.setenv("MQTT_HOST", host)
     monkeypatch.setenv("MQTT_PORT", str(port))
+    monkeypatch.setenv("DATABASE_URL", "sqlite://")
+    monkeypatch.setenv("JWT_SECRET_KEY", "test-secret-not-real")
 
     with TestClient(app) as client:  # lifespan starts consumer against the real broker
         # wait for the backend consumer to connect + subscribe
@@ -50,7 +55,14 @@ def test_mqtt_to_backend_to_ws(broker, monkeypatch):
             time.sleep(0.05)
         time.sleep(0.3)
 
-        with client.websocket_connect("/ws?device_id=pump-01") as ws:
+        with app.state.db_sessionmaker() as db:
+            user = User(email="admin@example.com", password_hash="x", role=UserRole.admin)
+            db.add(user)
+            db.commit()
+            db.refresh(user)
+            token = create_access_token(str(user.id), user.role.value, app.state.auth_settings)
+
+        with client.websocket_connect(f"/ws?token={token}&device_id=pump-01") as ws:
             pub = mqtt.Client()
             pub.connect(host, port)
             pub.loop_start()
