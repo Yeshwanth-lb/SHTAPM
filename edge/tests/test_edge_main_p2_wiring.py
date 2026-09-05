@@ -83,21 +83,32 @@ def test_live_wiring_publishes_telemetry_and_invokes_p2_processing(caplog):
     # P2 processing was genuinely invoked (real, non-stub components,
     # exactly as edge/main.py composes them) and logged -- proving the
     # wiring is live, not re-implementing/stubbing it for this test.
-    p2_records = [r for r in caplog.records if r.name == "shtapm.edge.main"]
+    # Each outcome now logs two lines: the P2 window itself, and the
+    # (stateless, log-only) FR-RL4 isolation decision derived from it.
+    all_records = [r for r in caplog.records if r.name == "shtapm.edge.main"]
+    p2_records = [r for r in all_records if "P2 window" in r.getMessage()]
+    isolation_records = [r for r in all_records if "FR-RL4 isolation decision" in r.getMessage()]
+    assert len(all_records) == 6
     assert len(p2_records) == 3  # 1 at the fit/transition tick + 2 more sliding ticks
-    assert all("P2 window" in r.getMessage() for r in p2_records)
+    assert len(isolation_records) == 3
     assert all("anomaly=False" in r.getMessage() for r in p2_records)  # NullDetector
+    # FR-RL4 decision logging must never claim a real isolation/actuation --
+    # it only reports candidates for the caller to log (see
+    # edge/pipeline/isolation_fallback.py).
+    assert all("stateless, log-only" in r.getMessage() for r in isolation_records)
 
 
 def test_live_wiring_never_isolates_actuates_or_publishes_a_decision():
-    """Monitoring-only, by construction: AcquisitionRuntime/LiveP2Monitor
-    import nothing from edge/pipeline/self_heal.py, edge/pipeline/cycle.py,
-    or edge/actuation/*, and edge/main.py's MQTT publisher only ever
-    publishes telemetry/status topics (no decision/ledger topic exists)."""
+    """Monitoring-only, by construction: AcquisitionRuntime/LiveP2Monitor/
+    isolation_fallback import nothing from edge/pipeline/self_heal.py,
+    edge/pipeline/cycle.py, or edge/actuation/*, and edge/main.py's MQTT
+    publisher only ever publishes telemetry/status topics (no decision/
+    ledger topic exists)."""
     import edge.acquisition.runtime as runtime_module
+    import edge.pipeline.isolation_fallback as isolation_fallback_module
     import edge.pipeline.monitor as monitor_module
 
-    for module in (runtime_module, monitor_module):
+    for module in (runtime_module, monitor_module, isolation_fallback_module):
         with open(module.__file__, encoding="utf-8") as f:
             content = f.read()
         assert "RelayController" not in content

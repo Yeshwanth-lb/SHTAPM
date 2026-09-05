@@ -36,6 +36,17 @@ live windows — required, no default; a single-window bootstrap was found to
 collapse the consistency signal to a binary 0.0/1.0 output even on clean
 data, see the module docstring for the fix).
 
+FR-RL4 ISOLATION DECISION (decision-only slice, also observe-only): each
+logged ``WindowOutcome`` is additionally passed through
+``edge/pipeline/isolation_fallback.decide_isolation`` — a STATELESS,
+deterministic classification of each channel's current ``TrustBand``
+(MALICIOUS -> isolation candidate; Suspicious/Trusted -> not). This is
+logged alongside the P2 outcome and nothing else: it does NOT call
+``process_isolated_channels``, ``SelfHealOrchestrator``, actuation, ledger,
+or MQTT/decision publishing, and it does NOT track state across cycles
+(see the module's own docstring for exactly why recovery tracking is
+deliberately not implemented yet).
+
     PYTHONPATH=backend:. python -m edge
 """
 
@@ -59,6 +70,7 @@ from edge.anomaly.policy import SeverityThresholdFlagPolicy
 from edge.anomaly.preprocess import Preprocessor
 from edge.drivers.ds18b20 import DS18B20Driver
 from edge.drivers.fake import fake_drivers
+from edge.pipeline.isolation_fallback import decide_isolation
 from edge.pipeline.monitor import LiveP2Monitor
 from edge.trust.c_consistency import ConsistencyProvider
 from edge.trust.engine import TrustEngine
@@ -122,8 +134,9 @@ def _build_p2_monitor(*, fit_window_count: int) -> LiveP2Monitor:
 
 
 def _log_window_outcome(outcome: WindowOutcome) -> None:
-    """Monitoring-only: log preprocessing/anomaly/trust/attribution. Never
-    isolates a channel, actuates, or publishes anything."""
+    """Monitoring-only: log preprocessing/anomaly/trust/attribution plus the
+    stateless FR-RL4 isolation decision. Never isolates a channel for real,
+    actuates, or publishes anything — see edge/pipeline/isolation_fallback.py."""
     trust_summary = ", ".join(
         f"{ch}={outcome.trust[ch].trust:.3f}/{outcome.trust[ch].band.value}" for ch in CHANNELS
     )
@@ -138,6 +151,13 @@ def _log_window_outcome(outcome: WindowOutcome) -> None:
         outcome.anomaly.severity,
         trust_summary,
         attribution_summary,
+    )
+
+    decision = decide_isolation(outcome)
+    log.info(
+        "FR-RL4 isolation decision (stateless, log-only): candidates=%s reasons={%s}",
+        sorted(decision.isolated_channels) or "none",
+        ", ".join(f"{ch}: {reason}" for ch, reason in decision.reasons.items()),
     )
 
 
