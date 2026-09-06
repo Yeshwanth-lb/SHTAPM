@@ -1,22 +1,36 @@
-"""SHTAPM edge acquisition runtime — mixed hardware/fake drivers.
+"""SHTAPM edge acquisition runtime — configuration-driven hardware/fake drivers.
 
-Runs the C1→C2→C3 pipeline with:
-  - Real DS18B20 temperature probe via the kernel 1-Wire interface (GPIO4)
-  - Fake drivers for the remaining channels (vibration, pressure, humidity,
-    gas, current)
+Runs the C1→C2→C3 pipeline with one ``SensorDriver`` per frozen channel,
+selected via ``edge.drivers.registry`` from a declarative per-channel
+``DriverSpec`` table (``_DEFAULT_CHANNEL_SPECS`` below) rather than
+hand-written ``drivers[channel] = XDriver()`` lines:
 
-    DS18B20 + fake drivers → Sampler → TelemetryMessage → ResilientTelemetryPublisher → Mosquitto
-                                                        ↘ LiveP2Monitor (observe-only, see below)
+    registry.build_drivers(...) → Sampler → TelemetryMessage → Publisher → Mosquitto
+                                                              ↘ LiveP2Monitor (observe-only)
 
-DS18B20 is real because it's the only sensor currently wired to the Pi —
-ADXL335, BMP280, INA219, and DHT22 are implemented (edge/drivers/adxl335.py,
-bmp280.py, ina219.py, dht22.py, each independently hardware-validated
-earlier) but temporarily physically disconnected from this bench, so they'd
-be permanently unhealthy here and block every frame (Sampler.sample_once()
-requires all six channels healthy). When they're reconnected, re-add their
-imports and `drivers[channel] = XDriver()` lines exactly as before (see git
-history: commits d419d6b, 85bbe42, 43f2a54/e35ca5b, and the INA219 wiring
-predating this file's docstring) — no other change needed.
+DEFAULT BEHAVIOR IS UNCHANGED from before this file used the registry:
+``_DEFAULT_CHANNEL_SPECS`` names DS18B20 (temperature) as the sole real
+driver and every other channel as a fake constant, matching this bench's
+actual current wiring exactly — ADXL335, BMP280, INA219, and DHT22 are
+implemented (edge/drivers/{adxl335,bmp280,ina219,dht22}.py, each
+individually hardware-validated earlier) but temporarily physically
+disconnected, so they'd be permanently unhealthy here and block every frame
+(Sampler.sample_once() requires all six channels healthy).
+
+RECONNECTING A SENSOR IS NOW A CONFIGURATION CHANGE, not a code edit: set
+``SHTAPM_DRIVER_<CHANNEL>=real`` (e.g. ``SHTAPM_DRIVER_VIBRATION=real``) to
+switch that channel to its real driver (constructed with that driver's own
+hardware defaults — see edge/drivers/registry.py); ``=fake`` switches a
+channel back to a fake constant. ``SHTAPM_FAKE_SIGNAL_MODE=realistic``
+switches every still-fake channel from a flat constant to a deterministic,
+bounded, time-varying signal (edge/drivers/fake.py's ``realistic_raw`` —
+NOT a physical validation claim, see that function's docstring); the
+default (unset) is ``constant``, i.e. today's flat values, unchanged. No
+code edit or import change is needed for any of this — see
+``edge.drivers.registry`` for the full mechanism and its own docstring for
+exactly what each variable does. "gas" has no real driver implemented yet;
+requesting ``SHTAPM_DRIVER_GAS=real`` fails clearly at startup
+(``UnsupportedDriverError``) rather than silently staying fake.
 
 The frozen six-channel telemetry contract is preserved. Thin by design
 (env + wiring + signals) — the logic lives in the tested runtime/sampler/publisher.
@@ -87,8 +101,7 @@ from edge.anomaly.physics_rule import TrendSignPhysicsRule
 from edge.anomaly.pipeline import P2Pipeline, WindowOutcome
 from edge.anomaly.policy import SeverityThresholdFlagPolicy
 from edge.anomaly.preprocess import Preprocessor
-from edge.drivers.ds18b20 import DS18B20Driver
-from edge.drivers.fake import fake_drivers
+from edge.drivers.registry import DriverSpec, build_drivers, resolve_channel_specs_from_env
 from edge.pipeline.isolation_fallback import decide_isolation
 from edge.pipeline.isolation_tracker import IsolationFallbackTracker
 from edge.pipeline.monitor import LiveP2Monitor, RawChannelValues
@@ -99,17 +112,19 @@ from edge.trust.k_correlation import CorrelationProvider
 
 log = logging.getLogger("shtapm.edge.main")
 
-# Plausible steady-state constants for fake sensors (dev only — not authoritative specs).
-# The "temperature" value is a placeholder; replaced by the real driver below.
-# vibration/pressure/humidity/gas/current are fake for now — see module docstring
-# (ADXL335/BMP280/INA219/DHT22 are implemented but currently physically disconnected).
-_DEV_VALUES = {
-    "temperature": 26.0,  # Placeholder; replaced by DS18B20Driver
-    "vibration": 0.03,
-    "pressure": 1013.0,
-    "humidity": 45.0,
-    "gas": 150.0,
-    "current": 0.0,
+# This bench's current wiring, as a declarative spec table — see module
+# docstring. Constant values match the fake fixtures this file has used
+# since before the registry existed (dev only — not authoritative specs).
+# Override via SHTAPM_DRIVER_<CHANNEL> / SHTAPM_FAKE_SIGNAL_MODE env vars
+# (edge.drivers.registry.resolve_channel_specs_from_env) — never by editing
+# this table for a one-off run.
+_DEFAULT_CHANNEL_SPECS: dict[str, DriverSpec] = {
+    "temperature": DriverSpec(kind="real"),  # DS18B20Driver(), the only sensor wired right now
+    "vibration": DriverSpec(kind="fake", fake_mode="constant", params={"value": 0.03}),
+    "pressure": DriverSpec(kind="fake", fake_mode="constant", params={"value": 1013.0}),
+    "humidity": DriverSpec(kind="fake", fake_mode="constant", params={"value": 45.0}),
+    "gas": DriverSpec(kind="fake", fake_mode="constant", params={"value": 150.0}),
+    "current": DriverSpec(kind="fake", fake_mode="constant", params={"value": 0.0}),
 }
 
 
@@ -226,12 +241,11 @@ def main() -> None:
     port = int(os.environ.get("EDGE_MQTT_PORT", "1883"))
     p2_fit_window_count = _required_env_int("P2_FIT_WINDOW_COUNT")
 
-    # Create fake drivers for five channels (vibration, pressure, humidity, gas, current)
-    drivers = fake_drivers(_DEV_VALUES)
-
-    # Replace the fake temperature driver with real DS18B20 (kernel 1-Wire driver, GPIO4) —
-    # the only sensor currently physically connected; see module docstring.
-    drivers["temperature"] = DS18B20Driver()
+    # Resolve this run's per-channel driver selection (env overrides applied
+    # on top of _DEFAULT_CHANNEL_SPECS; unset env = today's bench state,
+    # unchanged) and construct the actual SensorDriver instances.
+    channel_specs = resolve_channel_specs_from_env(_DEFAULT_CHANNEL_SPECS)
+    drivers = build_drivers(channel_specs)
 
     sampler = Sampler(device_id=device_id, drivers=drivers)
     publisher = ResilientTelemetryPublisher(device_id=device_id, rate_hz=rate_hz)
@@ -252,9 +266,10 @@ def main() -> None:
     signal.signal(signal.SIGINT, _stop)
     signal.signal(signal.SIGTERM, _stop)
 
+    real_channels = sorted(ch for ch in CHANNELS if channel_specs[ch].kind == "real")
+    fake_channels = sorted(ch for ch in CHANNELS if channel_specs[ch].kind == "fake")
     print(
-        f"[edge] MIXED HW/DEV: real DS18B20 (temperature) + fake drivers "
-        f"(vibration, pressure, humidity, gas, current) → "
+        f"[edge] driver config: real={real_channels or 'none'} fake={fake_channels or 'none'} → "
         f"{publisher.telemetry_topic} at {rate_hz} Hz (Ctrl-C to stop) "
         f"[P2 monitoring: observe-only, no isolation/actuation/publish]"
     )
