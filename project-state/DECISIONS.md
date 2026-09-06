@@ -2311,3 +2311,27 @@ An additive, descriptive-only `ScenarioMetadata`/`EVALUATION_SCENARIO_METADATA` 
 **What this decision changes:** nothing in the codebase. This is a documentation-only decision record. Sections A-J of the "U06 — Operational Definitions Proposal" above remain the original proposal text, unmodified, now marked accepted by this record rather than rewritten.
 
 **Not done by this decision:** U06's status in the UNDECIDED list above is unchanged: fully open, zero partial resolution. No acceptable false-isolation/missed-fault rate, threshold, or reward-weight configuration is chosen. The roadmap's remaining four items — channel-matched comparison, `sample_seq` deduplication, DQN-policy evaluation, and confidence-interval/uncertainty reporting — each still require their own separate, future approval before implementation.
+
+---
+
+## U06 — Channel-Matched Agreement Implementation Note (IMPLEMENTATION RECORD, NOT A DECISION)
+**(U06 REMAINS FULLY UNDECIDED/OPEN. This is an implementation record for the channel-matched comparison increment, built strictly on the design decisions the U06 decision owner explicitly approved after the Operational Definitions Proposal sign-off above. It defines one new, isolated diagnostic module and does not resolve U06, choose a threshold, or modify any existing axis.)**
+
+- **Date implemented:** 2026-09-06
+- **Files changed:** `edge/eval/u06_channel_agreement.py` (new), `edge/tests/test_u06_channel_agreement.py` (new). No existing file modified — `edge/eval/u06_tracker_agreement.py`, `edge/eval/u06_ground_truth_rate_summary.py`, `edge/eval/u06_rate_summary.py`, `edge/eval/u06_diagnostic_report.py`, every seed-repetition report, `edge/eval/rl_baseline_eval.py` (both `tracked_channels` and `active_injection_channels` already existed and needed no further change), `edge/injection/injections.py`, `edge/rl/fallback_gate.py`, `edge/rl/environment.py`, `edge/rl/policy.py`, `edge/rl/reward.py`, `edge/eval/rl_training.py`, and every hardware/driver/actuator/relay/GPIO file are untouched.
+
+**What this increment does:**
+- Adds a pure function, `summarize_channel_agreement(record: EpisodeRecord) -> ChannelAgreementSummary`, in a new sibling module to `u06_tracker_agreement.py` (never editing it), implementing the design the decision owner explicitly approved: exact-set-equality comparison between `TransitionRecord.active_injection_channels` (injected ground truth) and `TransitionRecord.tracked_channels` (tracker state), restricted to `transition_consumed=True` observations (matching axis (ii)'s own observation-unit convention, for the same double-counting reason).
+- **Channel-match opportunity** = both sides non-empty; exact set equality is a MATCH, any difference (missing channel, extra channel, or both) is a MISMATCH — no partial-match category, no per-channel breakdown rows (confirmed by a dedicated structural test that no such field exists and an AST test confirming exactly one division operation exists in the whole module). An injection with no tracked channel, or no injection with no tracked channel, is **not** a channel-match opportunity and is not counted anywhere. No injection with a tracked channel is reported purely descriptively (`tracked_without_injection_observation_count`/`tracked_without_injection_channels_seen`), carrying no verdict.
+- **Zero-opportunity handling:** `channel_match_rate` is `None`, never `0.0`, when `channel_match_observation_count == 0` — verified directly on `SCENARIO_CLEAN_DEGRADATION` and `SCENARIO_INJECTED_CURRENT_SPIKE` (both baselines never produce a channel-match opportunity in their short episodes).
+- **Verified against the real, already-observed mismatch:** `SCENARIO_INJECTED_CURRENT_CONSTANT_SPOOF`'s `baseline_policy` run produces `channel_match_observation_count > 0`, `channel_match_count == 0`, `channel_mismatch_count == channel_match_observation_count`, `channel_match_rate == 0.0` — the injected `"current"` channel never matches the tracked `"vibration"` channel, confirming this is a genuine `0.0` opportunity-based rate, not a `None` no-opportunity case.
+- Reports one `ChannelAgreementSummary` per `EpisodeRecord` — never pooled across seeds, scenarios, or baselines, matching the already-signed-off reporting convention (Decision 3 above).
+
+**What this increment explicitly does NOT do:**
+- Does not modify `u06_tracker_agreement.py`'s `agreement_rate`, `total_observations`, or any other field — a dedicated regression test confirms axis (ii)'s output for a given `EpisodeRecord` is byte-identical before and after this module is invoked.
+- Does not implement `sample_seq` deduplication, axis (i), or axis (iii).
+- Does not implement any per-channel breakdown, threshold, verdict, pass/fail gate, confidence interval, pooling, averaging, DQN evaluation, or reward-weight change.
+- Does not modify `edge/injection/injections.py`, `edge/rl/fallback_gate.py`, `edge/rl/environment.py`, `edge/rl/policy.py`, `edge/rl/reward.py`, or `edge/eval/rl_training.py`.
+- No real-world fault-detection, attack-detection, accuracy, safety, effectiveness, validation, or production-readiness claim is made.
+
+**Not done by this increment:** U06's status in the UNDECIDED list above is unchanged: fully open, zero partial resolution. `sample_seq` deduplication, DQN-policy inclusion, confidence-interval/uncertainty reporting, and wiring this new axis into the aggregate diagnostic report or any seed-repetition report all remain open, separate questions, not addressed here.
