@@ -2423,3 +2423,82 @@ An additive, descriptive-only `ScenarioMetadata`/`EVALUATION_SCENARIO_METADATA` 
 - Introduces no threshold, verdict, pass/fail gate, reward change, pooling, or real-world claim.
 
 **Not done by this note:** U06's status in the UNDECIDED list above is unchanged: fully open, zero partial resolution. DQN-policy inclusion and confidence-interval/uncertainty reporting remain open, separate questions, each still requiring its own prerequisite methodology decision before any implementation.
+
+---
+
+## U06 — Confidence-Interval Methodology Decision (DECISION RECORD)
+**(THIS IS AN ACTUAL DECISION -- a methodology decision, resolving HOW a within-episode confidence interval is computed if and when one is requested. It does NOT resolve U06 itself: no acceptable false-isolation/missed-fault rate, threshold, verdict, or reward-weight configuration is chosen here, and no cross-seed or pooled interval is approved. U06's own status line above remains unchanged: fully open, zero partial resolution.)**
+
+- **Date decided:** 2026-09-06
+- **Decision owner:** Yeshwanth LB
+
+**Methodology approved:**
+- **Wilson score interval**, at a **95% confidence level**, computed via Python's standard-library `statistics.NormalDist` -- no new external dependency (no `scipy`, no `numpy`).
+- **Within-episode only**: the interval is computed from a single already-produced numerator/denominator pair (one scenario, one seed, one baseline) -- never across seeds, never pooled, never a mean/standard-deviation/distributional estimate. This follows directly from the prior methodology review's own conclusion: a within-episode binomial interval remains meaningful regardless of cross-seed constancy (it reflects the statistical uncertainty of a finite number of observed steps within one episode), whereas a cross-seed interval would currently be degenerate (every axis value is already byte-identical across all 5 seeds of every committed scenario).
+- **No change to any existing rate value** -- the interval is computed from already-existing numerator/denominator fields on the four existing summary objects (`EpisodeRateSummary`, `TrackerAgreementSummary`, `GroundTruthRateSummary`, `ChannelAgreementSummary`), read but never modified.
+- **Diagnostic interpretation only**: an interval's bounds carry no acceptable-rate threshold, verdict, or real-world accuracy/safety/effectiveness/validation/production-readiness claim -- identical in kind to every other U06 number's own disclaimers.
+
+**What this decision does NOT approve:** any cross-seed, pooled, mean, or standard-deviation interval; any threshold or verdict derived from an interval; any change to the opportunity-denominator or reporting conventions already signed off in the "U06 -- Operational Definitions Proposal Sign-Off" record above.
+
+---
+
+## U06 — DQN Diagnostic Evaluation Methodology Decision (DECISION RECORD)
+**(THIS IS AN ACTUAL DECISION -- a methodology decision, resolving the training configuration for a diagnostic-only DQN evaluation, if and when one is requested. It does NOT resolve U06 itself: no acceptable rate, threshold, verdict, or approved reward-weight configuration is chosen here. U06's own status line above remains unchanged: fully open, zero partial resolution.)**
+
+- **Date decided:** 2026-09-06
+- **Decision owner:** Yeshwanth LB
+
+**Methodology approved:**
+- **Reward fixture:** `edge.rl.reward.SIMULATION_REWARD_WEIGHTS_FIXTURE` -- used ONLY as a fixed, already-existing diagnostic fixture for this evaluation. This is explicitly **not** an approved U06 reward-weight decision -- §8 of the "U06 -- RL REWARD SHAPING SPECIFICATION PROPOSAL" section above still requires four unmet evidence items before any weight configuration could be selected as "the" answer, none of which this decision satisfies or claims to satisfy.
+- **Training configuration:** `edge.eval.rl_training`'s own existing fixtures, used verbatim and unmodified -- `HIDDEN_SIZE_FIXTURE`, `TRAIN_EPISODES_FIXTURE`, `GAMMA_FIXTURE`, `LEARNING_RATE_FIXTURE`, `EPSILON_START_FIXTURE`, `EPSILON_END_FIXTURE`, `EPSILON_DECAY_EPISODES_FIXTURE`, `REPLAY_BUFFER_SIZE_FIXTURE`, `BATCH_SIZE_FIXTURE`, `TARGET_UPDATE_INTERVAL_FIXTURE`, and `TRAINING_SCENARIOS` (the existing, already held-out-safe training set).
+- **Dedicated seed:** `edge.eval.rl_training.SEED_FIXTURE` (`1337`) collides with `edge.eval.rl_baseline_eval.SCENARIO_CLEAN_DEGRADATION`'s own seed -- rather than silently reusing it, a new, dedicated `U06_DQN_DIAGNOSTIC_SEED = 5001` was defined and documented (verified directly to collide with no existing evaluation-scenario, seed-repetition-variant, or training-scenario seed).
+- **Fresh in-memory training, no checkpoint persistence:** every evaluation run trains a new network from scratch in memory -- matching `TrainingRunResult`'s own existing "no checkpoint is written to disk" convention. No new persistence mechanism was introduced.
+- **Torch dependency isolated:** `edge/eval/rl_baseline_eval.py` remains torch-free (verified via a dedicated AST-based test) -- only the new, separate `edge/eval/u06_dqn_evaluation_report.py` module and its test file (guarded by `pytest.importorskip("torch")`) depend on `torch`/`edge.eval.rl_training`.
+- **No U06 acceptance or reward-weight decision is made by this record or by running the resulting evaluation** -- the evaluation's results are diagnostic-only, subject to the same world-inert-environment ceiling (§9 of the reward-shaping proposal) every other U06 evaluation already has.
+
+**What this decision does NOT approve:** any acceptable rate, threshold, or verdict for the DQN policy's results; any claim that `SIMULATION_REWARD_WEIGHTS_FIXTURE` is the correct or preferred reward-weight configuration; any real-world accuracy, safety, effectiveness, validation, or production-readiness claim; checkpoint persistence of any kind.
+
+---
+
+## U06 — Within-Episode Confidence Intervals Implementation Note (IMPLEMENTATION RECORD, NOT A DECISION)
+**(U06 REMAINS FULLY UNDECIDED/OPEN. This is an implementation record for the confidence-interval methodology approved above -- it implements a new, isolated module computing Wilson score intervals for already-existing numerator/denominator pairs. It defines no new axis, modifies no existing rate, and does not resolve U06.)**
+
+- **Date implemented:** 2026-09-06
+- **Files changed:** `edge/eval/u06_confidence_intervals.py` (new), `edge/tests/test_u06_confidence_intervals.py` (new). No existing axis/comparison module modified — `edge/eval/u06_rate_summary.py`, `edge/eval/u06_tracker_agreement.py`, `edge/eval/u06_ground_truth_rate_summary.py`, `edge/eval/u06_channel_agreement.py`, `edge/eval/u06_diagnostic_report.py`, and every seed-repetition report are all untouched.
+
+**What this increment does:**
+- Adds `wilson_score_interval(numerator, denominator, *, confidence_level=0.95) -> WilsonScoreInterval | None`, a pure, deterministic, standard-library-only (`statistics.NormalDist`) implementation of the Wilson score interval, verified directly against an independently hand-derived computation of the identical closed-form formula.
+- Adds six per-axis convenience wrappers (`axis_i_false_isolation_interval`, `axis_i_missed_fault_interval`, `axis_iii_false_isolation_interval`, `axis_iii_missed_fault_interval`, `axis_ii_tracker_agreement_interval`, `channel_agreement_interval`), each reading the ORIGINAL numerator/denominator directly off an existing summary object — never a rounded rate. `axis_ii_tracker_agreement_interval` reconstructs its numerator as `agreement_active_count + agreement_nominal_count` against `total_observations`, matching axis (ii)'s own `agreement_rate` definition exactly.
+- Returns `None` (never a degenerate interval) when the denominator is zero — matching every existing axis module's own zero-opportunity convention.
+- Verified directly: boundary cases (numerator=0, numerator=denominator) produce mathematically correct bounds (a `0`-numerator case has `lower_bound == 0.0` exactly; a full-numerator case has `upper_bound == 1.0` exactly) without any special-casing in the formula.
+
+**What this increment explicitly does NOT do:**
+- Computes no cross-seed, pooled, mean, standard-deviation, or distributional interval anywhere — every function accepts exactly one numerator/denominator pair, confirmed by a dedicated structural test that no function parameter name suggests a collection of seeds/summaries/scenarios.
+- Introduces no new external dependency — confirmed by an AST-based test that only `dataclasses`/`statistics`/`__future__` are imported at module scope.
+- Modifies no existing rate value — confirmed by a regression test comparing summary objects before and after computing an interval from them.
+- Computes no threshold, verdict, recommendation, or real-world claim of any kind.
+
+**Not done by this increment:** U06's status in the UNDECIDED list above is unchanged: fully open, zero partial resolution. Wiring these intervals into the aggregate diagnostic report or any seed-repetition report remains a separate, not-yet-approved question, not addressed here — this increment is the standalone module only, matching the channel-agreement precedent's own "metric first, wiring later" pattern.
+
+---
+
+## U06 — DQN-Policy Diagnostic Evaluation Implementation Note (IMPLEMENTATION RECORD, NOT A DECISION)
+**(U06 REMAINS FULLY UNDECIDED/OPEN. This is an implementation record for the DQN methodology approved above -- it implements a torch-free generic runner plus a new, isolated, torch-dependent evaluation module. It defines no new axis, modifies no existing axis/baseline logic, makes no reward-weight decision, and does not resolve U06.)**
+
+- **Date implemented:** 2026-09-06
+- **Files changed:** `edge/eval/rl_baseline_eval.py` (additive only — one new generic runner function, `run_dqn_policy_episode()`), `edge/tests/test_rl_baseline_eval.py`, `edge/eval/u06_dqn_evaluation_report.py` (new), `edge/tests/test_u06_dqn_evaluation_report.py` (new). No forbidden file modified — `edge/rl/environment.py`, `edge/rl/policy.py`, `edge/rl/reward.py`, `edge/rl/fallback_gate.py`, `edge/eval/rl_training.py`, `edge/injection/injections.py`, and all four existing axis/comparison modules are untouched.
+
+**What this increment does:**
+- `edge/eval/rl_baseline_eval.py` gains `run_dqn_policy_episode(scenario, propose_action, *, baseline_name="dqn_policy", reward_weights=...)`, a thin, policy-agnostic wrapper reusing the existing, unmodified `_run_episode()` shared loop — unlike the two existing runners, it constructs no policy internally, accepting an already-adapted `_ProposeFn`-shaped callable from its caller instead. **Verified directly via AST: this file imports neither `torch` nor `edge.eval.rl_training`** — the new runner adds zero new dependency to this module.
+- Adds a new module, `edge/eval/u06_dqn_evaluation_report.py` (torch-dependent, via `edge.eval.rl_training`), which trains one DQN policy under the approved fixed diagnostic configuration (see the methodology decision above), evaluates it greedily (`epsilon=0.0`) against all 9 evaluation scenarios via `run_dqn_policy_episode()`, and runs all four existing U06 summaries over each resulting `EpisodeRecord`.
+- **Verified directly: fully deterministic** — two independent calls to `build_dqn_diagnostic_report()`, including across separate Python processes, produce byte-identical results, given `train_dqn()`'s own existing `torch.manual_seed(seed)` + `random.Random(seed)` convention and greedy (`epsilon=0.0`) evaluation never drawing from the evaluation policy's own RNG.
+- **Verified directly: no checkpoint file is ever created** (a dedicated test runs the full build inside a temporary directory and confirms no `.pt`/`.pth`/`.ckpt` file appears).
+
+**What this increment explicitly does NOT do:**
+- Does not modify any existing axis/comparison module, the aggregate diagnostic report, or any seed-repetition report — confirmed by regression tests re-running the two existing deterministic baselines and axis (i)/(ii)/(iii)/channel-agreement summaries before and after this module's use.
+- Does not implement checkpoint persistence, `sample_seq` runtime deduplication, or cross-seed confidence intervals.
+- Does not select, declare, or imply a preferred reward-weight configuration — the module's own docstring and printed output explicitly state `SIMULATION_REWARD_WEIGHTS_FIXTURE` is a fixed diagnostic fixture only, confirmed present verbatim by a dedicated test.
+- Computes no threshold, verdict, or pass/fail judgment, and makes no real-world accuracy, safety, effectiveness, validation, or production-readiness claim anywhere.
+- Adds no new torch dependency to the ordinary U06 test surface — every new torch-dependent test is guarded by `pytest.importorskip("torch")`, matching `edge/tests/test_rl_training.py`'s own established convention exactly.
+
+**Not done by this increment:** U06's status in the UNDECIDED list above is unchanged: fully open, zero partial resolution. No acceptable false-isolation/missed-fault rate, threshold, or reward-weight configuration is chosen. This evaluation inherits the same world-inert-environment ceiling every other U06 evaluation already has (§9 of the reward-shaping proposal) — it measures only this policy's own requested-action bookkeeping consistency on synthetic data, never real fault-detection consequences.

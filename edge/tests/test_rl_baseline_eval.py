@@ -25,6 +25,7 @@ from edge.eval.rl_baseline_eval import (
     default_scenarios,
     run_all_baselines,
     run_baseline_policy_episode,
+    run_dqn_policy_episode,
     run_pure_fallback_episode,
 )
 from edge.injection.injections import InjectionType
@@ -1148,3 +1149,109 @@ def test_module_never_claims_validation_or_production_readiness():
     assert "hardware-validated" not in content
     assert "validated for production" not in content
     assert "this baseline is validated" not in content
+
+
+# ---------------------------------------------------------------------------
+# run_dqn_policy_episode (U06 scoping) -- generic, torch-free external-
+# policy runner. Constructs no policy itself; accepts an already-adapted
+# propose_action callable. See this module's own GENERIC EXTERNAL POLICY
+# RUNNER docstring section.
+# ---------------------------------------------------------------------------
+
+
+def test_run_dqn_policy_episode_returns_a_valid_episode_record():
+    def _propose(_state):
+        return (RLAction.continue_, True, False, 0.5)
+
+    record = run_dqn_policy_episode(SCENARIO, _propose)
+    assert isinstance(record, EpisodeRecord)
+    assert len(record.transitions) > 0
+    assert all(isinstance(t, TransitionRecord) for t in record.transitions)
+
+
+def test_run_dqn_policy_episode_defaults_baseline_name_to_dqn_policy():
+    def _propose(_state):
+        return (RLAction.continue_, True, False, 0.5)
+
+    record = run_dqn_policy_episode(SCENARIO, _propose)
+    assert record.baseline_name == "dqn_policy"
+
+
+def test_run_dqn_policy_episode_baseline_name_is_overridable():
+    def _propose(_state):
+        return (RLAction.continue_, True, False, 0.5)
+
+    record = run_dqn_policy_episode(SCENARIO, _propose, baseline_name="custom_policy_label")
+    assert record.baseline_name == "custom_policy_label"
+
+
+def test_run_dqn_policy_episode_calls_propose_action_with_current_state():
+    seen_states = []
+
+    def _propose(state):
+        seen_states.append(state)
+        return (RLAction.continue_, True, False, 0.5)
+
+    run_dqn_policy_episode(SCENARIO, _propose)
+    assert len(seen_states) > 0
+    assert all(hasattr(s, "to_vector") for s in seen_states)
+
+
+def test_run_dqn_policy_episode_requires_no_torch_import():
+    """Structural guard: rl_baseline_eval.py must remain torch-free -- this
+    module's own docstring explicitly states run_dqn_policy_episode()
+    imports neither torch nor edge.eval.rl_training, checked via AST
+    rather than a source-text scan."""
+    import ast
+
+    import edge.eval.rl_baseline_eval as module
+
+    tree = ast.parse(inspect.getsource(module))
+    imported_modules: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            imported_modules.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            imported_modules.add(node.module)
+
+    for imported in imported_modules:
+        assert imported != "torch"
+        assert not imported.startswith("edge.eval.rl_training")
+
+
+def test_run_dqn_policy_episode_does_not_change_existing_baseline_outputs():
+    """Regression guard: adding run_dqn_policy_episode must not change
+    run_baseline_policy_episode's or run_pure_fallback_episode's output."""
+    baseline_before = run_baseline_policy_episode(SCENARIO)
+    fallback_before = run_pure_fallback_episode(SCENARIO)
+
+    def _propose(_state):
+        return (RLAction.continue_, True, False, 0.5)
+
+    run_dqn_policy_episode(SCENARIO, _propose)
+
+    baseline_after = run_baseline_policy_episode(SCENARIO)
+    fallback_after = run_pure_fallback_episode(SCENARIO)
+    assert baseline_before.cumulative_reward == baseline_after.cumulative_reward
+    assert fallback_before.cumulative_reward == fallback_after.cumulative_reward
+
+
+def test_run_dqn_policy_episode_makes_no_dqn_specific_claim_in_this_module():
+    """No code in this module may implement DQN training or checkpoint
+    persistence -- this increment is a generic, policy-agnostic runner
+    only. The module docstring legitimately NAMES ``DQNPolicy.propose()``
+    to explain the scope boundary, so that phrase alone is not checked
+    here; the actual guarantee (no torch/rl_training import) is already
+    confirmed via AST in test_run_dqn_policy_episode_requires_no_torch_import."""
+    import edge.eval.rl_baseline_eval as module
+
+    source = inspect.getsource(module)
+    lowered = source.lower()
+    forbidden = (
+        "def train_dqn",
+        "torch.save",
+        "torch.load",
+        "checkpoint_path",
+    )
+    for phrase in forbidden:
+        assert phrase not in lowered

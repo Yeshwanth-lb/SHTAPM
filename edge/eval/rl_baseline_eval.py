@@ -173,6 +173,24 @@ additional ``result.info`` read is introduced. This module still performs
 NO deduplication of any kind -- every existing observation-selection loop
 in every axis module is unmodified and continues to read every transition
 exactly as before. U06 remains fully open (see ``DECISIONS.md``).
+
+GENERIC EXTERNAL POLICY RUNNER (U06 scoping, torch-free plumbing
+increment -- prepares the integration point a separately approved
+DQN-diagnostic-evaluation module needs, without this module importing
+``torch`` or ``edge.eval.rl_training`` itself): ``run_dqn_policy_episode()``
+is a thin, policy-agnostic wrapper around the same already-existing,
+unmodified ``_run_episode()`` shared loop ``run_baseline_policy_episode``/
+``run_pure_fallback_episode`` already use. Unlike those two, it does not
+construct any policy internally -- it accepts an ALREADY-ADAPTED
+``propose_action`` callable (matching the exact ``_ProposeFn`` shape) from
+its caller. This keeps this module free of any DQN-specific or
+``torch``-specific import: a future DQN-evaluation module (which does
+depend on ``torch``, via ``edge.eval.rl_training``) can adapt a
+``DQNPolicy.propose()`` call into this shape itself and pass the result
+in, without ``rl_baseline_eval.py`` ever needing to know a DQN is
+involved. This is data-plumbing/integration-point work only -- it
+constructs no DQN policy, chooses no training configuration, and makes no
+real-world claim. U06 remains fully open (see ``DECISIONS.md``).
 """
 
 from __future__ import annotations
@@ -1429,6 +1447,31 @@ def run_pure_fallback_episode(
 
     return _run_episode(
         scenario, "pure_fallback", propose_action=_propose, reward_weights=reward_weights
+    )
+
+
+def run_dqn_policy_episode(
+    scenario: ScenarioConfig,
+    propose_action: _ProposeFn,
+    *,
+    baseline_name: str = "dqn_policy",
+    reward_weights: RewardWeights = SIMULATION_REWARD_WEIGHTS_FIXTURE,
+) -> EpisodeRecord:
+    """Generic external-policy runner (U06 scoping) -- see this module's
+    own GENERIC EXTERNAL POLICY RUNNER docstring section. Unlike
+    ``run_baseline_policy_episode``/``run_pure_fallback_episode`` (which
+    each construct their own fixed policy internally), this function
+    accepts an ALREADY-ADAPTED ``propose_action`` callable matching the
+    exact ``_ProposeFn`` shape ``_run_episode`` already requires -- it
+    constructs no policy of any kind itself, and never imports ``torch``
+    or anything from ``edge.eval.rl_training``. The caller (e.g. a
+    DQN-evaluation module) owns adapting its own policy object into that
+    shape before calling this function. ``baseline_name`` defaults to
+    ``"dqn_policy"`` but may be overridden -- this function is not
+    DQN-specific in any way beyond that default label.
+    """
+    return _run_episode(
+        scenario, baseline_name, propose_action=propose_action, reward_weights=reward_weights
     )
 
 
