@@ -2551,3 +2551,69 @@ An additive, descriptive-only `ScenarioMetadata`/`EVALUATION_SCENARIO_METADATA` 
 - Computes no threshold, verdict, or pass/fail judgment, and makes no real-world accuracy, safety, effectiveness, validation, or production-readiness claim anywhere — the module's own printed output and docstring restate that the DQN reward fixture is a fixed diagnostic fixture only, not an approved U06 reward-weight decision.
 
 **Not done by this increment:** U06's status in the UNDECIDED list above is unchanged: fully open, zero partial resolution. No acceptable rate, threshold, or reward-weight configuration is chosen. Wiring confidence intervals into the DQN evaluation's own result type, wiring DQN results into any seed-repetition report, `sample_seq` runtime deduplication, and cross-seed confidence intervals all remain explicitly out of scope, not addressed here.
+
+---
+
+## U06 — Threshold/Weight/World-Inert Non-Resolution Record (DECISION RECORD)
+**(THIS RECORDS THREE EXPLICIT NON-DECISIONS AND ONE INTERFACE-ONLY DECISION.
+U06 REMAINS FULLY UNDECIDED/OPEN. No acceptable false-isolation/missed-fault
+rate, threshold, verdict, or reward-weight configuration is chosen here, and
+no isolation/self-heal wiring or actuation is approved by this record.)**
+
+- Date decided: 2026-09-07
+- Decision owner: Yeshwanth LB
+
+**Finding (evidentiary basis for this record):** the existing reports
+demonstrate that the operational definitions produce reproducible counts
+and expose opposite degenerate behaviors in the evaluated diagnostic
+policies. Because the simulation is world-inert for
+continue_/alert/reduce_weight and lacks validated real fault dynamics,
+these results are evidence of internal diagnostic bookkeeping only — not
+evidence of real-world fault-detection, false-isolation, safety,
+effectiveness, or production readiness.
+
+**Decision 1 — Acceptable-rate threshold/verdict: not selected.** No
+acceptable false-isolation or missed-fault threshold, or pass/fail
+verdict, is selected. No cost/tradeoff function relating the two rates
+exists anywhere in docs/DECISIONS.md, and no real bench evidence exists.
+
+**Decision 2 — Reward-weight configuration: not selected.** No reward-
+weight fixture is selected. None of the four existing named fixtures
+(`SIMULATION_REWARD_WEIGHTS_FIXTURE`, `SAFETY_PRIORITY_WEIGHTS_FIXTURE`,
+`DECISION_ONLY_WEIGHTS_FIXTURE`, `BALANCED_SURVIVAL_WEIGHTS_FIXTURE`) is
+ranked, recommended, or implied closer to final than any other.
+
+**Decision 3 — World-inert limitation: formally accepted as a standing
+caveat.** The world-inert simulation limitation (`continue_`/`alert`/
+`reduce_weight` have no simulation trajectory effect in
+`edge/rl/environment.py`) is formally accepted as a standing caveat for
+all current and future U06 evidence claims — binding as decided practice,
+not merely proposal text.
+
+**Decision 4 — Authorized future source of `isolated_channels` (interface
+only, NOT an authorization to wire or actuate): `edge.rl.fallback_gate.
+evaluate_rl_action()`, using the deterministic-fallback path, is named as
+the sole future source of `isolated_channels` IF isolation/self-heal
+wiring is separately approved.** This is an interface decision only — it
+does not authorize any wiring or actuation.
+
+**Explicitly kept unresolved by this decision:**
+- U06 thresholds and pass/fail verdicts remain unresolved.
+- Reward-weight selection remains unresolved.
+- U05's `divergence_threshold` remains open, pending real bench/hardware
+  data — not addressed by this record.
+- Any actual isolation/self-heal wiring remains unapproved.
+- Any real-world validation or production-readiness claim remains
+  unmade.
+
+**What this decision record explicitly states:**
+- No code was changed by this decision.
+- No wiring or actuation was approved by this decision.
+- No change was made to `edge/rl/reward.py`, `edge/rl/fallback_gate.py`,
+  `edge/rl/policy.py`, `edge/rl/environment.py`, any injection definition
+  (`edge/injection/injections.py`), or any self-heal code
+  (`edge/pipeline/self_heal.py`, `edge/pipeline/cycle.py`).
+- D003 (edge safety loop independent of backend/cloud) remains unchanged.
+- U06's status in the UNDECIDED list above is unchanged: fully open, zero
+  partial resolution.
+- U05 remains open.
