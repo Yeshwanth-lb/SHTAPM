@@ -12,13 +12,18 @@ whether ANY injection was active at an observed frame
 tracker considered the system ``"isolation_active"`` at that same frame. It
 does NOT:
   - match the SPECIFIC injected channel against the SPECIFIC tracked
-    channel (a channel-matched comparison would need the tracked-channel
-    data ``edge.rl.environment``'s ``EnvironmentStepResult.info
-    ["persistent_isolation_tracked_channels"]`` computes but
-    ``edge.eval.rl_baseline_eval.TransitionRecord`` does not currently
-    carry -- a real, confirmed gap, not addressed here);
+    channel. ``edge.eval.rl_baseline_eval.TransitionRecord`` now carries
+    ``tracked_channels`` (a later, separate data-plumbing increment --
+    see ``project-state/DECISIONS.md``'s "U06 -- Tracked-Channel Plumbing
+    Implementation Note"), but this module does not read or compare
+    against it. A channel-matched comparison would also still need
+    per-step INJECTED-channel ground truth, which ``TransitionRecord``
+    does not yet carry: ``active_injection_labels`` currently retains
+    only each active ``Label``'s ``injection_type`` (e.g. ``"spike"``),
+    never its ``channel`` (see ``edge/injection/injections.py``'s own
+    ``Label`` dataclass) -- a real, confirmed, still-open gap, not
+    addressed here or anywhere else in this codebase yet;
   - widen ``TransitionRecord.active_injection_labels``'s shape;
-  - add any tracked-channel field to ``TransitionRecord``;
   - implement axis (i) (already implemented separately in
     ``edge.eval.u06_rate_summary``) or axis (iii) (ground-truth-anchored
     decision-quality rates -- a distinct, still-unimplemented proposal).
