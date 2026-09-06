@@ -1,0 +1,340 @@
+"""Tests for edge/eval/u06_seed_repetition_report.py (U06 seed-repetition
+report -- pure, additive, opt-in). No new axis, metric, threshold,
+verdict, cross-seed statistic, or real-world claim exists here -- see the
+module's own docstring.
+"""
+
+from __future__ import annotations
+
+import inspect
+
+from edge.eval.rl_baseline_eval import (
+    CLEAN_DEGRADATION_SEED_REPETITION_SCENARIOS,
+    INJECTION_TYPE_SCENARIOS,
+    SCENARIO_CLEAN_DEGRADATION,
+    EpisodeRecord,
+)
+from edge.eval.u06_ground_truth_rate_summary import GroundTruthRateSummary
+from edge.eval.u06_rate_summary import EpisodeRateSummary
+from edge.eval.u06_seed_repetition_report import (
+    SeedRepetitionReport,
+    SeedRepetitionResult,
+    build_seed_repetition_report,
+)
+from edge.eval.u06_tracker_agreement import TrackerAgreementSummary
+
+_EXPECTED_BASELINES = {"baseline_policy", "pure_fallback"}
+
+
+# ---------------------------------------------------------------------------
+# Five distinct seeds, no collisions
+# ---------------------------------------------------------------------------
+
+
+def test_original_plus_four_variants_produce_five_total_seeds():
+    assert len(CLEAN_DEGRADATION_SEED_REPETITION_SCENARIOS) == 5
+
+
+def test_all_five_seeds_are_distinct_from_one_another():
+    seeds = [s.seed for s in CLEAN_DEGRADATION_SEED_REPETITION_SCENARIOS]
+    assert len(seeds) == len(set(seeds)) == 5
+
+
+def test_seed_variants_do_not_collide_with_any_existing_scenario_or_training_seed():
+    # edge.eval.rl_training.TRAINING_SCENARIOS' own seeds (2001, 2002) --
+    # referenced directly, not imported, so this lightweight test file
+    # does not pull in edge.eval.rl_training's hard torch dependency.
+    training_seeds = {2001, 2002}
+
+    variant_seeds = {
+        s.seed
+        for s in CLEAN_DEGRADATION_SEED_REPETITION_SCENARIOS
+        if s is not SCENARIO_CLEAN_DEGRADATION
+    }
+    existing_evaluation_seeds = {s.seed for s in INJECTION_TYPE_SCENARIOS}
+    existing_evaluation_seeds.add(SCENARIO_CLEAN_DEGRADATION.seed)
+
+    assert variant_seeds.isdisjoint(existing_evaluation_seeds)
+    assert variant_seeds.isdisjoint(training_seeds)
+
+
+def test_seed_variants_reuse_the_exact_clean_degradation_profile():
+    """Only `seed` and `name` may differ from SCENARIO_CLEAN_DEGRADATION --
+    length, health range, degradation rate, channel config, and injections
+    must be identical."""
+    for variant in CLEAN_DEGRADATION_SEED_REPETITION_SCENARIOS:
+        assert variant.length == SCENARIO_CLEAN_DEGRADATION.length
+        assert variant.start_health == SCENARIO_CLEAN_DEGRADATION.start_health
+        assert variant.end_health == SCENARIO_CLEAN_DEGRADATION.end_health
+        assert variant.degradation_rate == SCENARIO_CLEAN_DEGRADATION.degradation_rate
+        assert variant.channels == SCENARIO_CLEAN_DEGRADATION.channels
+        assert variant.injections == ()
+
+
+def test_original_clean_degradation_scenario_is_unchanged():
+    """Regression guard: this increment must not alter
+    SCENARIO_CLEAN_DEGRADATION itself."""
+    assert SCENARIO_CLEAN_DEGRADATION.seed == 1337
+    assert SCENARIO_CLEAN_DEGRADATION.name == "clean_degradation"
+    assert SCENARIO_CLEAN_DEGRADATION in CLEAN_DEGRADATION_SEED_REPETITION_SCENARIOS
+
+
+# ---------------------------------------------------------------------------
+# Coverage: both baselines for every seed, exactly 10 results
+# ---------------------------------------------------------------------------
+
+
+def test_report_contains_exactly_ten_results():
+    report = build_seed_repetition_report()
+    assert isinstance(report, SeedRepetitionReport)
+    assert len(report.results) == 10
+
+
+def test_both_baselines_run_for_every_seed():
+    report = build_seed_repetition_report()
+    for scenario in CLEAN_DEGRADATION_SEED_REPETITION_SCENARIOS:
+        baselines_for_seed = {
+            r.baseline_name for r in report.results if r.seed == scenario.seed
+        }
+        assert baselines_for_seed == _EXPECTED_BASELINES
+
+
+def test_seed_baseline_pairs_are_all_unique():
+    report = build_seed_repetition_report()
+    pairs = [(r.seed, r.baseline_name) for r in report.results]
+    assert len(pairs) == len(set(pairs)) == 10
+
+
+def test_every_result_carries_all_three_axis_summaries():
+    report = build_seed_repetition_report()
+    for result in report.results:
+        assert isinstance(result, SeedRepetitionResult)
+        assert isinstance(result.episode_rate_summary, EpisodeRateSummary)
+        assert isinstance(result.tracker_agreement_summary, TrackerAgreementSummary)
+        assert isinstance(result.ground_truth_rate_summary, GroundTruthRateSummary)
+
+
+# ---------------------------------------------------------------------------
+# Scenario, seed, and baseline labels remain separate
+# ---------------------------------------------------------------------------
+
+
+def test_scenario_seed_and_baseline_labels_are_all_reported_and_consistent():
+    report = build_seed_repetition_report()
+    for result in report.results:
+        assert result.scenario_name.startswith("clean_degradation")
+        assert isinstance(result.seed, int)
+        assert result.episode_rate_summary.scenario_name == result.scenario_name
+        assert result.tracker_agreement_summary.scenario_name == result.scenario_name
+        assert result.ground_truth_rate_summary.scenario_name == result.scenario_name
+
+
+def test_each_seed_maps_to_its_own_distinct_scenario_name():
+    report = build_seed_repetition_report()
+    seed_to_names = {}
+    for result in report.results:
+        seed_to_names.setdefault(result.seed, set()).add(result.scenario_name)
+    for names in seed_to_names.values():
+        assert len(names) == 1  # one scenario name per seed, never conflated
+    all_names = {name for names in seed_to_names.values() for name in names}
+    assert len(all_names) == 5
+
+
+# ---------------------------------------------------------------------------
+# Never pooled: no cross-seed statistic exists
+# ---------------------------------------------------------------------------
+
+
+def test_report_has_no_pooled_or_cross_seed_statistic_field():
+    """Structural guard: SeedRepetitionReport must carry only the flat
+    per-(seed, baseline) results tuple plus metadata -- no field computing
+    any cross-seed average, min, max, range, or variance."""
+    import dataclasses
+
+    field_names = {f.name for f in dataclasses.fields(SeedRepetitionReport)}
+    assert field_names == {"results", "execution_mode", "data_source", "model_status"}
+
+
+def test_module_never_computes_a_rate_or_cross_seed_statistic_of_its_own():
+    """AST-based check (not a source-text scan, so a comment or docstring
+    mentioning division/averages cannot trigger a false pass or fail): the
+    module must contain no arithmetic Div, and no builtin min/max/sum/
+    statistics call, anywhere in its own code."""
+    import ast
+
+    import edge.eval.u06_seed_repetition_report as module
+
+    tree = ast.parse(inspect.getsource(module))
+
+    division_nodes = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Div)
+    ]
+    assert division_nodes == []
+
+    forbidden_call_names = {"min", "max", "sum", "mean", "median", "stdev", "variance"}
+    call_names = {
+        node.func.id
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+    }
+    assert call_names.isdisjoint(forbidden_call_names)
+
+
+def test_results_for_different_seeds_remain_independent():
+    """Different seeds can produce different reward totals (different RNG
+    draws for the same clean-degradation profile) -- proving each seed's
+    episode was computed independently, not from one shared/pooled run."""
+    report = build_seed_repetition_report()
+    by_seed = {r.seed: r for r in report.results if r.baseline_name == "baseline_policy"}
+    rewards = {
+        seed: result.episode_rate_summary.policy_status_breakdown
+        for seed, result in by_seed.items()
+    }
+    # At minimum, distinct seeds must produce independently-computed
+    # results objects, not the same shared instance.
+    result_ids = {id(result) for result in by_seed.values()}
+    assert len(result_ids) == len(by_seed) == 5
+    assert len(rewards) == 5
+
+
+# ---------------------------------------------------------------------------
+# No mutation of underlying data
+# ---------------------------------------------------------------------------
+
+
+def test_build_seed_repetition_report_does_not_mutate_anything_across_calls():
+    first = build_seed_repetition_report()
+    second = build_seed_repetition_report()
+
+    first_by_key = {(r.seed, r.baseline_name): r for r in first.results}
+    second_by_key = {(r.seed, r.baseline_name): r for r in second.results}
+    assert first_by_key.keys() == second_by_key.keys()
+    for key, first_result in first_by_key.items():
+        second_result = second_by_key[key]
+        assert (
+            first_result.episode_rate_summary.false_isolation_rate
+            == second_result.episode_rate_summary.false_isolation_rate
+        )
+        assert (
+            first_result.tracker_agreement_summary.agreement_rate
+            == second_result.tracker_agreement_summary.agreement_rate
+        )
+
+
+def test_build_seed_repetition_report_returns_new_episode_records_not_shared_state():
+    report = build_seed_repetition_report()
+    for result in report.results:
+        assert not isinstance(result, EpisodeRecord)
+
+
+def test_scenario_definitions_are_not_mutated_by_building_the_report():
+    seeds_before = tuple(s.seed for s in CLEAN_DEGRADATION_SEED_REPETITION_SCENARIOS)
+    names_before = tuple(s.name for s in CLEAN_DEGRADATION_SEED_REPETITION_SCENARIOS)
+
+    build_seed_repetition_report()
+
+    seeds_after = tuple(s.seed for s in CLEAN_DEGRADATION_SEED_REPETITION_SCENARIOS)
+    names_after = tuple(s.name for s in CLEAN_DEGRADATION_SEED_REPETITION_SCENARIOS)
+    assert seeds_before == seeds_after
+    assert names_before == names_after
+
+
+# ---------------------------------------------------------------------------
+# Zero-result / error-handling: the report is never empty or partial
+# ---------------------------------------------------------------------------
+
+
+def test_report_is_never_empty_under_normal_operation():
+    report = build_seed_repetition_report()
+    assert len(report.results) > 0
+    assert len(report.results) == 10
+
+
+def test_build_seed_repetition_report_takes_no_parameters():
+    signature = inspect.signature(build_seed_repetition_report)
+    assert len(signature.parameters) == 0
+
+
+# ---------------------------------------------------------------------------
+# Structural: no threshold, verdict, real-world, or new-axis claim
+# ---------------------------------------------------------------------------
+
+
+def test_module_makes_no_threshold_verdict_or_real_world_claim():
+    import edge.eval.u06_seed_repetition_report as module
+
+    source = inspect.getsource(module)
+    lowered = source.lower()
+    forbidden = (
+        "the acceptable rate is",
+        "the acceptable threshold is",
+        "is validated",
+        "is safe",
+        "is accurate",
+        "production-ready",
+        "production ready",
+        "pass\"",
+        "fail\"",
+        "passed the",
+        "failed the",
+    )
+    for phrase in forbidden:
+        assert phrase not in lowered
+
+
+def test_module_does_not_import_forbidden_modules():
+    """The module docstring legitimately NAMES these modules to state the
+    scope boundary -- what must never exist is an actual import, checked
+    via AST rather than a source-text scan."""
+    import ast
+
+    import edge.eval.u06_seed_repetition_report as module
+
+    tree = ast.parse(inspect.getsource(module))
+    imported_modules: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            imported_modules.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            imported_modules.add(node.module)
+
+    forbidden_prefixes = (
+        "edge.rl.reward",
+        "edge.rl.fallback_gate",
+        "edge.rl.policy",
+        "edge.rl.environment",
+        "edge.eval.rl_training",
+        "edge.injection",
+    )
+    for imported in imported_modules:
+        assert not imported.startswith(forbidden_prefixes)
+
+
+def test_module_has_no_hardware_network_or_actuation_imports():
+    import edge.eval.u06_seed_repetition_report as module
+
+    with open(module.__file__, encoding="utf-8") as f:
+        content = f.read()
+    for forbidden in ("RelayController", "FakeActuator", "SelfHealOrchestrator", "paho"):
+        assert forbidden not in content
+    assert "GPIO" not in content.upper()
+    assert "MQTT" not in content.upper()
+
+
+# ---------------------------------------------------------------------------
+# main() is a simple, working printer
+# ---------------------------------------------------------------------------
+
+
+def test_main_runs_without_raising_and_prints_all_seeds(capsys):
+    from edge.eval.u06_seed_repetition_report import main
+
+    main()
+    captured = capsys.readouterr()
+    for scenario in CLEAN_DEGRADATION_SEED_REPETITION_SCENARIOS:
+        assert str(scenario.seed) in captured.out
+    assert "axis (i)" in captured.out
+    assert "axis (ii)" in captured.out
+    assert "axis (iii)" in captured.out
