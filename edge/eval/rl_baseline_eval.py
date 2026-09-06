@@ -287,6 +287,78 @@ SCENARIO_INJECTED_CURRENT_SPIKE = ScenarioConfig(
     injections=(Spike(channel="current", onset=32, duration=5, amplitude=50.0),),
 )
 
+# ---- Seed-repetition variants of SCENARIO_INJECTED_CURRENT_SPIKE (U06
+# scoping) -- second scenario shape covered by this pattern, after
+# SCENARIO_CLEAN_DEGRADATION's own 5-seed set above. Four additional
+# scenarios reusing SCENARIO_INJECTED_CURRENT_SPIKE's own profile EXACTLY
+# (length, health range, degradation rate, vibration config, and its
+# Spike injection unchanged) -- only ``seed`` differs. Per the "U06 --
+# Operational Definitions Proposal"'s own section D (proposed minimum: at
+# least 5 distinct seeds per scenario), still only 2 of 9 scenarios now
+# have 5-seed coverage; the remaining 7 injection-type scenarios remain
+# unfinished. Seeds 1350-1353 -- distinct from every existing evaluation-
+# scenario seed (1337-1349), every TRAINING_SCENARIOS seed (2001, 2002),
+# and edge.eval.rl_training.SEED_FIXTURE (1337, a training-run RNG seed,
+# unrelated to any ScenarioConfig). Not added to INJECTION_TYPE_SCENARIOS,
+# EVALUATION_SCENARIO_METADATA, or default_scenarios() -- consumed
+# explicitly by edge.eval.u06_seed_repetition_report_injected_current_spike
+# instead, matching CLEAN_DEGRADATION_SEED_REPETITION_SCENARIOS' own
+# convention.
+SCENARIO_INJECTED_CURRENT_SPIKE_SEED_1350 = ScenarioConfig(
+    name="injected_current_spike_seed_1350",
+    seed=1350,
+    length=40,
+    start_health=1.0,
+    end_health=0.2,
+    degradation_rate=1.0,
+    channels={"vibration": ChannelDegradationConfig(healthy_value=0.03, degraded_value=1.2)},
+    injections=(Spike(channel="current", onset=32, duration=5, amplitude=50.0),),
+)
+
+SCENARIO_INJECTED_CURRENT_SPIKE_SEED_1351 = ScenarioConfig(
+    name="injected_current_spike_seed_1351",
+    seed=1351,
+    length=40,
+    start_health=1.0,
+    end_health=0.2,
+    degradation_rate=1.0,
+    channels={"vibration": ChannelDegradationConfig(healthy_value=0.03, degraded_value=1.2)},
+    injections=(Spike(channel="current", onset=32, duration=5, amplitude=50.0),),
+)
+
+SCENARIO_INJECTED_CURRENT_SPIKE_SEED_1352 = ScenarioConfig(
+    name="injected_current_spike_seed_1352",
+    seed=1352,
+    length=40,
+    start_health=1.0,
+    end_health=0.2,
+    degradation_rate=1.0,
+    channels={"vibration": ChannelDegradationConfig(healthy_value=0.03, degraded_value=1.2)},
+    injections=(Spike(channel="current", onset=32, duration=5, amplitude=50.0),),
+)
+
+SCENARIO_INJECTED_CURRENT_SPIKE_SEED_1353 = ScenarioConfig(
+    name="injected_current_spike_seed_1353",
+    seed=1353,
+    length=40,
+    start_health=1.0,
+    end_health=0.2,
+    degradation_rate=1.0,
+    channels={"vibration": ChannelDegradationConfig(healthy_value=0.03, degraded_value=1.2)},
+    injections=(Spike(channel="current", onset=32, duration=5, amplitude=50.0),),
+)
+
+# All 5 injected_current_spike seed variants, including the original --
+# consumed by edge.eval.u06_seed_repetition_report_injected_current_spike.
+# Order is fixed and deterministic.
+INJECTED_CURRENT_SPIKE_SEED_REPETITION_SCENARIOS: tuple[ScenarioConfig, ...] = (
+    SCENARIO_INJECTED_CURRENT_SPIKE,
+    SCENARIO_INJECTED_CURRENT_SPIKE_SEED_1350,
+    SCENARIO_INJECTED_CURRENT_SPIKE_SEED_1351,
+    SCENARIO_INJECTED_CURRENT_SPIKE_SEED_1352,
+    SCENARIO_INJECTED_CURRENT_SPIKE_SEED_1353,
+)
+
 # ---- One held-out evaluation scenario per InjectionType (U06 scoping) -----
 # Each reuses SCENARIO_CLEAN_DEGRADATION's own degradation profile (length,
 # health range, degradation rate, vibration config) unchanged, varying only
