@@ -2291,3 +2291,23 @@ An additive, descriptive-only `ScenarioMetadata`/`EVALUATION_SCENARIO_METADATA` 
 - No real-world fault-detection, attack-detection, accuracy, safety, effectiveness, validation, or production-readiness claim is made.
 
 **Not done by this increment:** U06's status in the UNDECIDED list above is unchanged: fully open, zero partial resolution. With both `tracked_channels` and `active_injection_channels` now plumbed, the data prerequisites the channel-matched-comparison feasibility review identified are complete — but the comparison logic itself (deciding how to score channel agreement/mismatch, including the multi-channel attribution convention) remains a separate, not-yet-approved decision, deferred pending human sign-off on the Operational Definitions Proposal per that review's own conclusion. `sample_seq` deduplication, DQN-policy inclusion, and confidence-interval/uncertainty reporting all remain open, separate questions as well.
+
+---
+
+## U06 — Operational Definitions Proposal Sign-Off (DECISION RECORD)
+**(THIS IS AN ACTUAL DECISION — the first substantive decision recorded for any U06 sub-item, resolving the three items in the "U06 Operational Definitions Proposal Sign-Off Checklist" prepared for human review. It does NOT resolve U06 itself: no acceptable false-isolation/missed-fault rate, threshold, verdict, or reward-weight configuration is chosen here. U06's own status line above remains unchanged: fully open, zero partial resolution.)**
+
+- **Date decided:** 2026-09-06
+- **Decision owner:** Yeshwanth LB
+
+**Decision 1 — Ground-truth proxy: Option C chosen.** `safety_status`-based measurement (axis (i)) and ground-truth-anchored measurement (axis (iii)) continue to be reported side by side as independent diagnostic views. Neither is declared the single authoritative measure of "a fault is present." This requires no change to axis (i) or axis (iii) — both remain exactly as already implemented and committed.
+
+**Decision 2 — Opportunity denominator: Option A chosen.** The convention already drafted in section C above is confirmed as accepted: the false-isolation denominator is `safety_status == "nominal"` steps with a non-`None` requested action; the missed-fault denominator is `safety_status == "isolation_active"` steps. A zero-denominator scenario/episode is confirmed to report the rate as undefined (`None`), never `0%`. This requires no change to any existing axis module or report.
+
+**Decision 3 — Reporting convention: Option A chosen.** Per-scenario reporting is confirmed. Per-episode reporting is confirmed. All 5 seeds per scenario remain fully separate — no averaging, pooling, or cross-seed combined statistic is approved by this decision. This requires no change to any existing seed-repetition report.
+
+**Explicitly NOT approved by this decision:** any acceptable-rate threshold or pass/fail verdict; any reward-weight configuration; channel-matched comparison implementation; `sample_seq` deduplication; DQN-policy evaluation; confidence-interval/uncertainty reporting; any real-world accuracy, safety, effectiveness, validation, or production-readiness claim. Each remains a fully separate, future decision requiring its own explicit approval.
+
+**What this decision changes:** nothing in the codebase. This is a documentation-only decision record. Sections A-J of the "U06 — Operational Definitions Proposal" above remain the original proposal text, unmodified, now marked accepted by this record rather than rewritten.
+
+**Not done by this decision:** U06's status in the UNDECIDED list above is unchanged: fully open, zero partial resolution. No acceptable false-isolation/missed-fault rate, threshold, or reward-weight configuration is chosen. The roadmap's remaining four items — channel-matched comparison, `sample_seq` deduplication, DQN-policy evaluation, and confidence-interval/uncertainty reporting — each still require their own separate, future approval before implementation.
