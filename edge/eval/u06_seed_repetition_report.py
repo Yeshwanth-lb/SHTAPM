@@ -7,9 +7,9 @@ variants in ``edge.eval.rl_baseline_eval.
 CLEAN_DEGRADATION_SEED_REPETITION_SCENARIOS`` for both existing
 deterministic baselines, reporting every (seed, baseline) result
 independently -- establishing the FIRST complete 5-seed coverage pattern
-for one scenario shape, per the "U06 -- Operational Definitions
-Proposal"'s own section D (proposed minimum: at least 5 distinct seeds per
-scenario).
+for one scenario shape, per §4 of the "U06 -- RL REWARD SHAPING
+SPECIFICATION PROPOSAL" section (proposed minimum: at least 5 distinct
+seeds per scenario).
 
 data_source=synthetic · execution_mode=simulation · model_status=diagnostic_unvalidated
 
@@ -34,9 +34,9 @@ produces, matching the U06 Operational Definitions Proposal's own section
 E ("per-episode raw rates and opportunity counts are the base unit,
 reported before any cross-seed summary").
 
-PARTIAL COVERAGE, NOT COMPLETION, OF SECTION D: this module establishes
+PARTIAL COVERAGE, NOT COMPLETION, OF §4: this module establishes
 the 5-seed pattern for exactly ONE scenario shape (clean degradation).
-Section D's proposed minimum applies to EVERY scenario in the taxonomy
+§4's proposed minimum applies to EVERY scenario in the taxonomy
 (the 8 injection-type scenarios plus this one) -- broader 5-seed coverage
 across the other 8 scenarios remains unfinished and is NOT implemented
 here.

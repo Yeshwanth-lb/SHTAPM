@@ -211,8 +211,9 @@ SCENARIO_CLEAN_DEGRADATION = ScenarioConfig(
 # EXACTLY (length, health range, degradation rate, vibration config, no
 # injections) -- only ``seed`` differs. Together with the original, these
 # five scenarios establish the first complete 5-seed coverage pattern for
-# one scenario shape, per the "U06 -- Operational Definitions Proposal"'s
-# own section D (proposed minimum: at least 5 distinct seeds per scenario).
+# one scenario shape, per the "U06 -- RL REWARD SHAPING SPECIFICATION
+# PROPOSAL" section's own §4 (proposed minimum: at least 5 distinct seeds
+# per scenario).
 # Seeds 1346-1349 -- distinct from every existing evaluation-scenario seed
 # (1337-1345), every TRAINING_SCENARIOS seed (2001, 2002), and
 # edge.eval.rl_training.SEED_FIXTURE (1337, a training-run RNG seed,
@@ -292,9 +293,9 @@ SCENARIO_INJECTED_CURRENT_SPIKE = ScenarioConfig(
 # SCENARIO_CLEAN_DEGRADATION's own 5-seed set above. Four additional
 # scenarios reusing SCENARIO_INJECTED_CURRENT_SPIKE's own profile EXACTLY
 # (length, health range, degradation rate, vibration config, and its
-# Spike injection unchanged) -- only ``seed`` differs. Per the "U06 --
-# Operational Definitions Proposal"'s own section D (proposed minimum: at
-# least 5 distinct seeds per scenario), still only 2 of 9 scenarios now
+# Spike injection unchanged) -- only ``seed`` differs. Per §4 of the "U06
+# -- RL REWARD SHAPING SPECIFICATION PROPOSAL" section (proposed minimum:
+# at least 5 distinct seeds per scenario), still only 2 of 9 scenarios now
 # have 5-seed coverage; the remaining 7 injection-type scenarios remain
 # unfinished. Seeds 1350-1353 -- distinct from every existing evaluation-
 # scenario seed (1337-1349), every TRAINING_SCENARIOS seed (2001, 2002),
@@ -386,8 +387,8 @@ SCENARIO_INJECTED_TEMPERATURE_DRIFT = ScenarioConfig(
 # 5-seed sets. Four additional scenarios reusing
 # SCENARIO_INJECTED_TEMPERATURE_DRIFT's own profile EXACTLY (length, health
 # range, degradation rate, vibration config, and its Drift injection
-# unchanged) -- only ``seed`` differs. Per the "U06 -- Operational
-# Definitions Proposal"'s own section D (proposed minimum: at least 5
+# unchanged) -- only ``seed`` differs. Per §4 of the "U06 -- RL REWARD
+# SHAPING SPECIFICATION PROPOSAL" section (proposed minimum: at least 5
 # distinct seeds per scenario), still only 3 of 9 scenarios now have 5-seed
 # coverage; the remaining 6 injection-type scenarios remain unfinished.
 # Seeds 1354-1357 -- distinct from every existing evaluation-scenario seed
@@ -454,10 +455,10 @@ SCENARIO_INJECTED_PRESSURE_STUCK_AT = ScenarioConfig(
 # SCENARIO_INJECTED_TEMPERATURE_DRIFT's own 5-seed sets. Four additional
 # scenarios reusing SCENARIO_INJECTED_PRESSURE_STUCK_AT's own profile
 # EXACTLY (length, health range, degradation rate, vibration config, and
-# its StuckAt injection unchanged) -- only ``seed`` differs. Per the "U06
-# -- Operational Definitions Proposal"'s own section D (proposed minimum:
-# at least 5 distinct seeds per scenario), still only 4 of 9 scenarios now
-# have 5-seed coverage; the remaining 5 injection-type scenarios remain
+# its StuckAt injection unchanged) -- only ``seed`` differs. Per §4 of
+# the "U06 -- RL REWARD SHAPING SPECIFICATION PROPOSAL" section (proposed
+# minimum: at least 5 distinct seeds per scenario), still only 4 of 9
+# scenarios now have 5-seed coverage; the remaining 5 injection-type scenarios remain
 # unfinished. Seeds 1358-1361 -- distinct from every existing evaluation-
 # scenario seed (1337-1357), every TRAINING_SCENARIOS seed (2001, 2002),
 # and edge.eval.rl_training.SEED_FIXTURE (1337, a training-run RNG seed,
@@ -523,9 +524,9 @@ SCENARIO_INJECTED_HUMIDITY_BIAS_FDI = ScenarioConfig(
 # SCENARIO_INJECTED_PRESSURE_STUCK_AT's own 5-seed sets. Four additional
 # scenarios reusing SCENARIO_INJECTED_HUMIDITY_BIAS_FDI's own profile
 # EXACTLY (length, health range, degradation rate, vibration config, and
-# its BiasFDI injection unchanged) -- only ``seed`` differs. Per the "U06
-# -- Operational Definitions Proposal"'s own section D (proposed minimum:
-# at least 5 distinct seeds per scenario), still only 5 of 9 scenarios now
+# its BiasFDI injection unchanged) -- only ``seed`` differs. Per §4 of
+# the "U06 -- RL REWARD SHAPING SPECIFICATION PROPOSAL" section (proposed
+# minimum: at least 5 distinct seeds per scenario), still only 5 of 9 scenarios now
 # have 5-seed coverage; the remaining 4 injection-type scenarios remain
 # unfinished. Seeds 1362-1365 -- distinct from every existing evaluation-
 # scenario seed (1337-1361), every TRAINING_SCENARIOS seed (2001, 2002),
@@ -593,7 +594,7 @@ SCENARIO_INJECTED_GAS_RAMP_FDI = ScenarioConfig(
 # Four additional scenarios reusing SCENARIO_INJECTED_GAS_RAMP_FDI's own
 # profile EXACTLY (length, health range, degradation rate, vibration
 # config, and its RampFDI injection unchanged) -- only ``seed`` differs.
-# Per the "U06 -- Operational Definitions Proposal"'s own section D
+# Per §4 of the "U06 -- RL REWARD SHAPING SPECIFICATION PROPOSAL" section
 # (proposed minimum: at least 5 distinct seeds per scenario), still only
 # 6 of 9 scenarios now have 5-seed coverage; the remaining 3 injection-type
 # scenarios remain unfinished. Seeds 1366-1369 -- distinct from every
@@ -666,8 +667,8 @@ SCENARIO_INJECTED_VIBRATION_REPLAY = ScenarioConfig(
 # GAS_RAMP_FDI's own 5-seed sets. Four additional scenarios reusing
 # SCENARIO_INJECTED_VIBRATION_REPLAY's own profile EXACTLY (length, health
 # range, degradation rate, vibration config, and its Replay injection
-# unchanged) -- only ``seed`` differs. Per the "U06 -- Operational
-# Definitions Proposal"'s own section D (proposed minimum: at least 5
+# unchanged) -- only ``seed`` differs. Per §4 of the "U06 -- RL REWARD
+# SHAPING SPECIFICATION PROPOSAL" section (proposed minimum: at least 5
 # distinct seeds per scenario), still only 7 of 9 scenarios now have
 # 5-seed coverage; the remaining 2 injection-type scenarios remain
 # unfinished. Seeds 1370-1373 -- distinct from every existing evaluation-
@@ -741,8 +742,8 @@ SCENARIO_INJECTED_CURRENT_CONSTANT_SPOOF = ScenarioConfig(
 # Four additional scenarios reusing SCENARIO_INJECTED_CURRENT_CONSTANT_
 # SPOOF's own profile EXACTLY (length, health range, degradation rate,
 # vibration config, and its ConstantSpoof injection unchanged) -- only
-# ``seed`` differs. Per the "U06 -- Operational Definitions Proposal"'s
-# own section D (proposed minimum: at least 5 distinct seeds per
+# ``seed`` differs. Per §4 of the "U06 -- RL REWARD SHAPING SPECIFICATION
+# PROPOSAL" section (proposed minimum: at least 5 distinct seeds per
 # scenario), still only 8 of 9 scenarios now have 5-seed coverage; the
 # remaining 1 injection-type scenario remains unfinished. Seeds 1374-1377
 # -- distinct from every existing evaluation-scenario seed (1337-1373),
@@ -819,8 +820,8 @@ SCENARIO_INJECTED_TEMPERATURE_ADAPTIVE_STEALTH_FDI = ScenarioConfig(
 # scenarios reusing SCENARIO_INJECTED_TEMPERATURE_ADAPTIVE_STEALTH_FDI's
 # own profile EXACTLY (length, health range, degradation rate, vibration
 # config, and its AdaptiveStealthFDI injection unchanged) -- only
-# ``seed`` differs. Per the "U06 -- Operational Definitions Proposal"'s
-# own section D (proposed minimum: at least 5 distinct seeds per
+# ``seed`` differs. Per §4 of the "U06 -- RL REWARD SHAPING SPECIFICATION
+# PROPOSAL" section (proposed minimum: at least 5 distinct seeds per
 # scenario), this completes 5-seed coverage for all 9 of 9 scenario
 # shapes; the remaining 0 injection-type scenarios are unfinished.
 # Seeds 1378-1381 -- distinct from every existing evaluation-scenario

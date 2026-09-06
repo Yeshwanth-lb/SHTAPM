@@ -17,7 +17,7 @@ u06_seed_repetition_report_injected_humidity_bias_fdi``'s own coverage,
 ``edge.eval.u06_seed_repetition_report_injected_gas_ramp_fdi``'s own
 coverage, and ``edge.eval.
 u06_seed_repetition_report_injected_vibration_replay``'s own coverage),
-per the "U06 -- Operational Definitions Proposal"'s own section D
+per §4 of the "U06 -- RL REWARD SHAPING SPECIFICATION PROPOSAL" section
 (proposed minimum: at least 5 distinct seeds per scenario).
 
 data_source=synthetic · execution_mode=simulation · model_status=diagnostic_unvalidated
@@ -49,11 +49,11 @@ produces, matching the U06 Operational Definitions Proposal's own section
 E ("per-episode raw rates and opportunity counts are the base unit,
 reported before any cross-seed summary").
 
-STILL PARTIAL COVERAGE OF SECTION D: with this module, 8 of the 9
+STILL PARTIAL COVERAGE OF §4: with this module, 8 of the 9
 evaluation-scenario shapes (clean degradation, injected_current_spike,
 injected_temperature_drift, injected_pressure_stuck_at, injected_humidity_
 bias_fdi, injected_gas_ramp_fdi, injected_vibration_replay, injected_
-current_constant_spoof) now have 5-seed coverage. Section D's proposed
+current_constant_spoof) now have 5-seed coverage. §4's proposed
 minimum applies to EVERY scenario in the taxonomy -- the remaining 1
 injection-type scenario (AdaptiveStealthFDI) still has only its single,
 original seed. Broader 5-seed coverage across that scenario remains
