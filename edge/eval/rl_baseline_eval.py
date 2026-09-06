@@ -516,6 +516,67 @@ SCENARIO_INJECTED_HUMIDITY_BIAS_FDI = ScenarioConfig(
     **_EVALUATION_DEGRADATION_PROFILE,
 )
 
+# ---- Seed-repetition variants of SCENARIO_INJECTED_HUMIDITY_BIAS_FDI (U06
+# scoping) -- fifth scenario shape covered by this pattern, after
+# SCENARIO_CLEAN_DEGRADATION's, SCENARIO_INJECTED_CURRENT_SPIKE's,
+# SCENARIO_INJECTED_TEMPERATURE_DRIFT's, and
+# SCENARIO_INJECTED_PRESSURE_STUCK_AT's own 5-seed sets. Four additional
+# scenarios reusing SCENARIO_INJECTED_HUMIDITY_BIAS_FDI's own profile
+# EXACTLY (length, health range, degradation rate, vibration config, and
+# its BiasFDI injection unchanged) -- only ``seed`` differs. Per the "U06
+# -- Operational Definitions Proposal"'s own section D (proposed minimum:
+# at least 5 distinct seeds per scenario), still only 5 of 9 scenarios now
+# have 5-seed coverage; the remaining 4 injection-type scenarios remain
+# unfinished. Seeds 1362-1365 -- distinct from every existing evaluation-
+# scenario seed (1337-1361), every TRAINING_SCENARIOS seed (2001, 2002),
+# and edge.eval.rl_training.SEED_FIXTURE (1337, a training-run RNG seed,
+# unrelated to any ScenarioConfig). Not added to INJECTION_TYPE_SCENARIOS,
+# EVALUATION_SCENARIO_METADATA, or default_scenarios() -- consumed
+# explicitly by edge.eval.u06_seed_repetition_report_injected_humidity_bias_fdi
+# instead, matching the four prior seed-repetition sets' own convention.
+SCENARIO_INJECTED_HUMIDITY_BIAS_FDI_SEED_1362 = ScenarioConfig(
+    name="injected_humidity_bias_fdi_seed_1362",
+    seed=1362,
+    length=40,
+    injections=(BiasFDI(channel="humidity", onset=30, duration=5, bias=5.0),),
+    **_EVALUATION_DEGRADATION_PROFILE,
+)
+
+SCENARIO_INJECTED_HUMIDITY_BIAS_FDI_SEED_1363 = ScenarioConfig(
+    name="injected_humidity_bias_fdi_seed_1363",
+    seed=1363,
+    length=40,
+    injections=(BiasFDI(channel="humidity", onset=30, duration=5, bias=5.0),),
+    **_EVALUATION_DEGRADATION_PROFILE,
+)
+
+SCENARIO_INJECTED_HUMIDITY_BIAS_FDI_SEED_1364 = ScenarioConfig(
+    name="injected_humidity_bias_fdi_seed_1364",
+    seed=1364,
+    length=40,
+    injections=(BiasFDI(channel="humidity", onset=30, duration=5, bias=5.0),),
+    **_EVALUATION_DEGRADATION_PROFILE,
+)
+
+SCENARIO_INJECTED_HUMIDITY_BIAS_FDI_SEED_1365 = ScenarioConfig(
+    name="injected_humidity_bias_fdi_seed_1365",
+    seed=1365,
+    length=40,
+    injections=(BiasFDI(channel="humidity", onset=30, duration=5, bias=5.0),),
+    **_EVALUATION_DEGRADATION_PROFILE,
+)
+
+# All 5 injected_humidity_bias_fdi seed variants, including the original --
+# consumed by edge.eval.u06_seed_repetition_report_injected_humidity_bias_fdi.
+# Order is fixed and deterministic.
+INJECTED_HUMIDITY_BIAS_FDI_SEED_REPETITION_SCENARIOS: tuple[ScenarioConfig, ...] = (
+    SCENARIO_INJECTED_HUMIDITY_BIAS_FDI,
+    SCENARIO_INJECTED_HUMIDITY_BIAS_FDI_SEED_1362,
+    SCENARIO_INJECTED_HUMIDITY_BIAS_FDI_SEED_1363,
+    SCENARIO_INJECTED_HUMIDITY_BIAS_FDI_SEED_1364,
+    SCENARIO_INJECTED_HUMIDITY_BIAS_FDI_SEED_1365,
+)
+
 SCENARIO_INJECTED_GAS_RAMP_FDI = ScenarioConfig(
     name="injected_gas_ramp_fdi",
     seed=1342,
