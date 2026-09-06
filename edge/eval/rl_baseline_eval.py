@@ -808,6 +808,92 @@ SCENARIO_INJECTED_TEMPERATURE_ADAPTIVE_STEALTH_FDI = ScenarioConfig(
     **_EVALUATION_DEGRADATION_PROFILE,
 )
 
+# ---- Seed-repetition variants of
+# SCENARIO_INJECTED_TEMPERATURE_ADAPTIVE_STEALTH_FDI (U06 scoping) --
+# ninth (final) scenario shape covered by this pattern, after
+# SCENARIO_CLEAN_DEGRADATION's, SCENARIO_INJECTED_CURRENT_SPIKE's,
+# SCENARIO_INJECTED_TEMPERATURE_DRIFT's, SCENARIO_INJECTED_PRESSURE_
+# STUCK_AT's, SCENARIO_INJECTED_HUMIDITY_BIAS_FDI's, SCENARIO_INJECTED_
+# GAS_RAMP_FDI's, SCENARIO_INJECTED_VIBRATION_REPLAY's, and SCENARIO_
+# INJECTED_CURRENT_CONSTANT_SPOOF's own 5-seed sets. Four additional
+# scenarios reusing SCENARIO_INJECTED_TEMPERATURE_ADAPTIVE_STEALTH_FDI's
+# own profile EXACTLY (length, health range, degradation rate, vibration
+# config, and its AdaptiveStealthFDI injection unchanged) -- only
+# ``seed`` differs. Per the "U06 -- Operational Definitions Proposal"'s
+# own section D (proposed minimum: at least 5 distinct seeds per
+# scenario), this completes 5-seed coverage for all 9 of 9 scenario
+# shapes; the remaining 0 injection-type scenarios are unfinished.
+# Seeds 1378-1381 -- distinct from every existing evaluation-scenario
+# seed (1337-1377), every TRAINING_SCENARIOS seed (2001, 2002), and
+# edge.eval.rl_training.SEED_FIXTURE (1337, a training-run RNG seed,
+# unrelated to any ScenarioConfig). Not added to INJECTION_TYPE_
+# SCENARIOS, EVALUATION_SCENARIO_METADATA, or default_scenarios() --
+# consumed explicitly by edge.eval.
+# u06_seed_repetition_report_injected_temperature_adaptive_stealth_fdi
+# instead, matching the eight prior seed-repetition sets' own
+# convention.
+SCENARIO_INJECTED_TEMPERATURE_ADAPTIVE_STEALTH_FDI_SEED_1378 = ScenarioConfig(
+    name="injected_temperature_adaptive_stealth_fdi_seed_1378",
+    seed=1378,
+    length=40,
+    injections=(
+        AdaptiveStealthFDI(
+            channel="temperature", onset=25, duration=10, rate=0.5, residual_cap=2.0
+        ),
+    ),
+    **_EVALUATION_DEGRADATION_PROFILE,
+)
+
+SCENARIO_INJECTED_TEMPERATURE_ADAPTIVE_STEALTH_FDI_SEED_1379 = ScenarioConfig(
+    name="injected_temperature_adaptive_stealth_fdi_seed_1379",
+    seed=1379,
+    length=40,
+    injections=(
+        AdaptiveStealthFDI(
+            channel="temperature", onset=25, duration=10, rate=0.5, residual_cap=2.0
+        ),
+    ),
+    **_EVALUATION_DEGRADATION_PROFILE,
+)
+
+SCENARIO_INJECTED_TEMPERATURE_ADAPTIVE_STEALTH_FDI_SEED_1380 = ScenarioConfig(
+    name="injected_temperature_adaptive_stealth_fdi_seed_1380",
+    seed=1380,
+    length=40,
+    injections=(
+        AdaptiveStealthFDI(
+            channel="temperature", onset=25, duration=10, rate=0.5, residual_cap=2.0
+        ),
+    ),
+    **_EVALUATION_DEGRADATION_PROFILE,
+)
+
+SCENARIO_INJECTED_TEMPERATURE_ADAPTIVE_STEALTH_FDI_SEED_1381 = ScenarioConfig(
+    name="injected_temperature_adaptive_stealth_fdi_seed_1381",
+    seed=1381,
+    length=40,
+    injections=(
+        AdaptiveStealthFDI(
+            channel="temperature", onset=25, duration=10, rate=0.5, residual_cap=2.0
+        ),
+    ),
+    **_EVALUATION_DEGRADATION_PROFILE,
+)
+
+# All 5 injected_temperature_adaptive_stealth_fdi seed variants, including
+# the original -- consumed by edge.eval.
+# u06_seed_repetition_report_injected_temperature_adaptive_stealth_fdi.
+# Order is fixed and deterministic.
+INJECTED_TEMPERATURE_ADAPTIVE_STEALTH_FDI_SEED_REPETITION_SCENARIOS: tuple[
+    ScenarioConfig, ...
+] = (
+    SCENARIO_INJECTED_TEMPERATURE_ADAPTIVE_STEALTH_FDI,
+    SCENARIO_INJECTED_TEMPERATURE_ADAPTIVE_STEALTH_FDI_SEED_1378,
+    SCENARIO_INJECTED_TEMPERATURE_ADAPTIVE_STEALTH_FDI_SEED_1379,
+    SCENARIO_INJECTED_TEMPERATURE_ADAPTIVE_STEALTH_FDI_SEED_1380,
+    SCENARIO_INJECTED_TEMPERATURE_ADAPTIVE_STEALTH_FDI_SEED_1381,
+)
+
 # All 8 InjectionType-covering scenarios, in InjectionType declaration order
 # (edge/injection/injections.py's own DRIFT/SPIKE/STUCK_AT/BIAS_FDI/RAMP_FDI/
 # REPLAY/CONSTANT_SPOOF/ADAPTIVE_STEALTH_FDI ordering) -- NOT included in
