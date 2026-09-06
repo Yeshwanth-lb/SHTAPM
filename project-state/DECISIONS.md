@@ -2502,3 +2502,52 @@ An additive, descriptive-only `ScenarioMetadata`/`EVALUATION_SCENARIO_METADATA` 
 - Adds no new torch dependency to the ordinary U06 test surface — every new torch-dependent test is guarded by `pytest.importorskip("torch")`, matching `edge/tests/test_rl_training.py`'s own established convention exactly.
 
 **Not done by this increment:** U06's status in the UNDECIDED list above is unchanged: fully open, zero partial resolution. No acceptable false-isolation/missed-fault rate, threshold, or reward-weight configuration is chosen. This evaluation inherits the same world-inert-environment ceiling every other U06 evaluation already has (§9 of the reward-shaping proposal) — it measures only this policy's own requested-action bookkeeping consistency on synthetic data, never real fault-detection consequences.
+
+---
+
+## U06 — Confidence Intervals Wired Into Aggregate and Seed-Repetition Reports Implementation Note (IMPLEMENTATION RECORD, NOT A DECISION)
+**(U06 REMAINS FULLY UNDECIDED/OPEN. This is an implementation record for the confidence-interval wiring explicitly approved as part of "complete every remaining optional coding increment" — it wires the already-approved, already-built Wilson score interval module into the aggregate diagnostic report and all nine seed-repetition reports. It defines no new methodology, modifies no existing axis, and does not resolve U06.)**
+
+- **Date implemented:** 2026-09-06
+- **Files changed:** `edge/eval/u06_diagnostic_report.py`, `edge/tests/test_u06_diagnostic_report.py`, all 9 seed-repetition report modules (`edge/eval/u06_seed_repetition_report.py` and its 8 `_injected_*` siblings) and their 9 corresponding test files. No existing axis/comparison module modified — `edge/eval/u06_rate_summary.py`, `edge/eval/u06_tracker_agreement.py`, `edge/eval/u06_ground_truth_rate_summary.py`, `edge/eval/u06_channel_agreement.py`, and `edge/eval/u06_confidence_intervals.py` itself are all untouched.
+
+**What this increment does:**
+- `ScenarioBaselineResult` and each of the 9 `SeedRepetitionResult` dataclasses gain six new fields — `axis_i_false_isolation_interval`, `axis_i_missed_fault_interval`, `axis_ii_tracker_agreement_interval`, `axis_iii_false_isolation_interval`, `axis_iii_missed_fault_interval`, `channel_agreement_interval` — each populated by calling the corresponding already-existing, unmodified wrapper function from `edge.eval.u06_confidence_intervals` directly on the already-computed summary object (never on a rounded rate).
+- **Verified directly across the aggregate report and all 9 seed-repetition reports:** the known real channel mismatch (`injected_current_constant_spoof`) produces a real, non-`None` interval (numerator=0, denominator=3, 95% confidence level) identically across all 5 seeds and both baselines where applicable; the 8 zero-opportunity scenario shapes correctly produce `None` for every seed and baseline, matching their own underlying `channel_match_rate is None`.
+- **Verified directly (regression):** every pre-existing rate/count value on all four summaries is unchanged before and after this wiring, for both the aggregate report and every seed-repetition report.
+
+**What this increment explicitly does NOT do:**
+- Introduces no new interval methodology — the Wilson formula, 95% confidence level, and zero-denominator convention are all read unmodified from `edge.eval.u06_confidence_intervals`.
+- Computes no cross-seed, pooled, mean, or standard-deviation interval anywhere — confirmed by structural tests on every affected dataclass.
+- Does not modify `edge.eval.u06_confidence_intervals.py` or any of its already-approved rules.
+- Computes no threshold, verdict, or pass/fail judgment, and makes no real-world accuracy, safety, effectiveness, validation, or production-readiness claim anywhere.
+
+**Not done by this increment:** U06's status in the UNDECIDED list above is unchanged: fully open, zero partial resolution. Confidence intervals were not added to the DQN diagnostic evaluation's own result type in this increment (see the DQN integration note below for why) — that remains a separate, not-yet-approved question if ever wanted.
+
+---
+
+## U06 — DQN Diagnostic Evaluation Integrated Into Reporting Layer Implementation Note (IMPLEMENTATION RECORD, NOT A DECISION)
+**(U06 REMAINS FULLY UNDECIDED/OPEN. This is an implementation record for the DQN reporting-layer integration explicitly approved as part of "complete every remaining optional coding increment" — it combines the already-approved, already-built aggregate diagnostic report and DQN diagnostic evaluation into one new, optional, torch-guarded integration module. It defines no new methodology, modifies neither wrapped module, and does not resolve U06.)**
+
+- **Date implemented:** 2026-09-06
+- **Files changed:** `edge/eval/u06_dqn_augmented_diagnostic_report.py` (new), `edge/tests/test_u06_dqn_augmented_diagnostic_report.py` (new). No existing file modified — `edge/eval/u06_diagnostic_report.py` and `edge/eval/u06_dqn_evaluation_report.py` are both untouched.
+
+**Architectural decision (the choice made, and the alternative rejected):**
+- **Chosen:** a new, separate, isolated integration module that calls both already-existing `build_diagnostic_report()` and (conditionally) `build_dqn_diagnostic_report()` unmodified, combining their results into one `DQNAugmentedDiagnosticReport` with two fields (`baseline_results`, always populated; `dqn_results`, populated only when torch is available).
+- **Rejected:** adding a third "dqn_policy" row directly inside `edge.eval.u06_diagnostic_report.build_diagnostic_report()` itself — rejected because that would make importing `edge.eval.u06_diagnostic_report` (already depended on by every seed-repetition report and every other existing consumer) unconditionally require `torch`, exactly the outcome the DQN methodology decision's own "torch dependency isolated" requirement forbids.
+- **Torch guard:** `TORCH_AVAILABLE` is computed once via `importlib.util.find_spec("torch") is not None` (a static check, no import side effect). `edge.eval.u06_dqn_evaluation_report` is imported only inside `build_dqn_augmented_diagnostic_report()`, only after that check passes — confirmed directly: merely importing the new module never requires torch (verified via AST inspection of its own module-level import statements).
+- **Never silently skipped for any other reason:** the ONLY documented skip condition is `TORCH_UNAVAILABLE_REASON` ("torch is not installed in this environment"); no broad exception handler exists anywhere in the module, so any real failure during DQN training/evaluation propagates normally rather than being mistaken for unavailability.
+
+**What this increment does:**
+- Both torch-available and torch-unavailable behavior are verified directly: with torch available, `dqn_results` contains all 9 scenarios' `DQNScenarioResult`s (unmodified from the standalone DQN module) and `baseline_results` contains all 18 (scenario, baseline) rows (unmodified from the standalone aggregate report, now including the confidence-interval fields from the increment above); with torch simulated unavailable (via monkeypatching `TORCH_AVAILABLE`), `dqn_results` is `None`, `dqn_evaluation_skipped_reason` is populated, and `baseline_results` remains fully populated regardless.
+- **Verified directly: fully deterministic** and **no checkpoint file is created**, matching the standalone DQN module's own already-verified guarantees, unaffected by this integration layer.
+- Preserves the dedicated diagnostic seed `5001`, fresh in-memory training, and the fixed training configuration exactly as previously approved — this increment reads `dqn_report.diagnostic_seed`/`dqn_report.reward_weights_fixture_name` for self-documentation but changes none of them.
+
+**What this increment explicitly does NOT do:**
+- Does not modify `edge.eval.u06_diagnostic_report.py` or `edge.eval.u06_dqn_evaluation_report.py` — confirmed via `git diff` showing zero changes to either file.
+- Does not add confidence-interval fields to `DQNScenarioResult` — that dataclass is used completely unmodified; confidence-interval wiring was explicitly scoped to the aggregate/seed-repetition reports only (see the note above).
+- Does not change the DQN training configuration, seed, or reward fixture in any way.
+- Does not add checkpoint persistence of any kind.
+- Computes no threshold, verdict, or pass/fail judgment, and makes no real-world accuracy, safety, effectiveness, validation, or production-readiness claim anywhere — the module's own printed output and docstring restate that the DQN reward fixture is a fixed diagnostic fixture only, not an approved U06 reward-weight decision.
+
+**Not done by this increment:** U06's status in the UNDECIDED list above is unchanged: fully open, zero partial resolution. No acceptable rate, threshold, or reward-weight configuration is chosen. Wiring confidence intervals into the DQN evaluation's own result type, wiring DQN results into any seed-repetition report, `sample_seq` runtime deduplication, and cross-seed confidence intervals all remain explicitly out of scope, not addressed here.

@@ -129,6 +129,15 @@ from edge.eval.u06_channel_agreement import (
     ChannelAgreementSummary,
     summarize_channel_agreement,
 )
+from edge.eval.u06_confidence_intervals import (
+    WilsonScoreInterval,
+    axis_i_false_isolation_interval,
+    axis_i_missed_fault_interval,
+    axis_ii_tracker_agreement_interval,
+    axis_iii_false_isolation_interval,
+    axis_iii_missed_fault_interval,
+    channel_agreement_interval,
+)
 from edge.eval.u06_ground_truth_rate_summary import (
     GroundTruthRateSummary,
     summarize_ground_truth_rates,
@@ -163,6 +172,13 @@ class SeedRepetitionResult:
     tracker_agreement_summary: TrackerAgreementSummary
     ground_truth_rate_summary: GroundTruthRateSummary
     channel_agreement_summary: ChannelAgreementSummary
+
+    axis_i_false_isolation_interval: WilsonScoreInterval | None
+    axis_i_missed_fault_interval: WilsonScoreInterval | None
+    axis_ii_tracker_agreement_interval: WilsonScoreInterval | None
+    axis_iii_false_isolation_interval: WilsonScoreInterval | None
+    axis_iii_missed_fault_interval: WilsonScoreInterval | None
+    channel_agreement_interval: WilsonScoreInterval | None
 
     execution_mode: str = EXECUTION_MODE
     data_source: str = DATA_SOURCE
@@ -200,15 +216,37 @@ def build_seed_repetition_report() -> SeedRepetitionReport:
     for scenario in INJECTED_PRESSURE_STUCK_AT_SEED_REPETITION_SCENARIOS:
         for runner in _BASELINE_RUNNERS:
             record = runner(scenario)
+            episode_rate_summary = summarize_episode_rates(record)
+            tracker_agreement_summary = summarize_tracker_agreement(record)
+            ground_truth_rate_summary = summarize_ground_truth_rates(record)
+            channel_agreement_summary = summarize_channel_agreement(record)
             results.append(
                 SeedRepetitionResult(
                     scenario_name=record.scenario_name,
                     seed=scenario.seed,
                     baseline_name=record.baseline_name,
-                    episode_rate_summary=summarize_episode_rates(record),
-                    tracker_agreement_summary=summarize_tracker_agreement(record),
-                    ground_truth_rate_summary=summarize_ground_truth_rates(record),
-                    channel_agreement_summary=summarize_channel_agreement(record),
+                    episode_rate_summary=episode_rate_summary,
+                    tracker_agreement_summary=tracker_agreement_summary,
+                    ground_truth_rate_summary=ground_truth_rate_summary,
+                    channel_agreement_summary=channel_agreement_summary,
+                    axis_i_false_isolation_interval=axis_i_false_isolation_interval(
+                        episode_rate_summary
+                    ),
+                    axis_i_missed_fault_interval=axis_i_missed_fault_interval(
+                        episode_rate_summary
+                    ),
+                    axis_ii_tracker_agreement_interval=axis_ii_tracker_agreement_interval(
+                        tracker_agreement_summary
+                    ),
+                    axis_iii_false_isolation_interval=axis_iii_false_isolation_interval(
+                        ground_truth_rate_summary
+                    ),
+                    axis_iii_missed_fault_interval=axis_iii_missed_fault_interval(
+                        ground_truth_rate_summary
+                    ),
+                    channel_agreement_interval=channel_agreement_interval(
+                        channel_agreement_summary
+                    ),
                 )
             )
     return SeedRepetitionReport(results=tuple(results))
@@ -249,6 +287,11 @@ def main() -> None:
             f"  channel-agreement channel_match_rate="
             f"{channel_agreement.channel_match_rate} "
             f"(observations={channel_agreement.channel_match_observation_count})"
+        )
+        ci = result.channel_agreement_interval
+        print(
+            f"  channel-agreement 95% Wilson interval="
+            f"{(ci.lower_bound, ci.upper_bound) if ci is not None else None}"
         )
     print(
         "NOTE: every number above is diagnostic, simulation-only, and per-seed-"

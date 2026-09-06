@@ -183,6 +183,111 @@ def test_existing_axis_i_ii_iii_outputs_are_unchanged_by_this_wiring():
 
 
 # ---------------------------------------------------------------------------
+# Confidence-interval wiring (U06 scoping): all six existing rate types
+# gain a within-episode Wilson score interval field. NOT cross-seed, NOT
+# pooled, NOT a new methodology -- see edge/eval/u06_diagnostic_report.py's
+# own CONFIDENCE-INTERVAL WIRING docstring section.
+# ---------------------------------------------------------------------------
+
+
+def test_every_result_carries_all_six_confidence_interval_fields():
+    from edge.eval.u06_confidence_intervals import WilsonScoreInterval
+
+    report = build_diagnostic_report()
+    for result in report.results:
+        for interval in (
+            result.axis_i_false_isolation_interval,
+            result.axis_i_missed_fault_interval,
+            result.axis_ii_tracker_agreement_interval,
+            result.axis_iii_false_isolation_interval,
+            result.axis_iii_missed_fault_interval,
+            result.channel_agreement_interval,
+        ):
+            assert interval is None or isinstance(interval, WilsonScoreInterval)
+
+
+def test_known_constant_spoof_channel_agreement_interval_is_a_real_interval():
+    """Verified real, already-observed mismatch case: 3 opportunities, 0
+    matches -- must produce a real (non-None) interval, not None, since
+    there WAS an opportunity."""
+    report = build_diagnostic_report()
+    result = next(
+        r
+        for r in report.results
+        if r.scenario_name == "injected_current_constant_spoof"
+        and r.baseline_name == "baseline_policy"
+    )
+    interval = result.channel_agreement_interval
+    assert interval is not None
+    assert interval.numerator == 0
+    assert interval.denominator == 3
+    assert interval.rate == 0.0
+    assert interval.confidence_level == 0.95
+    assert interval.lower_bound == 0.0
+    assert interval.upper_bound > 0.0
+
+
+def test_zero_opportunity_scenarios_have_no_channel_agreement_interval():
+    """clean_degradation never produces a channel-match opportunity --
+    the interval field must be None, matching the underlying rate."""
+    report = build_diagnostic_report()
+    result = next(
+        r
+        for r in report.results
+        if r.scenario_name == "clean_degradation" and r.baseline_name == "baseline_policy"
+    )
+    assert result.channel_agreement_summary.channel_match_rate is None
+    assert result.channel_agreement_interval is None
+
+
+def test_intervals_use_original_counts_matching_the_source_summary():
+    report = build_diagnostic_report()
+    result = next(
+        r
+        for r in report.results
+        if r.scenario_name == "injected_current_constant_spoof"
+        and r.baseline_name == "baseline_policy"
+    )
+    interval = result.channel_agreement_interval
+    summary = result.channel_agreement_summary
+    assert interval.numerator == summary.channel_match_count
+    assert interval.denominator == summary.channel_match_observation_count
+
+
+def test_confidence_interval_wiring_introduces_no_cross_seed_or_pooled_field():
+    """Structural guard: no field on ScenarioBaselineResult or
+    AggregateDiagnosticReport may suggest cross-seed pooling."""
+    import dataclasses
+
+    for cls in (ScenarioBaselineResult, AggregateDiagnosticReport):
+        field_names = {f.name for f in dataclasses.fields(cls)}
+        assert not any(
+            "pooled" in name or "mean" in name or "stdev" in name or "variance" in name
+            for name in field_names
+        )
+
+
+def test_existing_rate_values_are_unchanged_by_adding_interval_fields():
+    """Regression guard: adding interval fields must not change any
+    existing rate/count value the four summaries already report."""
+    from edge.eval.rl_baseline_eval import SCENARIO_INJECTED_CURRENT_CONSTANT_SPOOF
+    from edge.eval.rl_baseline_eval import run_baseline_policy_episode as _run
+    from edge.eval.u06_rate_summary import summarize_episode_rates as _summarize
+
+    record = _run(SCENARIO_INJECTED_CURRENT_CONSTANT_SPOOF)
+    rates_direct = _summarize(record)
+
+    report = build_diagnostic_report()
+    result = next(
+        r
+        for r in report.results
+        if r.scenario_name == "injected_current_constant_spoof"
+        and r.baseline_name == "baseline_policy"
+    )
+    assert result.episode_rate_summary == rates_direct
+
+
+# ---------------------------------------------------------------------------
 # Never pooled: no global/cross-scenario aggregate is computed
 # ---------------------------------------------------------------------------
 

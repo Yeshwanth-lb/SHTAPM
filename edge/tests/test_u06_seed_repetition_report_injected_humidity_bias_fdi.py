@@ -17,6 +17,7 @@ from edge.eval.rl_baseline_eval import (
     EpisodeRecord,
 )
 from edge.eval.u06_channel_agreement import ChannelAgreementSummary
+from edge.eval.u06_confidence_intervals import WilsonScoreInterval
 from edge.eval.u06_ground_truth_rate_summary import GroundTruthRateSummary
 from edge.eval.u06_rate_summary import EpisodeRateSummary
 from edge.eval.u06_seed_repetition_report_injected_humidity_bias_fdi import (
@@ -220,6 +221,55 @@ def test_zero_channel_match_opportunities_across_all_seeds_and_baselines():
         assert summary.channel_match_observation_count == 0
         assert summary.channel_match_rate is None
         assert summary.channel_match_rate != 0.0
+
+
+def test_every_result_carries_all_six_confidence_interval_fields():
+    report = build_seed_repetition_report()
+    for result in report.results:
+        for interval in (
+            result.axis_i_false_isolation_interval,
+            result.axis_i_missed_fault_interval,
+            result.axis_ii_tracker_agreement_interval,
+            result.axis_iii_false_isolation_interval,
+            result.axis_iii_missed_fault_interval,
+            result.channel_agreement_interval,
+        ):
+            assert interval is None or isinstance(interval, WilsonScoreInterval)
+
+
+def test_confidence_interval_wiring_introduces_no_pooled_field():
+    """Structural guard: no field on SeedRepetitionResult or
+    SeedRepetitionReport may suggest cross-seed pooling."""
+    import dataclasses
+
+    for cls in (SeedRepetitionResult, SeedRepetitionReport):
+        field_names = {f.name for f in dataclasses.fields(cls)}
+        assert not any(
+            "pooled" in name or "mean" in name or "stdev" in name or "variance" in name
+            for name in field_names
+        )
+
+
+def test_channel_agreement_interval_uses_original_counts():
+    report = build_seed_repetition_report()
+    for result in report.results:
+        interval = result.channel_agreement_interval
+        if interval is not None:
+            summary = result.channel_agreement_summary
+            assert interval.numerator == summary.channel_match_count
+            assert interval.denominator == summary.channel_match_observation_count
+
+
+
+def test_channel_agreement_interval_is_none_across_all_seeds_and_baselines():
+    """Verified directly: this scenario shape never produces a channel-
+    match opportunity for any of its 5 seeds under either baseline -- the
+    interval field must be None for every result, matching
+    channel_match_rate."""
+    report = build_seed_repetition_report()
+    for result in report.results:
+        assert result.channel_agreement_summary.channel_match_rate is None
+        assert result.channel_agreement_interval is None
 
 
 # Never pooled: no cross-seed statistic exists
