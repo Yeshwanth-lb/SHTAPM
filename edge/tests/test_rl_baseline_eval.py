@@ -319,6 +319,150 @@ def test_run_episode_makes_no_false_isolation_or_missed_fault_claim():
 
 
 # ---------------------------------------------------------------------------
+# active_injection_channels (U06 scoping) -- data-plumbing-only field
+# reading each active Label's own channel (already available alongside
+# injection_type at the existing construction site). NOT a channel-match
+# comparison, verdict, rate, or threshold. See edge/eval/rl_baseline_eval.py's
+# own INJECTED-CHANNEL PLUMBING docstring section.
+# ---------------------------------------------------------------------------
+
+
+def test_transition_record_active_injection_channels_field_exists_and_defaults_addable():
+    """Existing behavior regression guard: the new field must be present
+    and additive -- every other TransitionRecord field is unaffected."""
+    record = run_baseline_policy_episode(SCENARIO)
+    for t in record.transitions:
+        assert isinstance(t.active_injection_channels, tuple)
+
+
+def test_active_injection_channels_field_defaults_to_empty_tuple_for_existing_callers():
+    """Existing TransitionRecord construction call sites (this module's own
+    test helpers in test_u06_rate_summary.py / test_u06_tracker_agreement.py
+    / test_u06_ground_truth_rate_summary.py) never pass
+    active_injection_channels -- the dataclass default must apply cleanly,
+    exactly like active_injection_labels's and tracked_channels's own
+    established default behavior."""
+    t = TransitionRecord(
+        episode_index=0,
+        step_index=0,
+        previous_state_vector=(0.0,),
+        next_state_vector=(0.0,),
+        requested_action=RLAction.continue_.value,
+        approved_action=RLAction.continue_.value,
+        fallback_used=False,
+        fallback_reason=None,
+        safety_status="nominal",
+        policy_status="validated",
+        reward_components={},
+        total_reward=0.0,
+        done=False,
+        transition_consumed=True,
+        safe_stop_terminated_without_transition=False,
+        transition_substitution_mode=None,
+        substituted_channels=(),
+    )
+    assert t.active_injection_channels == ()
+
+
+def test_clean_scenario_has_no_active_injection_channels():
+    record = run_baseline_policy_episode(SCENARIO_CLEAN_DEGRADATION)
+    assert all(t.active_injection_channels == () for t in record.transitions)
+
+
+def test_injected_scenario_reports_the_expected_injected_channel():
+    record = run_baseline_policy_episode(SCENARIO_INJECTED_CURRENT_SPIKE)
+    labeled_steps = [t for t in record.transitions if t.active_injection_channels]
+    assert len(labeled_steps) > 0
+    for t in labeled_steps:
+        assert t.active_injection_channels == ("current",)
+
+
+def test_active_injection_channels_are_purely_descriptive_strings_in_channels():
+    record = run_baseline_policy_episode(SCENARIO_INJECTED_CURRENT_SPIKE)
+    for t in record.transitions:
+        for channel in t.active_injection_channels:
+            assert isinstance(channel, str)
+            assert channel in CHANNELS
+
+
+def test_active_injection_channels_align_positionally_with_active_injection_labels():
+    """Both fields are built from the same active_labels tuple, in the same
+    order (one via label.injection_type.value, the other via label.channel)
+    -- verifies positional/length alignment, not any semantic comparison
+    between the two."""
+    for scenario in (SCENARIO_CLEAN_DEGRADATION, SCENARIO_INJECTED_CURRENT_SPIKE):
+        record = run_baseline_policy_episode(scenario)
+        for t in record.transitions:
+            assert len(t.active_injection_channels) == len(t.active_injection_labels)
+
+
+def test_multi_channel_injection_preserves_all_channels_deterministically():
+    """Test-only multi-injection scenario (no committed scenario uses more
+    than one injection -- see test_no_scenario_injects_more_than_one_channel_
+    simultaneously below) -- confirms active_injection_channels retains
+    both channels from two simultaneous injections, in the same
+    deterministic order as active_injection_labels, mirroring
+    test_rl_environment.py's own
+    test_multi_injection_environment_retains_overlapping_labels_from_different_channels."""
+    from edge.injection.injections import Drift, Spike
+    from edge.models.degradation_generator import ChannelDegradationConfig
+
+    multi_injection_scenario = ScenarioConfig(
+        name="test_only_multi_channel_injection",
+        seed=9001,
+        length=40,
+        start_health=1.0,
+        end_health=0.2,
+        degradation_rate=1.0,
+        channels={"vibration": ChannelDegradationConfig(healthy_value=0.03, degraded_value=1.2)},
+        injections=(
+            Spike(channel="current", onset=32, duration=5, amplitude=50.0),
+            Drift(channel="temperature", onset=32, duration=5, rate=0.5),
+        ),
+    )
+    record = run_baseline_policy_episode(multi_injection_scenario)
+    overlapping_steps = [
+        t for t in record.transitions if len(t.active_injection_channels) > 1
+    ]
+    assert len(overlapping_steps) > 0
+    for t in overlapping_steps:
+        assert set(t.active_injection_channels) == {"current", "temperature"}
+        assert len(t.active_injection_channels) == len(t.active_injection_labels) == 2
+
+
+def test_existing_transition_record_fields_unchanged_by_active_injection_channels_field():
+    """Regression guard: adding active_injection_channels must not change
+    any other TransitionRecord field's value for the existing scenarios."""
+    record = run_baseline_policy_episode(SCENARIO)
+    for t in record.transitions:
+        assert isinstance(t.requested_action, str | None)
+        assert isinstance(t.approved_action, str)
+        assert isinstance(t.fallback_used, bool)
+        assert isinstance(t.safety_status, str)
+        assert isinstance(t.active_injection_labels, tuple)
+        assert isinstance(t.tracked_channels, tuple)
+        assert isinstance(t.reward_components, dict)
+
+
+def test_run_episode_makes_no_channel_matching_claim_from_active_injection_channels():
+    """No code, docstring, or test in this module may compute or claim a
+    channel-match comparison, agreement rate, threshold, or verdict from
+    active_injection_channels -- this increment is data plumbing only."""
+    import edge.eval.rl_baseline_eval as module
+
+    source = inspect.getsource(module)
+    lowered = source.lower()
+    forbidden = (
+        "channel_match_rate",
+        "channel agreement rate",
+        "channel-match rate",
+        "injected channel matches",
+    )
+    for phrase in forbidden:
+        assert phrase not in lowered
+
+
+# ---------------------------------------------------------------------------
 # tracked_channels (U06 scoping) -- data-plumbing-only field reading the
 # already-existing result.info["persistent_isolation_tracked_channels"].
 # NOT a channel-match comparison, verdict, rate, or threshold. See

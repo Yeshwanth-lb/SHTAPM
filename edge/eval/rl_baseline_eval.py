@@ -139,6 +139,26 @@ a false-isolation or missed-fault verdict, NOT a rate, NOT a channel-match
 comparison against ``active_injection_labels`` or any injected channel --
 no such comparison is implemented anywhere in this module. U06 remains
 fully open (see ``DECISIONS.md``).
+
+INJECTED-CHANNEL PLUMBING (U06 scoping, data-plumbing-only increment --
+prepares the second half of the input a future, separately approved
+channel-comparison increment would need, alongside TRACKED-CHANNEL
+PLUMBING above): each retained ``Label`` (see ``edge.injection.
+injections.Label``) already carries its own ``channel`` alongside its
+``injection_type`` -- ``active_injection_labels`` (above) has only ever
+read the latter. This module's ``TransitionRecord`` gains one new,
+defaulted, purely descriptive field, ``active_injection_channels`` (a
+tuple of channel-name strings for each currently active injection, e.g.
+``("current",)``, in the same order as ``active_injection_labels``, or
+``()`` if none) -- populated in ``_run_episode`` directly from the same
+already-retrieved ``active_labels`` this module already reads for
+``active_injection_labels``, via ``label.channel`` instead of
+``label.injection_type.value``. No new lookup, environment access, or
+scenario-config inference is introduced -- the channel data was already
+in scope at the existing call site. This is NOT a channel-match
+comparison against ``tracked_channels`` or anything else -- no such
+comparison is implemented anywhere in this module. U06 remains fully open
+(see ``DECISIONS.md``).
 """
 
 from __future__ import annotations
@@ -1111,6 +1131,13 @@ class TransitionRecord:
     # INJECTION-LABEL RETENTION docstring section (U06 scoping). Defaulted so
     # every existing TransitionRecord construction call site is unaffected.
     active_injection_labels: tuple[str, ...] = ()
+    # Purely descriptive, raw injected-CHANNEL facts only (each active
+    # Label's own channel, e.g. "current") -- NOT a channel-match
+    # comparison, NOT a verdict, NOT a rate. See this module's own
+    # INJECTED-CHANNEL PLUMBING docstring section (U06 scoping). Defaulted
+    # so every existing TransitionRecord construction call site is
+    # unaffected.
+    active_injection_channels: tuple[str, ...] = ()
     # Purely descriptive, raw tracked-channel facts only (the deterministic
     # tracker's own current isolation-candidate set at this step) -- NOT a
     # channel-match comparison, NOT a verdict, NOT a rate. See this module's
@@ -1276,6 +1303,7 @@ def _run_episode(
             env._labels_by_sample_seq.get(sample_seq, ()) if sample_seq is not None else ()
         )
         active_injection_labels = tuple(label.injection_type.value for label in active_labels)
+        active_injection_channels = tuple(label.channel for label in active_labels)
         transitions.append(
             TransitionRecord(
                 episode_index=0,
@@ -1298,6 +1326,7 @@ def _run_episode(
                 transition_substitution_mode=result.info["transition_substitution_mode"],
                 substituted_channels=tuple(result.info["substituted_channels"]),
                 active_injection_labels=active_injection_labels,
+                active_injection_channels=active_injection_channels,
                 tracked_channels=tuple(result.info["persistent_isolation_tracked_channels"]),
             )
         )
