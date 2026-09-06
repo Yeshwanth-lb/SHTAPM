@@ -15,6 +15,18 @@ Real GPIO/I2C/SPI/1-Wire access is provided later as a ``RawRead`` callable
 ``value`` is ``None`` when the read is unhealthy; how an unhealthy channel is
 represented in the frozen telemetry contract (impute / healthy_mask) is the
 sampler's concern (C2), not the driver's.
+
+STALENESS (opt-in): ``Sensor`` can optionally track how long its *reported*
+value has gone unchanged and report ``healthy=False`` once that exceeds a
+caller-supplied ``max_age_seconds`` — this is how a driver silently stuck
+returning its last cached value (e.g. a hung I2C/1-Wire read that keeps
+"succeeding" with stale data) gets caught, since a raised exception or NaN
+is not the failure mode here. ``max_age_seconds`` defaults to ``None``
+(staleness checking disabled — identical to today's behavior), the same
+"intentionally NOT invented here" convention already used for
+``calibrate``/``value_range`` above: no numeric age is guessed on a
+caller's behalf, only "off" is a real default. Uses the same injected
+``clock`` as timestamping — no wall-clock dependency.
 """
 
 from __future__ import annotations
@@ -63,6 +75,14 @@ def _clamp(value: float, lo: float, hi: float) -> float:
     return lo if value < lo else hi if value > hi else value
 
 
+def _parse_ts(ts: str) -> datetime:
+    return datetime.fromisoformat(ts.replace("Z", "+00:00"))
+
+
+def _seconds_between(earlier: str, later: str) -> float:
+    return (_parse_ts(later) - _parse_ts(earlier)).total_seconds()
+
+
 class Sensor(SensorDriver):
     """Concrete driver: ``RawRead`` → calibrate → range-clamp → ``Reading``.
 
@@ -74,6 +94,14 @@ class Sensor(SensorDriver):
     ``calibrate`` and ``value_range`` are per-sensor and supplied by the caller
     (defaults: identity / no clamp). They are intentionally NOT invented here;
     real per-sensor values arrive with the hardware drivers / config.
+
+    ``max_age_seconds`` (also per-sensor, also NOT invented — default ``None``
+    means staleness checking is off, matching today's behavior exactly): if
+    set, a reported value that stays byte-identical for longer than
+    ``max_age_seconds`` (per the injected ``clock``) becomes ``healthy=False``
+    instead of being reported as fresh. A genuine value change resets the
+    clock. This is independent of, and does not affect, the raise/None/NaN/
+    calibration-failure health checks above.
     """
 
     def __init__(
@@ -84,15 +112,32 @@ class Sensor(SensorDriver):
         calibrate: Calibrate | None = None,
         value_range: tuple[float, float] | None = None,
         clock: Clock = now_iso_ms,
+        max_age_seconds: float | None = None,
     ) -> None:
         self._unit = unit
         self._raw_read = raw_read
         self._calibrate = calibrate
         self._range = value_range
         self._clock = clock
+        self._max_age_seconds = max_age_seconds
+        self._unchanged_value: float | None = None
+        self._unchanged_since: str | None = None
 
     def _unhealthy(self, ts: str) -> Reading:
         return Reading(value=None, unit=self._unit, ts=ts, healthy=False)
+
+    def _is_stale(self, value: float, ts: str) -> bool:
+        """True iff ``value`` has been reported, unchanged, for longer than
+        ``max_age_seconds``. Always False when staleness checking is off
+        (``max_age_seconds is None``) or on this value's first observation."""
+        if self._max_age_seconds is None:
+            return False
+        if self._unchanged_value is None or value != self._unchanged_value:
+            self._unchanged_value = value
+            self._unchanged_since = ts
+            return False
+        assert self._unchanged_since is not None  # set alongside _unchanged_value above
+        return _seconds_between(self._unchanged_since, ts) > self._max_age_seconds
 
     def read(self) -> Reading:
         ts = self._clock()
@@ -117,4 +162,6 @@ class Sensor(SensorDriver):
                 return self._unhealthy(ts)
         if self._range is not None:
             value = _clamp(value, self._range[0], self._range[1])
+        if self._is_stale(value, ts):
+            return self._unhealthy(ts)
         return Reading(value=value, unit=self._unit, ts=ts, healthy=True)
