@@ -2214,3 +2214,36 @@ An additive, descriptive-only `ScenarioMetadata`/`EVALUATION_SCENARIO_METADATA` 
 - No permanent numeric snapshot from running this report is pasted into this document.
 
 **Not done by this increment:** U06's status in the UNDECIDED list above is unchanged: fully open, zero partial resolution. Channel-matched comparison, DQN-policy inclusion, and any human sign-off accepting the Operational Definitions Proposal all remain open, separate questions — completing §4's 5-seed-per-scenario minimum does not itself decide or partially decide any of them.
+
+---
+
+## U06 — Worked-Example Interpretation & Terminology Clarification (DOCUMENTATION CLARIFICATION, NOT A DECISION)
+**(U06 REMAINS FULLY UNDECIDED/OPEN. This is a documentation-only clarification of two wording gaps in the "U06 -- Operational Definitions Proposal" section above, surfaced by a read-only worked-example run and interpretation review of the already-committed axis (i)/(ii)/(iii) machinery. It changes no code, adds no metric, threshold, or verdict, and does not resolve U06.)**
+
+- **Date drafted:** 2026-09-06
+- **Files changed:** `project-state/DECISIONS.md` only (this section). No code, test, fixture, or configuration file is created, modified, or implied to change by this clarification — no executable behavior changes anywhere.
+- **Basis:** a one-time, read-only run of the already-committed `edge.eval.u06_diagnostic_report.build_diagnostic_report()` (per §I.1's "worked example" evidence item), followed by a read-only interpretation review comparing its actual output against §A-§J above. Neither the run nor the review is repeated or re-pasted here; no permanent numeric snapshot from that run is recorded in this document, matching every prior increment's own convention.
+
+**Clarification 1 — "sensible, non-degenerate counts" (§I.1) requires more than a non-`None` value:**
+- §I.1 asks for a worked example "confirming the definitions produce sensible, non-degenerate counts," but does not define what would make a count *degenerate* beyond §C's own zero-denominator `None` case.
+- The worked example showed a rate can be technically defined (not `None`) and still be weakly informative: when a policy proposes the *same* action on every step of an episode, **any** opportunity-scoped rate — regardless of whether it is computed against the proxy (§A/§B) or against ground truth (axis (iii)'s redefinition) — trivially evaluates to `0.0` or `1.0`. A repeated value under these conditions does not demonstrate that the proxy and ground truth agree, or that the definitions discriminate between good and bad decisions; it only reflects that the requested action never varied.
+- **Clarified reading of §I.1, going forward:** a "sensible, non-degenerate count" additionally requires evidence that the underlying requested-action behavior *varies* within the opportunity set being measured — a constant-behavior episode with a non-`None` rate is not, by itself, sufficient evidence that §I.1 is satisfied for that scenario/baseline. This clarification does not retroactively invalidate the worked example already performed (see "What this clarification confirms" below); it narrows how future reviewers should interpret a repeated or unvarying rate.
+
+**Clarification 2 — raw generator ticks vs. RL decision steps are not necessarily 1:1:**
+- `ScenarioConfig.length` and any `Injection`'s `onset`/`duration` (as used throughout §C, §E, and the scenario taxonomy in the Scenario-Taxonomy Implementation Note above) refer to raw `SyntheticDegradationGenerator` frame ticks — the length of the synthetic trajectory before any RL decision loop runs over it.
+- `EpisodeRecord.transitions` / `TransitionRecord` counts (what axis (i)/(ii)/(iii) and every seed-repetition report actually consume as their opportunity denominators) represent RL **decision steps**, produced by `_run_episode`'s own loop in `edge/eval/rl_baseline_eval.py` — a separate count.
+- The worked example showed these two counts are **not necessarily equal**: a `length=40` scenario (`injected_temperature_drift`) produced exactly 9 `TransitionRecord`s in one traced `baseline_policy` run (`termination_cause="trajectory_exhausted"`), not 40.
+- §E's own illustrative phrasing ("a single episode's opportunity count can be small enough (e.g., a 40-step scenario)") itself conflates the two counts by using a scenario's raw `length` as a stand-in for its opportunity-count magnitude. **Clarified reading of §C/§E, going forward:** a scenario's stated `length`, and any injection's stated `onset`/`duration`, must not be read as the number of RL decision-step opportunities that scenario will produce — the two are governed by different mechanisms and must be verified separately (e.g., via `EpisodeRecord.step_count`) rather than inferred from `ScenarioConfig.length` alone.
+
+**What this clarification confirms (restating the worked-example interpretation, not re-litigating it):**
+- The already-performed worked example and interpretation review remain valid on their own terms: they confirm the axis (i)/(ii)/(iii) plumbing, field typing, per-scenario separation, and zero-denominator `None`-not-`0.0` handling all behave exactly as §A-§F specify, on real, already-existing `EpisodeRecord` data.
+- They do **not** establish that the definitions have discriminative validity (i.e., that they reliably distinguish good decisions from bad ones across varying policy behavior), and they make no real-world accuracy, safety, effectiveness, validation, or production-readiness claim of any kind — consistent with §6/§9 of the "U06 -- RL REWARD SHAPING SPECIFICATION PROPOSAL" section and every prior increment's own disclaimers.
+
+**What this clarification explicitly does NOT do:**
+- Introduces no new metric, threshold, verdict, pass/fail judgment, confidence interval, pooled statistic, or average anywhere.
+- Does not implement channel-matched comparison, `sample_seq` deduplication, DQN-policy inclusion, or any other code change — all remain exactly as before this clarification.
+- Does not add, preserve, or reference a permanent numeric snapshot from any run.
+- Does not modify, rewrite, or supersede any prior "IMPLEMENTATION RECORD" section above — this is a new, separate, additive clarification note.
+- Does not change U06's status line: it remains fully open, zero partial resolution, and no "Partial:" marker is introduced anywhere by this clarification.
+
+**Not done by this clarification:** U06's status in the UNDECIDED list above is unchanged. Channel-matched comparison, `sample_seq` deduplication, DQN-policy inclusion, confidence-interval/uncertainty reporting, and any human sign-off accepting the Operational Definitions Proposal all remain open, separate questions, entirely untouched by this documentation-only clarification.
