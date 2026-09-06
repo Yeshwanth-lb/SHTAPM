@@ -16,6 +16,7 @@ from edge.eval.rl_baseline_eval import (
     SCENARIO_INJECTED_CURRENT_CONSTANT_SPOOF,
     EpisodeRecord,
 )
+from edge.eval.u06_channel_agreement import ChannelAgreementSummary
 from edge.eval.u06_ground_truth_rate_summary import GroundTruthRateSummary
 from edge.eval.u06_rate_summary import EpisodeRateSummary
 from edge.eval.u06_seed_repetition_report_injected_current_constant_spoof import (
@@ -145,13 +146,14 @@ def test_seed_baseline_pairs_are_all_unique():
     assert len(pairs) == len(set(pairs)) == 10
 
 
-def test_every_result_carries_all_three_axis_summaries():
+def test_every_result_carries_all_four_summaries():
     report = build_seed_repetition_report()
     for result in report.results:
         assert isinstance(result, SeedRepetitionResult)
         assert isinstance(result.episode_rate_summary, EpisodeRateSummary)
         assert isinstance(result.tracker_agreement_summary, TrackerAgreementSummary)
         assert isinstance(result.ground_truth_rate_summary, GroundTruthRateSummary)
+        assert isinstance(result.channel_agreement_summary, ChannelAgreementSummary)
 
 
 # ---------------------------------------------------------------------------
@@ -167,6 +169,7 @@ def test_scenario_seed_and_baseline_labels_are_all_reported_and_consistent():
         assert result.episode_rate_summary.scenario_name == result.scenario_name
         assert result.tracker_agreement_summary.scenario_name == result.scenario_name
         assert result.ground_truth_rate_summary.scenario_name == result.scenario_name
+        assert result.channel_agreement_summary.scenario_name == result.scenario_name
 
 
 def test_each_seed_maps_to_its_own_distinct_scenario_name():
@@ -181,6 +184,60 @@ def test_each_seed_maps_to_its_own_distinct_scenario_name():
 
 
 # ---------------------------------------------------------------------------
+def test_channel_agreement_wiring_introduces_no_per_channel_or_partial_match_field():
+    """Structural guard: wiring channel-agreement into this report must not
+    introduce a per-channel breakdown or partial-match category anywhere --
+    ChannelAgreementSummary's own fields are unchanged by this increment."""
+    import dataclasses
+
+    field_names = {f.name for f in dataclasses.fields(ChannelAgreementSummary)}
+    assert not any("per_channel" in name or "partial" in name for name in field_names)
+
+
+def test_existing_axis_summaries_are_unchanged_by_channel_agreement_wiring():
+    """Regression guard: adding channel_agreement_summary must not change
+    any value the three pre-existing axis summaries report, for every
+    seed/baseline pair -- each is independently recomputed fresh and
+    compared against the report's own stored value."""
+    from edge.eval.rl_baseline_eval import run_baseline_policy_episode, run_pure_fallback_episode
+    from edge.eval.u06_ground_truth_rate_summary import summarize_ground_truth_rates
+    from edge.eval.u06_rate_summary import summarize_episode_rates
+    from edge.eval.u06_tracker_agreement import summarize_tracker_agreement
+
+    runners = {
+        "baseline_policy": run_baseline_policy_episode,
+        "pure_fallback": run_pure_fallback_episode,
+    }
+    report = build_seed_repetition_report()
+    for result in report.results:
+        scenario = next(
+            s
+            for s in INJECTED_CURRENT_CONSTANT_SPOOF_SEED_REPETITION_SCENARIOS
+            if s.seed == result.seed
+        )
+        record = runners[result.baseline_name](scenario)
+        assert result.episode_rate_summary == summarize_episode_rates(record)
+        assert result.tracker_agreement_summary == summarize_tracker_agreement(record)
+        assert result.ground_truth_rate_summary == summarize_ground_truth_rates(record)
+
+
+
+def test_known_channel_mismatch_across_all_seeds_and_baselines():
+    """Verified directly, already documented in the tracked-channel
+    plumbing and channel-agreement increments: injected_current_constant_
+    spoof injects "current" but the tracker holds "vibration" -- this real
+    mismatch must surface identically across all 5 seeds and both
+    baselines through this seed-repetition report."""
+    report = build_seed_repetition_report()
+    for result in report.results:
+        summary = result.channel_agreement_summary
+        assert summary.channel_match_observation_count > 0
+        assert summary.channel_match_count == 0
+        assert summary.channel_mismatch_count == summary.channel_match_observation_count
+        assert summary.channel_match_rate == 0.0
+        assert summary.tracked_without_injection_channels_seen == ("vibration",)
+
+
 # Never pooled: no cross-seed statistic exists
 # ---------------------------------------------------------------------------
 
@@ -447,3 +504,5 @@ def test_main_runs_without_raising_and_prints_all_seeds(capsys):
     assert "axis (i)" in captured.out
     assert "axis (ii)" in captured.out
     assert "axis (iii)" in captured.out
+    assert "channel-agreement" in captured.out
+    assert "channel_match_rate" in captured.out

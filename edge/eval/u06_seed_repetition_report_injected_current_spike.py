@@ -91,6 +91,10 @@ from edge.eval.rl_baseline_eval import (
     run_baseline_policy_episode,
     run_pure_fallback_episode,
 )
+from edge.eval.u06_channel_agreement import (
+    ChannelAgreementSummary,
+    summarize_channel_agreement,
+)
 from edge.eval.u06_ground_truth_rate_summary import (
     GroundTruthRateSummary,
     summarize_ground_truth_rates,
@@ -124,6 +128,7 @@ class SeedRepetitionResult:
     episode_rate_summary: EpisodeRateSummary
     tracker_agreement_summary: TrackerAgreementSummary
     ground_truth_rate_summary: GroundTruthRateSummary
+    channel_agreement_summary: ChannelAgreementSummary
 
     execution_mode: str = EXECUTION_MODE
     data_source: str = DATA_SOURCE
@@ -169,6 +174,7 @@ def build_seed_repetition_report() -> SeedRepetitionReport:
                     episode_rate_summary=summarize_episode_rates(record),
                     tracker_agreement_summary=summarize_tracker_agreement(record),
                     ground_truth_rate_summary=summarize_ground_truth_rates(record),
+                    channel_agreement_summary=summarize_channel_agreement(record),
                 )
             )
     return SeedRepetitionReport(results=tuple(results))
@@ -190,6 +196,7 @@ def main() -> None:
         rates = result.episode_rate_summary
         agreement = result.tracker_agreement_summary
         ground_truth = result.ground_truth_rate_summary
+        channel_agreement = result.channel_agreement_summary
         print(f"[seed={result.seed}] {result.baseline_name}:")
         print(
             f"  axis (i)   proxy false_isolation_rate={rates.false_isolation_rate} "
@@ -203,6 +210,11 @@ def main() -> None:
             f"  axis (iii) ground-truth false_isolation_rate="
             f"{ground_truth.false_isolation_rate} "
             f"missed_fault_rate={ground_truth.missed_fault_rate}"
+        )
+        print(
+            f"  channel-agreement channel_match_rate="
+            f"{channel_agreement.channel_match_rate} "
+            f"(observations={channel_agreement.channel_match_observation_count})"
         )
     print(
         "NOTE: every number above is diagnostic, simulation-only, and per-seed-"

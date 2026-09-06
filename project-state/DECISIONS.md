@@ -2379,3 +2379,26 @@ An additive, descriptive-only `ScenarioMetadata`/`EVALUATION_SCENARIO_METADATA` 
 - Computes no threshold, verdict, or pass/fail judgment, and makes no real-world accuracy, safety, effectiveness, validation, or production-readiness claim anywhere.
 
 **Not done by this increment:** U06's status in the UNDECIDED list above is unchanged: fully open, zero partial resolution. Wiring channel-agreement into the nine seed-repetition reports, `sample_seq` runtime deduplication, DQN-policy inclusion, and confidence-interval/uncertainty reporting all remain open, separate questions, not addressed here.
+
+---
+
+## U06 — Channel Agreement Wired Into All Nine Seed-Repetition Reports Implementation Note (IMPLEMENTATION RECORD, NOT A DECISION)
+**(U06 REMAINS FULLY UNDECIDED/OPEN. This is an implementation record for the mechanical extension explicitly approved as "Option 1" in the "next U06 increment" review above — wiring the already-approved, already-built channel-matched comparison metric into all nine seed-repetition reports in one increment, identical in shape to the already-completed aggregate-diagnostic-report wiring. It defines no new axis, metric, threshold, or verdict, and does not resolve U06.)**
+
+- **Date implemented:** 2026-09-06
+- **Files changed:** all 9 seed-repetition report modules (`edge/eval/u06_seed_repetition_report.py` and its 8 `_injected_*` siblings) and their 9 corresponding test files. No other file modified — `edge/eval/u06_channel_agreement.py`, `edge/eval/u06_tracker_agreement.py`, `edge/eval/u06_rate_summary.py`, `edge/eval/u06_ground_truth_rate_summary.py`, `edge/eval/u06_diagnostic_report.py` (and its test file), `edge/rl/environment.py`, `edge/rl/policy.py`, `edge/rl/reward.py`, `edge/rl/fallback_gate.py`, `edge/eval/rl_training.py`, and `edge/injection/injections.py` are untouched.
+
+**What this increment does:**
+- Each of the 9 `SeedRepetitionResult` dataclasses gains one new field, `channel_agreement_summary: ChannelAgreementSummary`, populated in each `build_seed_repetition_report()` via an unmodified call to `summarize_channel_agreement(record)` alongside the three pre-existing summary calls — the identical mechanical edit applied 9 times, each verified individually.
+- Each `main()` printer gains one new line per (seed, baseline) result reporting `channel_match_rate` and its observation count.
+- **Verified directly across all 9 modules:** 8 of 9 scenario shapes (all except `injected_current_constant_spoof`) produce `channel_match_observation_count == 0` / `channel_match_rate is None` for every one of their 5 seeds under both baselines — the byte-identical-across-seeds pattern already established for every other axis extends unchanged to channel-agreement. `injected_current_constant_spoof`'s seed-repetition report is the one exception: all 5 seeds under both baselines produce the known real mismatch (`channel_match_rate == 0.0`, `tracked_without_injection_channels_seen == ("vibration",)`), matching the already-documented `injected_current_constant_spoof` characteristic exactly.
+- **Verified directly (regression), for all 9 modules:** every result's `episode_rate_summary`, `tracker_agreement_summary`, and `ground_truth_rate_summary` are byte-for-byte identical to independently re-running the three original summary functions on a freshly-built `EpisodeRecord` for the same seed/baseline — this wiring changed no pre-existing axis's output anywhere.
+
+**What this increment explicitly does NOT do:**
+- Does not modify `edge/eval/u06_channel_agreement.py`'s own match/mismatch/zero-opportunity rules, or any of its dataclass fields — no per-channel breakdown or partial-match category exists anywhere, confirmed structurally in all 9 test files.
+- Does not modify the aggregate diagnostic report (`edge/eval/u06_diagnostic_report.py`) — that wiring was completed in a separate, prior increment.
+- Does not implement `sample_seq` runtime deduplication, DQN-policy evaluation, or confidence-interval/uncertainty reporting.
+- Introduces no cross-seed pooling or averaging — all 5 seeds remain fully separate in every one of the 9 reports, exactly as before.
+- Computes no threshold, verdict, or pass/fail judgment, and makes no real-world accuracy, safety, effectiveness, validation, or production-readiness claim anywhere.
+
+**Not done by this increment:** U06's status in the UNDECIDED list above is unchanged: fully open, zero partial resolution. `sample_seq` runtime deduplication, DQN-policy inclusion, and confidence-interval/uncertainty reporting all remain open, separate questions, not addressed here.
