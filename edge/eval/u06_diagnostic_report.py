@@ -1,26 +1,40 @@
 """U06 aggregate diagnostic report -- pure, additive, opt-in. Runs the
-three existing, independently-committed U06 axis summaries (axis (i):
-``edge.eval.u06_rate_summary``; axis (ii): ``edge.eval.
+four existing, independently-committed U06 axis/comparison summaries
+(axis (i): ``edge.eval.u06_rate_summary``; axis (ii): ``edge.eval.
 u06_tracker_agreement``; axis (iii): ``edge.eval.
-u06_ground_truth_rate_summary``) across the complete evaluation-scenario
-taxonomy for both existing deterministic baselines, and reports the
-results scenario-by-scenario, baseline-by-baseline -- never pooled.
+u06_ground_truth_rate_summary``; channel-matched agreement: ``edge.eval.
+u06_channel_agreement``) across the complete evaluation-scenario taxonomy
+for both existing deterministic baselines, and reports the results
+scenario-by-scenario, baseline-by-baseline -- never pooled.
 
 data_source=synthetic · execution_mode=simulation · model_status=diagnostic_unvalidated
 
 SCOPE -- AGGREGATION AND REPORTING ONLY: this module defines no new U06
 axis, comparison, definition, denominator, or metric. It calls exactly the
-three already-committed, unmodified summary functions
+four already-committed, unmodified summary functions
 (``summarize_episode_rates``, ``summarize_tracker_agreement``,
-``summarize_ground_truth_rates``) on ``EpisodeRecord``s produced by the
-two already-committed, unmodified baseline runners
-(``run_baseline_policy_episode``, ``run_pure_fallback_episode``) over the
-already-committed evaluation-scenario taxonomy
-(``SCENARIO_CLEAN_DEGRADATION`` plus all eight ``INJECTION_TYPE_SCENARIOS``
-members). It never constructs an environment, gate, reward, or policy
-object directly, and never imports anything from the injection-framework
-package, ``edge.rl.reward``, ``edge.rl.fallback_gate``, ``edge.rl.policy``,
-or ``edge.eval.rl_training``.
+``summarize_ground_truth_rates``, ``summarize_channel_agreement``) on
+``EpisodeRecord``s produced by the two already-committed, unmodified
+baseline runners (``run_baseline_policy_episode``,
+``run_pure_fallback_episode``) over the already-committed
+evaluation-scenario taxonomy (``SCENARIO_CLEAN_DEGRADATION`` plus all
+eight ``INJECTION_TYPE_SCENARIOS`` members). It never constructs an
+environment, gate, reward, or policy object directly, and never imports
+anything from the injection-framework package, ``edge.rl.reward``,
+``edge.rl.fallback_gate``, ``edge.rl.policy``, or ``edge.eval.rl_training``.
+
+CHANNEL-MATCHED AGREEMENT WIRING (U06 scoping, aggregation-only increment
+-- the channel-matched comparison metric itself was already approved and
+built separately in ``edge.eval.u06_channel_agreement``; this increment
+only adds it alongside the three axes already assembled here, exactly as
+axis (iii) was itself added to this same module when it existed):
+``summarize_channel_agreement()`` is called unmodified on the same
+``EpisodeRecord`` every other summary function already reads.
+``ScenarioBaselineResult`` gains one new, defaulted-free field,
+``channel_agreement_summary``. This wiring does not implement `sample_seq`
+deduplication, DQN-policy evaluation, or confidence-interval reporting,
+and does not modify ``edge.eval.u06_channel_agreement`` or any of its
+already-approved match/mismatch/zero-opportunity rules.
 
 NEVER POOLED: every one of this module's 9 scenarios x 2 baselines = 18
 ``ScenarioBaselineResult``s is reported independently. No global,
@@ -65,6 +79,10 @@ from edge.eval.rl_baseline_eval import (
     run_baseline_policy_episode,
     run_pure_fallback_episode,
 )
+from edge.eval.u06_channel_agreement import (
+    ChannelAgreementSummary,
+    summarize_channel_agreement,
+)
 from edge.eval.u06_ground_truth_rate_summary import (
     GroundTruthRateSummary,
     summarize_ground_truth_rates,
@@ -96,15 +114,16 @@ _BASELINE_RUNNERS: tuple[Callable[[ScenarioConfig], EpisodeRecord], ...] = (
 
 @dataclass(frozen=True)
 class ScenarioBaselineResult:
-    """One scenario/baseline pair's independent axis (i)/(ii)/(iii)
-    summaries -- see module docstring's NEVER POOLED section. Never
-    combined with any other result."""
+    """One scenario/baseline pair's independent axis (i)/(ii)/(iii) and
+    channel-matched agreement summaries -- see module docstring's NEVER
+    POOLED section. Never combined with any other result."""
 
     scenario_name: str
     baseline_name: str
     episode_rate_summary: EpisodeRateSummary
     tracker_agreement_summary: TrackerAgreementSummary
     ground_truth_rate_summary: GroundTruthRateSummary
+    channel_agreement_summary: ChannelAgreementSummary
 
     execution_mode: str = EXECUTION_MODE
     data_source: str = DATA_SOURCE
@@ -127,14 +146,14 @@ class AggregateDiagnosticReport:
 
 
 def build_diagnostic_report() -> AggregateDiagnosticReport:
-    """Run all three existing U06 axis summaries over every (scenario,
-    baseline) pair in the complete evaluation-scenario taxonomy, for both
-    existing deterministic baselines -- see module docstring. Pure: reads
-    only already-committed scenario/baseline/summary functions, constructs
-    no new environment/gate/reward/policy object, and mutates nothing.
-    Takes no parameters; always returns exactly
-    ``len(_EVALUATION_SCENARIOS) * len(_BASELINE_RUNNERS)`` results (see
-    module docstring's NO EXTERNAL ERROR SURFACE section).
+    """Run all four existing U06 axis/comparison summaries over every
+    (scenario, baseline) pair in the complete evaluation-scenario
+    taxonomy, for both existing deterministic baselines -- see module
+    docstring. Pure: reads only already-committed scenario/baseline/
+    summary functions, constructs no new environment/gate/reward/policy
+    object, and mutates nothing. Takes no parameters; always returns
+    exactly ``len(_EVALUATION_SCENARIOS) * len(_BASELINE_RUNNERS)`` results
+    (see module docstring's NO EXTERNAL ERROR SURFACE section).
     """
     results: list[ScenarioBaselineResult] = []
     for scenario in _EVALUATION_SCENARIOS:
@@ -147,6 +166,7 @@ def build_diagnostic_report() -> AggregateDiagnosticReport:
                     episode_rate_summary=summarize_episode_rates(record),
                     tracker_agreement_summary=summarize_tracker_agreement(record),
                     ground_truth_rate_summary=summarize_ground_truth_rates(record),
+                    channel_agreement_summary=summarize_channel_agreement(record),
                 )
             )
     return AggregateDiagnosticReport(results=tuple(results))
@@ -163,6 +183,7 @@ def main() -> None:
         rates = result.episode_rate_summary
         agreement = result.tracker_agreement_summary
         ground_truth = result.ground_truth_rate_summary
+        channel_agreement = result.channel_agreement_summary
         print(f"[{result.scenario_name}] {result.baseline_name}:")
         print(
             f"  axis (i)   proxy false_isolation_rate={rates.false_isolation_rate} "
@@ -176,6 +197,11 @@ def main() -> None:
             f"  axis (iii) ground-truth false_isolation_rate="
             f"{ground_truth.false_isolation_rate} "
             f"missed_fault_rate={ground_truth.missed_fault_rate}"
+        )
+        print(
+            f"  channel-agreement channel_match_rate="
+            f"{channel_agreement.channel_match_rate} "
+            f"(observations={channel_agreement.channel_match_observation_count})"
         )
     print(
         "NOTE: every number above is diagnostic, simulation-only, and scenario-"

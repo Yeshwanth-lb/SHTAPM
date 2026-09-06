@@ -2357,3 +2357,25 @@ An additive, descriptive-only `ScenarioMetadata`/`EVALUATION_SCENARIO_METADATA` 
 - No real-world fault-detection, attack-detection, accuracy, safety, effectiveness, validation, or production-readiness claim is made.
 
 **Not done by this increment:** U06's status in the UNDECIDED list above is unchanged: fully open, zero partial resolution. Whether to actually add defensive deduplication logic inside axis (ii)/channel-agreement's own observation loops (the larger of the two options in the design proposal above) remains a separate, not-yet-approved decision — this increment's own proof shows such logic would currently be a no-op, which is evidence for deferring it, not a reason to skip deciding it. DQN-policy inclusion and confidence-interval/uncertainty reporting remain open, separate questions as well.
+
+---
+
+## U06 — Channel Agreement Wired Into Aggregate Diagnostic Report Implementation Note (IMPLEMENTATION RECORD, NOT A DECISION)
+**(U06 REMAINS FULLY UNDECIDED/OPEN. This is an implementation record for the smaller, aggregate-report-only option scoped in the "next U06 increment" review above — the U06 decision owner explicitly approved wiring the already-approved, already-built channel-matched comparison metric into the existing aggregate diagnostic report, deferring the nine seed-repetition reports to a separate later increment. It defines no new axis, metric, threshold, or verdict, and does not resolve U06.)**
+
+- **Date implemented:** 2026-09-06
+- **Files changed:** `edge/eval/u06_diagnostic_report.py`, `edge/tests/test_u06_diagnostic_report.py`. No other file modified — `edge/eval/u06_tracker_agreement.py`, `edge/eval/u06_channel_agreement.py`, `edge/eval/u06_rate_summary.py`, `edge/eval/u06_ground_truth_rate_summary.py`, all nine seed-repetition report modules, `edge/rl/environment.py`, `edge/rl/policy.py`, `edge/rl/reward.py`, `edge/rl/fallback_gate.py`, `edge/eval/rl_training.py`, and every injection file are untouched.
+
+**What this increment does:**
+- `ScenarioBaselineResult` gains one new field, `channel_agreement_summary: ChannelAgreementSummary`, populated in `build_diagnostic_report()` via an unmodified call to `summarize_channel_agreement(record)` alongside the three pre-existing summary calls — the exact same shape as how axis (iii) was itself added to this module previously.
+- `main()`'s printer gains one new line per (scenario, baseline) result reporting `channel_match_rate` and its observation count, matching the existing printer's own style.
+- **Verified directly:** the known real channel mismatch (`injected_current_constant_spoof`'s `baseline_policy` run: injects `"current"`, tracks `"vibration"`) surfaces correctly through the aggregate report (`channel_match_rate == 0.0`, a genuine ratio, not `None`). The known zero-opportunity cases (`clean_degradation`, `injected_current_spike`, both baselines) correctly preserve `channel_match_rate is None` through the aggregate report.
+- **Verified directly (regression):** for every one of the 18 (scenario, baseline) results, `episode_rate_summary`, `tracker_agreement_summary`, and `ground_truth_rate_summary` are byte-for-byte identical to independently re-running the three original summary functions on a freshly-built `EpisodeRecord` — this wiring changed no pre-existing axis's output.
+
+**What this increment explicitly does NOT do:**
+- Does not modify `edge/eval/u06_channel_agreement.py`'s own match/mismatch/zero-opportunity rules, or any of its dataclass fields — no per-channel breakdown or partial-match category exists, confirmed structurally.
+- Does not wire channel-agreement into any of the nine seed-repetition report modules — deferred to a separate, later increment, as explicitly scoped.
+- Does not implement `sample_seq` runtime deduplication, DQN-policy evaluation, or confidence-interval/uncertainty reporting.
+- Computes no threshold, verdict, or pass/fail judgment, and makes no real-world accuracy, safety, effectiveness, validation, or production-readiness claim anywhere.
+
+**Not done by this increment:** U06's status in the UNDECIDED list above is unchanged: fully open, zero partial resolution. Wiring channel-agreement into the nine seed-repetition reports, `sample_seq` runtime deduplication, DQN-policy inclusion, and confidence-interval/uncertainty reporting all remain open, separate questions, not addressed here.

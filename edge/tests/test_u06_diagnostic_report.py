@@ -9,6 +9,7 @@ from __future__ import annotations
 import inspect
 
 from edge.eval.rl_baseline_eval import EpisodeRecord
+from edge.eval.u06_channel_agreement import ChannelAgreementSummary
 from edge.eval.u06_diagnostic_report import (
     AggregateDiagnosticReport,
     ScenarioBaselineResult,
@@ -73,17 +74,18 @@ def test_scenario_baseline_pairs_are_all_unique():
 
 
 # ---------------------------------------------------------------------------
-# All three axis summaries present for every result
+# All four axis/comparison summaries present for every result
 # ---------------------------------------------------------------------------
 
 
-def test_every_result_carries_all_three_axis_summaries():
+def test_every_result_carries_all_four_summaries():
     report = build_diagnostic_report()
     for result in report.results:
         assert isinstance(result, ScenarioBaselineResult)
         assert isinstance(result.episode_rate_summary, EpisodeRateSummary)
         assert isinstance(result.tracker_agreement_summary, TrackerAgreementSummary)
         assert isinstance(result.ground_truth_rate_summary, GroundTruthRateSummary)
+        assert isinstance(result.channel_agreement_summary, ChannelAgreementSummary)
 
 
 def test_each_axis_summary_reports_its_own_scenario_and_baseline_identity():
@@ -95,6 +97,89 @@ def test_each_axis_summary_reports_its_own_scenario_and_baseline_identity():
         assert result.tracker_agreement_summary.baseline_name == result.baseline_name
         assert result.ground_truth_rate_summary.scenario_name == result.scenario_name
         assert result.ground_truth_rate_summary.baseline_name == result.baseline_name
+        assert result.channel_agreement_summary.scenario_name == result.scenario_name
+        assert result.channel_agreement_summary.baseline_name == result.baseline_name
+
+
+# ---------------------------------------------------------------------------
+# Channel-agreement wiring (U06 scoping): summarize_channel_agreement() is
+# called for every result; the known real mismatch and known
+# zero-opportunity cases are represented correctly; existing axis (i)/(ii)/
+# (iii) outputs are unaffected.
+# ---------------------------------------------------------------------------
+
+
+def test_known_constant_spoof_channel_mismatch_is_represented_correctly():
+    """Verified real, already-observed mismatch (documented in the
+    tracked-channel plumbing and channel-agreement increments):
+    injected_current_constant_spoof injects "current" but the tracker
+    holds "vibration" -- this must surface unchanged through the aggregate
+    report."""
+    report = build_diagnostic_report()
+    result = next(
+        r
+        for r in report.results
+        if r.scenario_name == "injected_current_constant_spoof"
+        and r.baseline_name == "baseline_policy"
+    )
+    summary = result.channel_agreement_summary
+    assert summary.channel_match_observation_count > 0
+    assert summary.channel_match_count == 0
+    assert summary.channel_mismatch_count == summary.channel_match_observation_count
+    assert summary.channel_match_rate == 0.0
+    assert summary.tracked_without_injection_channels_seen == ("vibration",)
+
+
+def test_zero_opportunity_scenarios_preserve_none_rate_in_the_aggregate_report():
+    """clean_degradation and injected_current_spike never produce a
+    channel-match opportunity (verified directly in the channel-agreement
+    increment) -- the aggregate report must preserve None, never 0.0."""
+    report = build_diagnostic_report()
+    for scenario_name in ("clean_degradation", "injected_current_spike"):
+        for baseline_name in _EXPECTED_BASELINES:
+            result = next(
+                r
+                for r in report.results
+                if r.scenario_name == scenario_name and r.baseline_name == baseline_name
+            )
+            summary = result.channel_agreement_summary
+            assert summary.channel_match_observation_count == 0
+            assert summary.channel_match_rate is None
+            assert summary.channel_match_rate != 0.0
+
+
+def test_channel_agreement_wiring_introduces_no_per_channel_or_partial_match_field():
+    """Structural guard: wiring channel-agreement into the aggregate report
+    must not introduce a per-channel breakdown or partial-match category
+    anywhere -- ChannelAgreementSummary's own fields are unchanged by this
+    increment."""
+    import dataclasses
+
+    field_names = {f.name for f in dataclasses.fields(ChannelAgreementSummary)}
+    assert not any("per_channel" in name or "partial" in name for name in field_names)
+
+
+def test_existing_axis_i_ii_iii_outputs_are_unchanged_by_this_wiring():
+    """Regression guard: adding channel_agreement_summary must not change
+    any value any of the three pre-existing axis summaries report, for
+    every scenario/baseline pair."""
+    from edge.eval.rl_baseline_eval import run_baseline_policy_episode, run_pure_fallback_episode
+    from edge.eval.u06_diagnostic_report import _EVALUATION_SCENARIOS
+    from edge.eval.u06_ground_truth_rate_summary import summarize_ground_truth_rates
+    from edge.eval.u06_rate_summary import summarize_episode_rates
+    from edge.eval.u06_tracker_agreement import summarize_tracker_agreement
+
+    report = build_diagnostic_report()
+    runners = {
+        "baseline_policy": run_baseline_policy_episode,
+        "pure_fallback": run_pure_fallback_episode,
+    }
+    for result in report.results:
+        scenario = next(s for s in _EVALUATION_SCENARIOS if s.name == result.scenario_name)
+        record = runners[result.baseline_name](scenario)
+        assert result.episode_rate_summary == summarize_episode_rates(record)
+        assert result.tracker_agreement_summary == summarize_tracker_agreement(record)
+        assert result.ground_truth_rate_summary == summarize_ground_truth_rates(record)
 
 
 # ---------------------------------------------------------------------------
@@ -204,6 +289,8 @@ def test_main_runs_without_raising_and_prints_all_scenarios(capsys):
     assert "axis (i)" in captured.out
     assert "axis (ii)" in captured.out
     assert "axis (iii)" in captured.out
+    assert "channel-agreement" in captured.out
+    assert "channel_match_rate" in captured.out
 
 
 # ---------------------------------------------------------------------------
