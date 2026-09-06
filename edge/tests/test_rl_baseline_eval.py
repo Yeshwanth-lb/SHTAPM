@@ -463,6 +463,272 @@ def test_run_episode_makes_no_channel_matching_claim_from_active_injection_chann
 
 
 # ---------------------------------------------------------------------------
+# sample_seq (U06 scoping) -- data-plumbing-only field reading the
+# already-computed local sample_seq value at the existing construction
+# site. NOT a deduplication pass -- this proves the invariant that would
+# make one unnecessary for every currently-committed scenario. See
+# edge/eval/rl_baseline_eval.py's own SAMPLE_SEQ PLUMBING docstring
+# section.
+# ---------------------------------------------------------------------------
+
+
+def _assert_sample_seq_unique_and_increasing_among_consumed(transitions):
+    """Shared invariant check, reused by both the real-scenario test below
+    and the synthetic tests proving it actually catches a violation (not
+    just passing vacuously). Only transition_consumed=True transitions are
+    checked; a None sample_seq is excluded rather than guessed at (see
+    module docstring's own precedent for this exact None-handling
+    convention)."""
+    consumed_seqs = [
+        t.sample_seq
+        for t in transitions
+        if t.transition_consumed and t.sample_seq is not None
+    ]
+    assert len(consumed_seqs) == len(set(consumed_seqs)), (
+        "duplicate sample_seq among transition_consumed=True transitions"
+    )
+    assert all(a < b for a, b in zip(consumed_seqs, consumed_seqs[1:], strict=False)), (
+        "sample_seq not strictly increasing among transition_consumed=True transitions"
+    )
+
+
+def test_transition_record_sample_seq_field_exists_and_defaults_addable():
+    """Existing behavior regression guard: the new field must be present
+    and additive -- every other TransitionRecord field is unaffected."""
+    record = run_baseline_policy_episode(SCENARIO)
+    for t in record.transitions:
+        assert t.sample_seq is None or isinstance(t.sample_seq, int)
+
+
+def test_sample_seq_field_defaults_to_none_for_existing_callers():
+    """Existing TransitionRecord construction call sites (this module's own
+    test helpers in test_u06_rate_summary.py / test_u06_tracker_agreement.py
+    / test_u06_ground_truth_rate_summary.py / test_u06_channel_agreement.py)
+    never pass sample_seq -- the dataclass default must apply cleanly,
+    exactly like every other U06-scoping field's own established default
+    behavior."""
+    t = TransitionRecord(
+        episode_index=0,
+        step_index=0,
+        previous_state_vector=(0.0,),
+        next_state_vector=(0.0,),
+        requested_action=RLAction.continue_.value,
+        approved_action=RLAction.continue_.value,
+        fallback_used=False,
+        fallback_reason=None,
+        safety_status="nominal",
+        policy_status="validated",
+        reward_components={},
+        total_reward=0.0,
+        done=False,
+        transition_consumed=True,
+        safe_stop_terminated_without_transition=False,
+        transition_substitution_mode=None,
+        substituted_channels=(),
+    )
+    assert t.sample_seq is None
+
+
+def test_sample_seq_is_unique_and_strictly_increasing_for_every_committed_scenario():
+    """The core justification for this increment: proves, across every
+    committed scenario and both baselines, that transition_consumed=True
+    transitions already have unique, strictly increasing sample_seq values
+    -- the invariant edge/rl/environment.py's own cursor-advancement logic
+    (_feed_next_frame always advances by exactly 1, or raises rather than
+    repeating a frame) and immediate-termination-on-safe_stop logic
+    (done is set the moment safe_stop is approved, so at most one
+    transition_consumed=False transition can ever exist per episode)
+    together guarantee. This is a diagnostic proof, not a deduplication
+    pass -- no transition is filtered, dropped, or modified by this test
+    or by any production code."""
+    for scenario in _ALL_EVALUATION_SCENARIOS:
+        for runner in (run_baseline_policy_episode, run_pure_fallback_episode):
+            record = runner(scenario)
+            _assert_sample_seq_unique_and_increasing_among_consumed(record.transitions)
+
+
+def test_synthetic_duplicate_sample_seq_among_consumed_transitions_is_detected():
+    """Focused synthetic coverage: no real committed scenario currently
+    produces a duplicate sample_seq (verified above), so this directly
+    constructs a deliberately-violating fixture to prove the invariant
+    check itself is not vacuous -- it must actually fail on a real
+    violation, not merely pass because nothing exercises it."""
+    duplicate_transitions = [
+        TransitionRecord(
+            episode_index=0,
+            step_index=0,
+            previous_state_vector=(0.0,),
+            next_state_vector=(0.0,),
+            requested_action=RLAction.continue_.value,
+            approved_action=RLAction.continue_.value,
+            fallback_used=False,
+            fallback_reason=None,
+            safety_status="nominal",
+            policy_status="validated",
+            reward_components={},
+            total_reward=0.0,
+            done=False,
+            transition_consumed=True,
+            safe_stop_terminated_without_transition=False,
+            transition_substitution_mode=None,
+            substituted_channels=(),
+            sample_seq=5,
+        ),
+        TransitionRecord(
+            episode_index=0,
+            step_index=1,
+            previous_state_vector=(0.0,),
+            next_state_vector=(0.0,),
+            requested_action=RLAction.continue_.value,
+            approved_action=RLAction.continue_.value,
+            fallback_used=False,
+            fallback_reason=None,
+            safety_status="nominal",
+            policy_status="validated",
+            reward_components={},
+            total_reward=0.0,
+            done=False,
+            transition_consumed=True,
+            safe_stop_terminated_without_transition=False,
+            transition_substitution_mode=None,
+            substituted_channels=(),
+            sample_seq=5,  # deliberately duplicated
+        ),
+    ]
+    try:
+        _assert_sample_seq_unique_and_increasing_among_consumed(duplicate_transitions)
+        raised = False
+    except AssertionError:
+        raised = True
+    assert raised, "invariant check failed to detect a deliberately duplicated sample_seq"
+
+
+def test_synthetic_none_sample_seq_is_excluded_not_guessed_at():
+    """Focused synthetic coverage: a None sample_seq (only possible before
+    the first frame is fed, never observed in practice during the step
+    loop) must be excluded from the invariant check entirely, never
+    treated as equal or unequal to any other value."""
+    transitions_with_none = [
+        TransitionRecord(
+            episode_index=0,
+            step_index=0,
+            previous_state_vector=(0.0,),
+            next_state_vector=(0.0,),
+            requested_action=RLAction.continue_.value,
+            approved_action=RLAction.continue_.value,
+            fallback_used=False,
+            fallback_reason=None,
+            safety_status="nominal",
+            policy_status="validated",
+            reward_components={},
+            total_reward=0.0,
+            done=False,
+            transition_consumed=True,
+            safe_stop_terminated_without_transition=False,
+            transition_substitution_mode=None,
+            substituted_channels=(),
+            sample_seq=None,
+        ),
+        TransitionRecord(
+            episode_index=0,
+            step_index=1,
+            previous_state_vector=(0.0,),
+            next_state_vector=(0.0,),
+            requested_action=RLAction.continue_.value,
+            approved_action=RLAction.continue_.value,
+            fallback_used=False,
+            fallback_reason=None,
+            safety_status="nominal",
+            policy_status="validated",
+            reward_components={},
+            total_reward=0.0,
+            done=False,
+            transition_consumed=True,
+            safe_stop_terminated_without_transition=False,
+            transition_substitution_mode=None,
+            substituted_channels=(),
+            sample_seq=None,
+        ),
+    ]
+    # Must not raise: both sample_seq values are None and are excluded
+    # entirely, never compared to one another as if they were duplicates.
+    _assert_sample_seq_unique_and_increasing_among_consumed(transitions_with_none)
+
+
+def test_synthetic_transition_consumed_false_is_excluded_from_the_invariant():
+    """Focused synthetic coverage: a transition_consumed=False transition
+    sharing the same sample_seq as the preceding real step (exactly the
+    documented safe_stop echo mechanism in edge/rl/environment.py) must
+    never be counted as a duplicate -- it is excluded from the invariant
+    entirely, by design, before any uniqueness check runs."""
+    transitions = [
+        TransitionRecord(
+            episode_index=0,
+            step_index=0,
+            previous_state_vector=(0.0,),
+            next_state_vector=(0.0,),
+            requested_action=RLAction.continue_.value,
+            approved_action=RLAction.continue_.value,
+            fallback_used=False,
+            fallback_reason=None,
+            safety_status="nominal",
+            policy_status="validated",
+            reward_components={},
+            total_reward=0.0,
+            done=False,
+            transition_consumed=True,
+            safe_stop_terminated_without_transition=False,
+            transition_substitution_mode=None,
+            substituted_channels=(),
+            sample_seq=7,
+        ),
+        TransitionRecord(
+            episode_index=0,
+            step_index=1,
+            previous_state_vector=(0.0,),
+            next_state_vector=(0.0,),
+            requested_action=RLAction.safe_stop.value,
+            approved_action=RLAction.safe_stop.value,
+            fallback_used=False,
+            fallback_reason=None,
+            safety_status="nominal",
+            policy_status="validated",
+            reward_components={},
+            total_reward=0.0,
+            done=True,
+            transition_consumed=False,
+            safe_stop_terminated_without_transition=True,
+            transition_substitution_mode=None,
+            substituted_channels=(),
+            sample_seq=7,  # echoes the preceding real step, by design
+        ),
+    ]
+    # Must not raise: the second transition's transition_consumed=False
+    # excludes it from the invariant entirely, so the shared sample_seq=7
+    # is never evaluated as a duplicate.
+    _assert_sample_seq_unique_and_increasing_among_consumed(transitions)
+
+
+def test_run_episode_adds_no_deduplication_logic_from_sample_seq():
+    """No code, docstring, or test in this module may implement a
+    deduplication pass, filter, or drop-duplicate operation from
+    sample_seq -- this increment is data plumbing and invariant proof
+    only, per its own explicit scope."""
+    import edge.eval.rl_baseline_eval as module
+
+    source = inspect.getsource(module)
+    lowered = source.lower()
+    forbidden = (
+        "deduplicate",
+        "dedup(",
+        "drop_duplicate",
+        "seen_sample_seq",
+    )
+    for phrase in forbidden:
+        assert phrase not in lowered
+
+
+# ---------------------------------------------------------------------------
 # tracked_channels (U06 scoping) -- data-plumbing-only field reading the
 # already-existing result.info["persistent_isolation_tracked_channels"].
 # NOT a channel-match comparison, verdict, rate, or threshold. See

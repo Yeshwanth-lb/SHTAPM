@@ -159,6 +159,20 @@ in scope at the existing call site. This is NOT a channel-match
 comparison against ``tracked_channels`` or anything else -- no such
 comparison is implemented anywhere in this module. U06 remains fully open
 (see ``DECISIONS.md``).
+
+SAMPLE_SEQ PLUMBING (U06 scoping, data-plumbing-only increment -- proof
+prerequisite for a possible future, separately approved ``sample_seq``
+deduplication increment; does NOT implement deduplication itself):
+``sample_seq`` was already computed as a local variable at the existing
+``_run_episode`` construction site (``result.info["sample_seq"]``, used
+transiently to look up injection labels) but was never persisted.
+``TransitionRecord`` gains one new, defaulted, purely descriptive field,
+``sample_seq: int | None = None``, populated directly from that same
+already-computed local value -- no new lookup, environment access, or
+additional ``result.info`` read is introduced. This module still performs
+NO deduplication of any kind -- every existing observation-selection loop
+in every axis module is unmodified and continues to read every transition
+exactly as before. U06 remains fully open (see ``DECISIONS.md``).
 """
 
 from __future__ import annotations
@@ -1145,6 +1159,15 @@ class TransitionRecord:
     # so every existing TransitionRecord construction call site is
     # unaffected.
     tracked_channels: tuple[str, ...] = ()
+    # Purely descriptive, raw frame-identity fact only (the same
+    # ``result.info["sample_seq"]`` already used, transiently, to look up
+    # injection labels at this construction site) -- NOT a deduplication
+    # pass, NOT a verdict. See this module's own SAMPLE_SEQ PLUMBING
+    # docstring section (U06 scoping). ``None`` only before the first frame
+    # is fed (never observed in practice during ``_run_episode``'s own step
+    # loop). Defaulted so every existing TransitionRecord construction call
+    # site is unaffected.
+    sample_seq: int | None = None
     execution_mode: str = EXECUTION_MODE
     data_source: str = DATA_SOURCE
     model_status: str = MODEL_STATUS
@@ -1328,6 +1351,7 @@ def _run_episode(
                 active_injection_labels=active_injection_labels,
                 active_injection_channels=active_injection_channels,
                 tracked_channels=tuple(result.info["persistent_isolation_tracked_channels"]),
+                sample_seq=sample_seq,
             )
         )
         state = result.state
