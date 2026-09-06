@@ -30,6 +30,12 @@ from app.core.db import get_db  # noqa: E402
 from app.core.security import hash_password  # noqa: E402
 from app.models import Alert, Base, Device, SensorReading, User  # noqa: E402
 from app.models.enums import AlertSeverity, AlertType, UserRole  # noqa: E402
+from app.schemas.contracts import Attribution, TrustScores  # noqa: E402
+from app.schemas.decision_diagnostic import (  # noqa: E402
+    ChannelAttribution,
+    DecisionDiagnosticMessage,
+)
+from app.services.decision_diagnostic_persistence import DecisionDiagnosticPersistence  # noqa: E402
 from fastapi import FastAPI  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 from sqlalchemy import create_engine  # noqa: E402
@@ -280,6 +286,53 @@ def test_get_decisions_empty_is_honest_not_fabricated(client, seed):
     r = client.get("/api/devices/pump-01/decisions", headers=_auth(_operator_token(client)))
     assert r.status_code == 200
     assert r.json() == []
+
+
+def test_get_decisions_returns_partial_diagnostic_row(client, seed, session_factory):
+    """A decision_diagnostic message ingested via the real
+    DecisionDiagnosticPersistence sink must appear over this pre-existing
+    REST endpoint with zero endpoint-code changes -- proving the milestone's
+    'REST needs no new code' claim, not just asserting it."""
+    message = DecisionDiagnosticMessage(
+        device_id="pump-01",
+        ts="2026-09-06T12:00:00.000Z",
+        sample_seq=42,
+        window_start_index=0,
+        window_end_index=30,
+        anomaly_flag=True,
+        anomaly_severity=0.66,
+        trust=TrustScores(
+            temperature=0.9, vibration=0.2, pressure=0.9, humidity=0.9, gas=0.9, current=0.9
+        ),
+        attribution={
+            "temperature": ChannelAttribution(attribution=Attribution.none, reason=""),
+            "vibration": ChannelAttribution(attribution=Attribution.fault, reason="anomaly"),
+            "pressure": ChannelAttribution(attribution=Attribution.none, reason=""),
+            "humidity": ChannelAttribution(attribution=Attribution.none, reason=""),
+            "gas": ChannelAttribution(attribution=Attribution.none, reason=""),
+            "current": ChannelAttribution(attribution=Attribution.none, reason=""),
+        },
+        isolation_candidates=[],
+        tracked_isolation_candidates=[],
+    )
+    DecisionDiagnosticPersistence(session_factory).persist(message)
+
+    r = client.get("/api/devices/pump-01/decisions", headers=_auth(_operator_token(client)))
+    assert r.status_code == 200
+    rows = r.json()
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["anomaly_flag"] is True
+    assert row["anomaly_severity"] == 0.66
+    # Fields this diagnostic payload cannot honestly populate stay NULL --
+    # never a fabricated health/action/isolation/attribution claim.
+    assert row["health_state"] is None
+    assert row["failure_eta"] is None
+    assert row["rl_action"] is None
+    assert row["isolated_channels"] is None
+    assert row["substituted_channels"] is None
+    assert row["attribution"] is None
+    assert row["reason"] is None
 
 
 def test_get_thresholds_lazily_creates_defaults(client, seed):

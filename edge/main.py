@@ -80,6 +80,20 @@ process_isolated_channels or SelfHealOrchestrator, and no twin, divergence
 threshold, uncertainty policy, cooldown, hysteresis, isolation cap,
 actuation, GPIO, relay, ledger, MQTT, or dashboard logic is added by it.
 
+DECISION-DIAGNOSTIC PUBLISHING (still observe-only, still no isolation/
+actuation): each outcome + its raw values + the current FR-RL4 tracking
+result are additionally shaped into a ``DecisionDiagnosticMessage``
+(``edge/pipeline/decision_diagnostic.py``) and best-effort-published to
+``shtapm/{device_id}/decision_diagnostic`` — a NEW, separate topic, NOT the
+frozen Doc05 ``.../decision`` topic/``DecisionMessage`` shape (that would
+require health/failure_eta/rl_action/substituted, none of which anything
+here computes; see that module's own docstring). Fire-and-forget: no LWT,
+no buffering, no retry, no delivery guarantee, and — critically — no way
+for a publish failure (or a broker that never even receives this topic) to
+affect telemetry publishing or P2 monitoring, both of which run through a
+completely separate publisher/connection and neither import nor call into
+this one.
+
     PYTHONPATH=backend:. python -m edge
 """
 
@@ -102,8 +116,12 @@ from edge.anomaly.pipeline import P2Pipeline, WindowOutcome
 from edge.anomaly.policy import SeverityThresholdFlagPolicy
 from edge.anomaly.preprocess import Preprocessor
 from edge.drivers.registry import DriverSpec, build_drivers, resolve_channel_specs_from_env
+from edge.pipeline.decision_diagnostic import (
+    DecisionDiagnosticPublisher,
+    build_decision_diagnostic_message,
+)
 from edge.pipeline.isolation_fallback import decide_isolation
-from edge.pipeline.isolation_tracker import IsolationFallbackTracker
+from edge.pipeline.isolation_tracker import IsolationFallbackTracker, IsolationTrackerResult
 from edge.pipeline.monitor import LiveP2Monitor, RawChannelValues
 from edge.trust.c_consistency import ConsistencyProvider
 from edge.trust.engine import TrustEngine
@@ -139,7 +157,12 @@ def _required_env_int(name: str) -> int:
     return int(value)
 
 
-def _build_p2_monitor(*, fit_window_count: int) -> LiveP2Monitor:
+def _build_p2_monitor(
+    *,
+    fit_window_count: int,
+    device_id: str,
+    decision_publisher: DecisionDiagnosticPublisher,
+) -> LiveP2Monitor:
     """Compose the real (non-stub) P2 pipeline for observe-only live
     monitoring. See edge/pipeline/monitor.py's docstring for exactly why
     each component needs no invented threshold/calibration to run this way,
@@ -163,9 +186,29 @@ def _build_p2_monitor(*, fit_window_count: int) -> LiveP2Monitor:
     # -- persistent, cross-cycle isolation-candidate memory for THIS pipeline
     # only; a fresh _build_p2_monitor() call gets a fresh, independent tracker.
     isolation_tracker = IsolationFallbackTracker()
+    # LiveP2Monitor calls on_outcome(outcome) then on_raw_values(outcome, raw)
+    # synchronously, for the SAME outcome, every cycle (edge/pipeline/monitor.py's
+    # _emit()) -- this one-slot box lets on_raw_values reuse the single
+    # isolation_tracker.update() call on_outcome already made, rather than
+    # calling the stateful tracker a second time for the same cycle.
+    last_tracked: dict[str, IsolationTrackerResult] = {}
 
     def _on_outcome(outcome: WindowOutcome) -> None:
-        _log_window_outcome(outcome, isolation_tracker)
+        last_tracked["result"] = _log_window_outcome(outcome, isolation_tracker)
+
+    def _on_raw_values(outcome: WindowOutcome, raw: RawChannelValues) -> None:
+        _log_raw_values(outcome, raw)
+        tracked = last_tracked.get("result")
+        if tracked is None:
+            return
+        try:
+            message = build_decision_diagnostic_message(device_id, outcome, tracked, raw)
+            decision_publisher.publish(message)
+        except Exception:
+            # Best-effort, observe-only (see module docstring's
+            # DECISION-DIAGNOSTIC PUBLISHING section) -- a bug here must
+            # never interrupt P2 monitoring or telemetry.
+            log.debug("decision diagnostic build/publish failed (best-effort)", exc_info=False)
 
     return LiveP2Monitor(
         preprocessor=preprocessor,
@@ -173,17 +216,20 @@ def _build_p2_monitor(*, fit_window_count: int) -> LiveP2Monitor:
         c_provider=c_provider,
         fit_window_count=fit_window_count,
         on_outcome=_on_outcome,
-        on_raw_values=_log_raw_values,
+        on_raw_values=_on_raw_values,
     )
 
 
 def _log_window_outcome(
     outcome: WindowOutcome, isolation_tracker: IsolationFallbackTracker
-) -> None:
+) -> IsolationTrackerResult:
     """Monitoring-only: log preprocessing/anomaly/trust/attribution, the
     stateless FR-RL4 isolation decision, and the persistent FR-RL4 tracking
     result. Never isolates a channel for real, actuates, or publishes
-    anything — see edge/pipeline/{isolation_fallback,isolation_tracker}.py."""
+    anything — see edge/pipeline/{isolation_fallback,isolation_tracker}.py.
+    Returns the tracking result so the caller can reuse it (e.g. for
+    decision-diagnostic publishing) without calling the stateful tracker
+    a second time for the same cycle."""
     trust_summary = ", ".join(
         f"{ch}={outcome.trust[ch].trust:.3f}/{outcome.trust[ch].band.value}" for ch in CHANNELS
     )
@@ -216,6 +262,7 @@ def _log_window_outcome(
         ", ".join(f"{ch}: {tracked.reasons[ch]}" for ch in CHANNELS if ch in tracked.reasons)
         or "none",
     )
+    return tracked
 
 
 def _log_raw_values(outcome: WindowOutcome, raw: RawChannelValues) -> None:
@@ -250,7 +297,16 @@ def main() -> None:
     sampler = Sampler(device_id=device_id, drivers=drivers)
     publisher = ResilientTelemetryPublisher(device_id=device_id, rate_hz=rate_hz)
     publisher.start(host, port)
-    p2_monitor = _build_p2_monitor(fit_window_count=p2_fit_window_count)
+    # Separate object, separate MQTT connection -- see module docstring's
+    # DECISION-DIAGNOSTIC PUBLISHING section. Its start()/publish()/stop()
+    # never raise, so a failure here can never affect `publisher` above.
+    decision_publisher = DecisionDiagnosticPublisher(device_id=device_id)
+    decision_publisher.start(host, port)
+    p2_monitor = _build_p2_monitor(
+        fit_window_count=p2_fit_window_count,
+        device_id=device_id,
+        decision_publisher=decision_publisher,
+    )
     runtime = AcquisitionRuntime(
         sampler=sampler,
         publisher=publisher,
@@ -277,6 +333,7 @@ def main() -> None:
         runtime.run(should_continue=lambda: running["go"], sleep=time.sleep)
     finally:
         runtime.stop()
+        decision_publisher.stop()
         print("[edge] stopped (status offline)")
 
 

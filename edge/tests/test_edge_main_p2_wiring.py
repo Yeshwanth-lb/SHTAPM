@@ -17,6 +17,7 @@ from edge.acquisition.runtime import AcquisitionRuntime
 from edge.acquisition.sampler import Sampler
 from edge.drivers.fake import fake_drivers
 from edge.main import _build_p2_monitor
+from edge.pipeline.decision_diagnostic import DecisionDiagnosticPublisher
 
 VALUES = {
     "temperature": 26.0,
@@ -66,7 +67,12 @@ def test_live_wiring_publishes_telemetry_and_invokes_p2_processing(caplog):
     client = FakeClient()
     publisher = ResilientTelemetryPublisher(device_id="pump-01", rate_hz=5.0, client=client)
     sampler = Sampler(device_id="pump-01", drivers=fake_drivers(VALUES))
-    monitor = _build_p2_monitor(fit_window_count=fit_window_count)
+    decision_publisher = DecisionDiagnosticPublisher(device_id="pump-01")  # never started -> no-op
+    monitor = _build_p2_monitor(
+        fit_window_count=fit_window_count,
+        device_id="pump-01",
+        decision_publisher=decision_publisher,
+    )
     runtime = AcquisitionRuntime(
         sampler=sampler, publisher=publisher, rate_hz=5.0, on_healthy_frame=monitor.on_frame
     )
@@ -109,13 +115,23 @@ def test_live_wiring_publishes_telemetry_and_invokes_p2_processing(caplog):
     assert all("current=0.420" in r.getMessage() for r in raw_value_records)
 
 
-def test_live_wiring_never_isolates_actuates_or_publishes_a_decision():
+def test_live_wiring_never_isolates_or_actuates():
     """Monitoring-only, by construction: AcquisitionRuntime/LiveP2Monitor/
-    isolation_fallback/isolation_tracker import nothing from
-    edge/pipeline/self_heal.py, edge/pipeline/cycle.py, or
-    edge/actuation/*, and edge/main.py's MQTT publisher only ever
-    publishes telemetry/status topics (no decision/ledger topic exists)."""
+    isolation_fallback/isolation_tracker/decision_diagnostic import nothing
+    from edge/pipeline/self_heal.py, edge/pipeline/cycle.py, or
+    edge/actuation/* -- a decision_diagnostic message is published (a new,
+    separate, best-effort diagnostic topic, NOT the frozen `.../decision`
+    topic/DecisionMessage shape -- see edge/pipeline/decision_diagnostic.py),
+    but no isolation/substitution/actuation is ever performed anywhere in
+    this wiring. AST-based (not substring search): decision_diagnostic.py's
+    own docstring legitimately NAMES SelfHealOrchestrator/RelayController to
+    explain that it does NOT call them, which a naive substring check can't
+    distinguish from an actual import."""
+    import ast
+    import inspect
+
     import edge.acquisition.runtime as runtime_module
+    import edge.pipeline.decision_diagnostic as decision_diagnostic_module
     import edge.pipeline.isolation_fallback as isolation_fallback_module
     import edge.pipeline.isolation_tracker as isolation_tracker_module
     import edge.pipeline.monitor as monitor_module
@@ -125,10 +141,56 @@ def test_live_wiring_never_isolates_actuates_or_publishes_a_decision():
         monitor_module,
         isolation_fallback_module,
         isolation_tracker_module,
+        decision_diagnostic_module,
     )
+    forbidden_import_substrings = ("self_heal", "cycle", "actuation")
     for module in modules:
-        with open(module.__file__, encoding="utf-8") as f:
-            content = f.read()
-        assert "RelayController" not in content
-        assert "SelfHealOrchestrator" not in content
-        assert "process_isolated_channels" not in content
+        tree = ast.parse(inspect.getsource(module))
+        imported_modules: set[str] = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                imported_modules.update(alias.name for alias in node.names)
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                imported_modules.add(node.module)
+        for forbidden in forbidden_import_substrings:
+            assert not any(forbidden in name for name in imported_modules), (
+                f"{module.__name__} imports something matching {forbidden!r}: {imported_modules}"
+            )
+
+
+def test_decision_diagnostic_publish_failure_never_interrupts_telemetry_or_p2_logging(caplog):
+    """A broken decision_publisher (e.g. a broker rejecting the diagnostic
+    topic) must never affect telemetry publishing or P2 monitoring/logging
+    -- see edge/main.py's DECISION-DIAGNOSTIC PUBLISHING docstring section."""
+
+    class _BrokenDecisionPublisher(DecisionDiagnosticPublisher):
+        def publish(self, message):  # noqa: D102
+            raise RuntimeError("broker rejected decision_diagnostic topic")
+
+    fit_window_count = 1
+    fit_buffer_size = 30 + (fit_window_count - 1) * 1
+    total_ticks = fit_buffer_size  # exactly one emitted outcome (the fit/transition tick)
+
+    client = FakeClient()
+    publisher = ResilientTelemetryPublisher(device_id="pump-01", rate_hz=5.0, client=client)
+    sampler = Sampler(device_id="pump-01", drivers=fake_drivers(VALUES))
+    monitor = _build_p2_monitor(
+        fit_window_count=fit_window_count,
+        device_id="pump-01",
+        decision_publisher=_BrokenDecisionPublisher(device_id="pump-01"),
+    )
+    runtime = AcquisitionRuntime(
+        sampler=sampler, publisher=publisher, rate_hz=5.0, on_healthy_frame=monitor.on_frame
+    )
+    client.fire_connect()
+
+    with caplog.at_level("INFO", logger="shtapm.edge.main"):
+        for _ in range(total_ticks):
+            runtime.tick()  # must not raise
+
+    seqs = [m["sample_seq"] for m in _telemetry(client)]
+    assert seqs == list(range(total_ticks))  # telemetry completely unaffected
+
+    all_records = [r for r in caplog.records if r.name == "shtapm.edge.main"]
+    raw_value_records = [r for r in all_records if "P2 raw values" in r.getMessage()]
+    assert len(raw_value_records) == 1  # P2 logging (which triggers the publish attempt) still ran
