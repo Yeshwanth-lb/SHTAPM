@@ -123,6 +123,22 @@ missed-fault verdict, NOT a rate, and NOT a comparison against
 ``safety_status``/``requested_action``/etc. -- no such comparison is
 implemented anywhere in this module. U06 remains fully open (see
 ``DECISIONS.md``).
+
+TRACKED-CHANNEL PLUMBING (U06 scoping, data-plumbing-only increment --
+prepares inputs a future, separately approved channel-comparison increment
+would need): ``edge/rl/environment.py`` already exposes
+``EnvironmentStepResult.info["persistent_isolation_tracked_channels"]``
+every step (the deterministic ``IsolationFallbackTracker``'s own current
+``tracked_channels`` set, sorted) -- unrelated to this increment's own
+scope and unmodified by it. This module's ``TransitionRecord`` gains one
+new, defaulted, purely descriptive field, ``tracked_channels`` (a tuple of
+channel-name strings currently tracked as isolation candidates at that
+step, e.g. ``("temperature",)``, or ``()`` if none) -- populated in
+``_run_episode`` directly from that already-existing info key. This is NOT
+a false-isolation or missed-fault verdict, NOT a rate, NOT a channel-match
+comparison against ``active_injection_labels`` or any injected channel --
+no such comparison is implemented anywhere in this module. U06 remains
+fully open (see ``DECISIONS.md``).
 """
 
 from __future__ import annotations
@@ -1095,6 +1111,13 @@ class TransitionRecord:
     # INJECTION-LABEL RETENTION docstring section (U06 scoping). Defaulted so
     # every existing TransitionRecord construction call site is unaffected.
     active_injection_labels: tuple[str, ...] = ()
+    # Purely descriptive, raw tracked-channel facts only (the deterministic
+    # tracker's own current isolation-candidate set at this step) -- NOT a
+    # channel-match comparison, NOT a verdict, NOT a rate. See this module's
+    # own TRACKED-CHANNEL PLUMBING docstring section (U06 scoping). Defaulted
+    # so every existing TransitionRecord construction call site is
+    # unaffected.
+    tracked_channels: tuple[str, ...] = ()
     execution_mode: str = EXECUTION_MODE
     data_source: str = DATA_SOURCE
     model_status: str = MODEL_STATUS
@@ -1275,6 +1298,7 @@ def _run_episode(
                 transition_substitution_mode=result.info["transition_substitution_mode"],
                 substituted_channels=tuple(result.info["substituted_channels"]),
                 active_injection_labels=active_injection_labels,
+                tracked_channels=tuple(result.info["persistent_isolation_tracked_channels"]),
             )
         )
         state = result.state

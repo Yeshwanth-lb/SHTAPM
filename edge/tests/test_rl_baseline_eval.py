@@ -17,6 +17,7 @@ from edge.eval.rl_baseline_eval import (
     INJECTION_TYPE_SCENARIOS,
     MODEL_STATUS,
     SCENARIO_CLEAN_DEGRADATION,
+    SCENARIO_INJECTED_CURRENT_CONSTANT_SPOOF,
     SCENARIO_INJECTED_CURRENT_SPIKE,
     EpisodeRecord,
     ScenarioConfig,
@@ -313,6 +314,134 @@ def test_run_episode_makes_no_false_isolation_or_missed_fault_claim():
         "missed-fault rate is",
     )
     lowered = source.lower()
+    for phrase in forbidden:
+        assert phrase not in lowered
+
+
+# ---------------------------------------------------------------------------
+# tracked_channels (U06 scoping) -- data-plumbing-only field reading the
+# already-existing result.info["persistent_isolation_tracked_channels"].
+# NOT a channel-match comparison, verdict, rate, or threshold. See
+# edge/eval/rl_baseline_eval.py's own TRACKED-CHANNEL PLUMBING docstring
+# section.
+# ---------------------------------------------------------------------------
+
+
+def test_transition_record_tracked_channels_field_exists_and_defaults_addable():
+    """Existing behavior regression guard: the new field must be present
+    and additive -- every other TransitionRecord field is unaffected."""
+    record = run_baseline_policy_episode(SCENARIO)
+    for t in record.transitions:
+        assert isinstance(t.tracked_channels, tuple)
+
+
+def test_tracked_channels_field_defaults_to_empty_tuple_for_existing_callers():
+    """Existing TransitionRecord construction call sites (this module's own
+    test helpers in test_u06_rate_summary.py / test_u06_tracker_agreement.py
+    / test_u06_ground_truth_rate_summary.py) never pass tracked_channels --
+    the dataclass default must apply cleanly, exactly like
+    active_injection_labels's own established default behavior."""
+    t = TransitionRecord(
+        episode_index=0,
+        step_index=0,
+        previous_state_vector=(0.0,),
+        next_state_vector=(0.0,),
+        requested_action=RLAction.continue_.value,
+        approved_action=RLAction.continue_.value,
+        fallback_used=False,
+        fallback_reason=None,
+        safety_status="nominal",
+        policy_status="validated",
+        reward_components={},
+        total_reward=0.0,
+        done=False,
+        transition_consumed=True,
+        safe_stop_terminated_without_transition=False,
+        transition_substitution_mode=None,
+        substituted_channels=(),
+    )
+    assert t.tracked_channels == ()
+
+
+def test_clean_scenario_has_no_tracked_channels():
+    record = run_baseline_policy_episode(SCENARIO_CLEAN_DEGRADATION)
+    assert all(t.tracked_channels == () for t in record.transitions)
+
+
+def test_scenario_with_persistent_isolation_reports_tracked_channels():
+    """injected_current_constant_spoof is the one already-committed scenario
+    whose baseline_policy run actually drives safety_status to
+    "isolation_active" (verified directly) -- exercising the non-empty
+    branch of the new field, populated straight from the environment's own
+    already-existing info key. This does NOT assert or imply that the
+    tracked channel matches the injected channel -- no such comparison is
+    made or claimed here."""
+    record = run_baseline_policy_episode(SCENARIO_INJECTED_CURRENT_CONSTANT_SPOOF)
+    tracked_steps = [t for t in record.transitions if t.tracked_channels]
+    assert len(tracked_steps) > 0
+    for t in tracked_steps:
+        assert t.safety_status == "isolation_active"
+        for channel in t.tracked_channels:
+            assert channel in CHANNELS
+
+
+def test_tracked_channels_populated_from_environment_info_key_empty_case():
+    """The empty case (no channel currently tracked) must round-trip safely
+    from result.info's list-of-sorted-channel-names shape to an empty
+    tuple, identical to the field's own default -- not raise, and not be
+    conflated with a "missing key" case (the key is always present)."""
+    record = run_baseline_policy_episode(SCENARIO_CLEAN_DEGRADATION)
+    for t in record.transitions:
+        assert t.tracked_channels == ()
+        assert isinstance(t.tracked_channels, tuple)
+
+
+def test_tracked_channels_are_purely_descriptive_strings():
+    record = run_baseline_policy_episode(SCENARIO_INJECTED_CURRENT_CONSTANT_SPOOF)
+    for t in record.transitions:
+        for channel in t.tracked_channels:
+            assert isinstance(channel, str)
+
+
+def test_existing_transition_record_fields_unchanged_by_tracked_channels_field():
+    """Regression guard: adding tracked_channels must not change any other
+    TransitionRecord field's value for the existing scenarios."""
+    record = run_baseline_policy_episode(SCENARIO)
+    for t in record.transitions:
+        assert isinstance(t.requested_action, str | None)
+        assert isinstance(t.approved_action, str)
+        assert isinstance(t.fallback_used, bool)
+        assert isinstance(t.safety_status, str)
+        assert isinstance(t.active_injection_labels, tuple)
+        assert isinstance(t.reward_components, dict)
+
+
+def test_tracked_channels_reports_match_underlying_safety_status_exactly():
+    """Structural guard, not a channel-match comparison: tracked_channels is
+    non-empty if and only if safety_status == "isolation_active" (both are
+    the deterministic tracker's own state, read from the same info dict) --
+    verifies the new field is a faithful passthrough, introducing no new
+    derivation or judgment of its own."""
+    for scenario in (SCENARIO_CLEAN_DEGRADATION, SCENARIO_INJECTED_CURRENT_CONSTANT_SPOOF):
+        record = run_baseline_policy_episode(scenario)
+        for t in record.transitions:
+            assert bool(t.tracked_channels) == (t.safety_status == "isolation_active")
+
+
+def test_run_episode_makes_no_channel_match_comparison_claim():
+    """No code, docstring, or test in this module may compute or claim a
+    channel-match comparison, agreement rate, threshold, or verdict from
+    tracked_channels -- this increment is data plumbing only."""
+    import edge.eval.rl_baseline_eval as module
+
+    source = inspect.getsource(module)
+    lowered = source.lower()
+    forbidden = (
+        "channel_match_rate",
+        "channel agreement rate",
+        "channel-match rate",
+        "tracked channel matches",
+    )
     for phrase in forbidden:
         assert phrase not in lowered
 

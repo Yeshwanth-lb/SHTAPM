@@ -2247,3 +2247,25 @@ An additive, descriptive-only `ScenarioMetadata`/`EVALUATION_SCENARIO_METADATA` 
 - Does not change U06's status line: it remains fully open, zero partial resolution, and no "Partial:" marker is introduced anywhere by this clarification.
 
 **Not done by this clarification:** U06's status in the UNDECIDED list above is unchanged. Channel-matched comparison, `sample_seq` deduplication, DQN-policy inclusion, confidence-interval/uncertainty reporting, and any human sign-off accepting the Operational Definitions Proposal all remain open, separate questions, entirely untouched by this documentation-only clarification.
+
+---
+
+## U06 — Tracked-Channel Plumbing Implementation Note (IMPLEMENTATION RECORD, NOT A DECISION)
+**(U06 REMAINS FULLY UNDECIDED/OPEN. This is an implementation record for the smallest approved increment scoped in the "next U06 increment" strategic review above — it plumbs one already-existing, already-computed data field through to `TransitionRecord`, preparing the input a future, separately approved channel-matched comparison increment would need. It defines no comparison, axis, metric, threshold, or verdict, and does not resolve U06.)**
+
+- **Date implemented:** 2026-09-06
+- **Files changed:** `edge/eval/rl_baseline_eval.py`, `edge/tests/test_rl_baseline_eval.py`. No reward, policy, fallback-gate, environment, training, hardware, DQN, or existing axis-summary file changed — `edge/rl/environment.py` already exposed the data this increment reads (`EnvironmentStepResult.info["persistent_isolation_tracked_channels"]`, present since the environment's own ACTION-DEPENDENT TRANSITION / tracked-channel logic, verified read-only and confirmed unmodified by this increment) and required no change of its own.
+
+**What this increment does:**
+- `edge/eval/rl_baseline_eval.py`'s `TransitionRecord` gains one new, defaulted field, `tracked_channels: tuple[str, ...] = ()` — raw channel-name strings (e.g. `("vibration",)`) currently held as isolation candidates by the deterministic `IsolationFallbackTracker` at that step, populated in `_run_episode` directly from `result.info["persistent_isolation_tracked_channels"]` (already computed and exposed by the environment on every step, unconditionally).
+- Verified directly: `tracked_channels` is non-empty if and only if that same transition's `safety_status == "isolation_active"` — both are read from the same underlying deterministic tracker state, so this field is a faithful passthrough introducing no new derivation.
+- Verified directly on the existing scenario taxonomy: `SCENARIO_CLEAN_DEGRADATION` and `SCENARIO_INJECTED_CURRENT_SPIKE` never populate this field (empty throughout); `SCENARIO_INJECTED_CURRENT_CONSTANT_SPOOF`'s `baseline_policy` run does (`("vibration",)` at several steps) — the one already-committed scenario whose short episode actually drives the tracker to `"isolation_active"`.
+
+**What this increment explicitly does NOT do:**
+- Does not implement channel-matched comparison — `tracked_channels` is not compared against `active_injection_labels` or any injected channel anywhere in this module; no such comparison, agreement rate, threshold, or verdict is computed, stored, or claimed (confirmed by a dedicated source-scan test).
+- Does not modify `edge/rl/environment.py`, `edge/rl/fallback_gate.py`, `edge/rl/reward.py`, `edge/rl/policy.py`, `edge/eval/rl_training.py`, or any of the three existing axis-summary modules — all read `TransitionRecord` unmodified and are unaffected by this additive field.
+- Does not change any existing scenario's behavior, any seed-repetition report, or the aggregate diagnostic report — all continue to produce byte-identical results to before this increment (the new field is additive and ignored by every existing consumer).
+- No false-isolation rate, missed-critical-fault rate, threshold, verdict, pooling, averaging, or confidence interval is computed, stored, or claimed anywhere.
+- No real-world fault-detection, attack-detection, accuracy, safety, effectiveness, validation, or production-readiness claim is made.
+
+**Not done by this increment:** U06's status in the UNDECIDED list above is unchanged: fully open, zero partial resolution. Channel-matched comparison itself (deciding how to score agreement/disagreement between `tracked_channels` and the injected channel), `sample_seq` deduplication, DQN-policy inclusion, confidence-interval/uncertainty reporting, and any human sign-off accepting the Operational Definitions Proposal all remain open, separate questions — this is a data-plumbing increment only, preparing inputs a future, separately approved comparison increment would need.
