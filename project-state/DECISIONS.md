@@ -1907,3 +1907,24 @@ An additive, descriptive-only `ScenarioMetadata`/`EVALUATION_SCENARIO_METADATA` 
 - No claim of real-world fault detection, real false-isolation rate, acceptable threshold, policy effectiveness, safety, or production readiness is made.
 
 **Not done by this increment:** U06's status in the UNDECIDED list above is unchanged: fully open, zero partial resolution. This is a data-plumbing increment only, preparing the inputs a future, separate, not-yet-approved comparison increment would need.
+
+---
+
+## U06 — Axis (i) Proxy-Based Rate Summary Implementation Note (IMPLEMENTATION RECORD, NOT A DECISION)
+**(U06 REMAINS FULLY UNDECIDED/OPEN. This is an implementation record for the narrowest approved comparison increment scoped in the "U06 comparison implementation" review above — it implements the already-proposed, proxy-based axis (i) rate definitions as an additive simulation-only summary. It does not resolve U06, choose a threshold, or implement axes (ii)/(iii).)**
+
+- **Date implemented:** 2026-09-06
+- **Files changed:** `edge/eval/u06_rate_summary.py` (new), `edge/tests/test_u06_rate_summary.py` (new). No existing file modified — `EpisodeRecord`, `TransitionRecord`, `active_injection_labels`, `edge/rl/reward.py`, `edge/rl/fallback_gate.py`, `edge/rl/policy.py`, `edge/eval/rl_training.py`, environment transition logic, and every hardware/driver/actuator/relay/GPIO file are untouched.
+
+**What this increment does:**
+- Adds a pure function, `summarize_episode_rates(record: EpisodeRecord) -> EpisodeRateSummary`, computing axis (i)'s already-proposed, proxy-based rates exactly per the "U06 — Operational Definitions Proposal" sections A–C above: false isolation (`safety_status == "nominal"` and `requested_action` is `isolate`/`reduce_weight`) and missed critical fault (`safety_status == "isolation_active"` and `requested_action` is `continue_`), each with its own opportunity denominator, reporting `rate=None` (never `0.0`) when its denominator is zero.
+- Per section F, `safe_stop` requests, fallback/unvalidated `policy_status`, and world-inert approved actions are **not excluded** from the opportunity denominators — section F's own text states these definitions "still evaluate the requester's intent," warning that exclusion could produce a misleadingly clean rate. Instead each is reported as its own breakdown field (`safe_stop_request_count`, `policy_status_breakdown`, and two world-inert-approved-action counts scoped to each denominator) alongside the rate.
+- Scenario/baseline identity (`scenario_name`, `baseline_name`), `step_count`, and `termination_cause` are carried through unchanged from the input `EpisodeRecord`.
+
+**What this increment explicitly does NOT do:**
+- Does not implement axis (ii) (tracker-vs-injection agreement) or axis (iii) (ground-truth-anchored rates) — both remain unimplemented, open proposals from the preceding scoping review.
+- Never reads the injection-ground-truth field `TransitionRecord` separately carries, and never imports anything from the injection-framework package — the new module's own source is scanned by a dedicated test confirming this.
+- Chooses no acceptable threshold, computes no verdict, and makes no claim of validation, safety, accuracy, or production readiness anywhere — confirmed by a dedicated source-scan test.
+- Changes no reward, gate, policy, transition, or DQN behavior — the function only reads an already-produced `EpisodeRecord`, never constructs or calls the environment/gate/reward/policy modules.
+
+**Not done by this increment:** U06's status in the UNDECIDED list above is unchanged: fully open, zero partial resolution. Axes (ii) and (iii) remain unimplemented proposals/open questions, as does any acceptable-rate decision.
