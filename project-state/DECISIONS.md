@@ -1951,3 +1951,25 @@ An additive, descriptive-only `ScenarioMetadata`/`EVALUATION_SCENARIO_METADATA` 
 - Chooses no acceptable agreement rate, computes no verdict, and makes no claim of validation, safety, accuracy, or production readiness anywhere — confirmed by dedicated tests.
 
 **Not done by this increment:** U06's status in the UNDECIDED list above is unchanged: fully open, zero partial resolution. Channel-matched axis (ii), `sample_seq` deduplication, and axis (iii) all remain unimplemented, open questions.
+
+---
+
+## U06 — Axis (iii) Coarse Ground-Truth-Anchored Rate Summary Implementation Note (IMPLEMENTATION RECORD, NOT A DECISION)
+**(U06 REMAINS FULLY UNDECIDED/OPEN. This is an implementation record for the narrowest approved axis (iii) increment scoped in the preceding axis (iii) scoping review — it implements coarse, ground-truth-anchored false-isolation/missed-fault rates as an additive simulation-only diagnostic. It does not resolve U06, choose a threshold or verdict, or implement channel matching.)**
+
+- **Date implemented:** 2026-09-06
+- **Files changed:** `edge/eval/u06_ground_truth_rate_summary.py` (new), `edge/tests/test_u06_ground_truth_rate_summary.py` (new). No existing file modified — `EpisodeRecord`, `TransitionRecord`, `active_injection_labels`'s shape, `edge/rl/environment.py`, `edge/rl/reward.py`, `edge/rl/fallback_gate.py`, `edge/rl/policy.py`, `edge/eval/rl_training.py`, axis (i) (`edge/eval/u06_rate_summary.py`), axis (ii) (`edge/eval/u06_tracker_agreement.py`), and every hardware/driver/actuator/relay/GPIO file are untouched.
+
+**What this increment does:**
+- Adds a pure function, `summarize_ground_truth_rates(record: EpisodeRecord) -> GroundTruthRateSummary`, redefining false isolation / missed fault directly against `active_injection_labels` (synthetic injection ground truth) instead of against `safety_status` (axis (i)'s proxy): ground-truth false isolation is `requested_action` in `{isolate, reduce_weight}` with no injection active; ground-truth missed fault is `requested_action == continue_` with an injection active. Denominators reuse axis (i)'s opportunity-denominator convention, with `rate=None` (never `0.0`) on a zero denominator.
+- **Unit of comparison is per decision (every transition), not per newly observed frame** — deliberately different from axis (ii)'s `transition_consumed=True` filter. This is not an oversight: axis (iii) evaluates policy decisions, and every step (including a `safe_stop` no-op step) is a genuine, distinct decision even when the underlying frame repeats. `safe_stop` requests remain in the denominators and are reported separately (`safe_stop_request_count`), matching axis (i)'s own established "not excluded, only separately reported" convention — verified structurally: a `transition_consumed=False` step can only occur when `approved_action is RLAction.safe_stop`, which (given the environment always passes `already_safe_stopped=False`) can only happen when `requested_action is RLAction.safe_stop` too, so such a step can never itself trigger either numerator.
+- Reports per-injection-type missed-fault breakdowns (never pooled across types) and a `no_injection` breakdown mirroring the top-level false-isolation fields, alongside `policy_status_breakdown` and world-inert-approved-action counts scoped to each denominator, matching axis (i)'s reporting conventions.
+- The module docstring documents five required disclaimers: injection *attempted* is not injection *detectable*; an injection may leave no trace in `RLState` at all (the only input any policy receives), so a ground-truth missed-fault count is not proof of policy failure; `AdaptiveStealthFDI` and similar evasive types require especially cautious interpretation; and every count/rate is simulation-only, with no real-world, validation, safety, or production-readiness claim.
+
+**What this increment explicitly does NOT do:**
+- Does not implement channel-matched comparison — `RLAction.isolate` itself carries no channel parameter, and `TransitionRecord` does not carry tracked-channel data; neither is added here.
+- Does not widen `active_injection_labels`'s shape or add any tracked-channel field.
+- Does not modify axis (i) or axis (ii) — both remain exactly as previously committed.
+- Chooses no acceptable rate, computes no verdict, and makes no claim of validation, safety, accuracy, or production readiness anywhere — confirmed by dedicated tests.
+
+**Not done by this increment:** U06's status in the UNDECIDED list above is unchanged: fully open, zero partial resolution. Channel-matched comparison (for any axis) remains an open question.
