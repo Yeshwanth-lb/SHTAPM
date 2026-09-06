@@ -732,6 +732,70 @@ SCENARIO_INJECTED_CURRENT_CONSTANT_SPOOF = ScenarioConfig(
     **_EVALUATION_DEGRADATION_PROFILE,
 )
 
+# ---- Seed-repetition variants of SCENARIO_INJECTED_CURRENT_CONSTANT_SPOOF
+# (U06 scoping) -- eighth scenario shape covered by this pattern, after
+# SCENARIO_CLEAN_DEGRADATION's, SCENARIO_INJECTED_CURRENT_SPIKE's,
+# SCENARIO_INJECTED_TEMPERATURE_DRIFT's, SCENARIO_INJECTED_PRESSURE_
+# STUCK_AT's, SCENARIO_INJECTED_HUMIDITY_BIAS_FDI's, SCENARIO_INJECTED_
+# GAS_RAMP_FDI's, and SCENARIO_INJECTED_VIBRATION_REPLAY's own 5-seed sets.
+# Four additional scenarios reusing SCENARIO_INJECTED_CURRENT_CONSTANT_
+# SPOOF's own profile EXACTLY (length, health range, degradation rate,
+# vibration config, and its ConstantSpoof injection unchanged) -- only
+# ``seed`` differs. Per the "U06 -- Operational Definitions Proposal"'s
+# own section D (proposed minimum: at least 5 distinct seeds per
+# scenario), still only 8 of 9 scenarios now have 5-seed coverage; the
+# remaining 1 injection-type scenario remains unfinished. Seeds 1374-1377
+# -- distinct from every existing evaluation-scenario seed (1337-1373),
+# every TRAINING_SCENARIOS seed (2001, 2002), and edge.eval.rl_training.
+# SEED_FIXTURE (1337, a training-run RNG seed, unrelated to any
+# ScenarioConfig). Not added to INJECTION_TYPE_SCENARIOS, EVALUATION_
+# SCENARIO_METADATA, or default_scenarios() -- consumed explicitly by
+# edge.eval.u06_seed_repetition_report_injected_current_constant_spoof
+# instead, matching the seven prior seed-repetition sets' own convention.
+SCENARIO_INJECTED_CURRENT_CONSTANT_SPOOF_SEED_1374 = ScenarioConfig(
+    name="injected_current_constant_spoof_seed_1374",
+    seed=1374,
+    length=40,
+    injections=(ConstantSpoof(channel="current", onset=30, duration=5, value=0.0),),
+    **_EVALUATION_DEGRADATION_PROFILE,
+)
+
+SCENARIO_INJECTED_CURRENT_CONSTANT_SPOOF_SEED_1375 = ScenarioConfig(
+    name="injected_current_constant_spoof_seed_1375",
+    seed=1375,
+    length=40,
+    injections=(ConstantSpoof(channel="current", onset=30, duration=5, value=0.0),),
+    **_EVALUATION_DEGRADATION_PROFILE,
+)
+
+SCENARIO_INJECTED_CURRENT_CONSTANT_SPOOF_SEED_1376 = ScenarioConfig(
+    name="injected_current_constant_spoof_seed_1376",
+    seed=1376,
+    length=40,
+    injections=(ConstantSpoof(channel="current", onset=30, duration=5, value=0.0),),
+    **_EVALUATION_DEGRADATION_PROFILE,
+)
+
+SCENARIO_INJECTED_CURRENT_CONSTANT_SPOOF_SEED_1377 = ScenarioConfig(
+    name="injected_current_constant_spoof_seed_1377",
+    seed=1377,
+    length=40,
+    injections=(ConstantSpoof(channel="current", onset=30, duration=5, value=0.0),),
+    **_EVALUATION_DEGRADATION_PROFILE,
+)
+
+# All 5 injected_current_constant_spoof seed variants, including the
+# original -- consumed by edge.eval.
+# u06_seed_repetition_report_injected_current_constant_spoof. Order is
+# fixed and deterministic.
+INJECTED_CURRENT_CONSTANT_SPOOF_SEED_REPETITION_SCENARIOS: tuple[ScenarioConfig, ...] = (
+    SCENARIO_INJECTED_CURRENT_CONSTANT_SPOOF,
+    SCENARIO_INJECTED_CURRENT_CONSTANT_SPOOF_SEED_1374,
+    SCENARIO_INJECTED_CURRENT_CONSTANT_SPOOF_SEED_1375,
+    SCENARIO_INJECTED_CURRENT_CONSTANT_SPOOF_SEED_1376,
+    SCENARIO_INJECTED_CURRENT_CONSTANT_SPOOF_SEED_1377,
+)
+
 SCENARIO_INJECTED_TEMPERATURE_ADAPTIVE_STEALTH_FDI = ScenarioConfig(
     name="injected_temperature_adaptive_stealth_fdi",
     seed=1345,
