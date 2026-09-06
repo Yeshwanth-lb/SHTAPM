@@ -380,6 +380,66 @@ SCENARIO_INJECTED_TEMPERATURE_DRIFT = ScenarioConfig(
     **_EVALUATION_DEGRADATION_PROFILE,
 )
 
+# ---- Seed-repetition variants of SCENARIO_INJECTED_TEMPERATURE_DRIFT (U06
+# scoping) -- third scenario shape covered by this pattern, after
+# SCENARIO_CLEAN_DEGRADATION's and SCENARIO_INJECTED_CURRENT_SPIKE's own
+# 5-seed sets. Four additional scenarios reusing
+# SCENARIO_INJECTED_TEMPERATURE_DRIFT's own profile EXACTLY (length, health
+# range, degradation rate, vibration config, and its Drift injection
+# unchanged) -- only ``seed`` differs. Per the "U06 -- Operational
+# Definitions Proposal"'s own section D (proposed minimum: at least 5
+# distinct seeds per scenario), still only 3 of 9 scenarios now have 5-seed
+# coverage; the remaining 6 injection-type scenarios remain unfinished.
+# Seeds 1354-1357 -- distinct from every existing evaluation-scenario seed
+# (1337-1353), every TRAINING_SCENARIOS seed (2001, 2002), and
+# edge.eval.rl_training.SEED_FIXTURE (1337, a training-run RNG seed,
+# unrelated to any ScenarioConfig). Not added to INJECTION_TYPE_SCENARIOS,
+# EVALUATION_SCENARIO_METADATA, or default_scenarios() -- consumed
+# explicitly by edge.eval.u06_seed_repetition_report_injected_temperature_drift
+# instead, matching the two prior seed-repetition sets' own convention.
+SCENARIO_INJECTED_TEMPERATURE_DRIFT_SEED_1354 = ScenarioConfig(
+    name="injected_temperature_drift_seed_1354",
+    seed=1354,
+    length=40,
+    injections=(Drift(channel="temperature", onset=30, duration=5, rate=0.5),),
+    **_EVALUATION_DEGRADATION_PROFILE,
+)
+
+SCENARIO_INJECTED_TEMPERATURE_DRIFT_SEED_1355 = ScenarioConfig(
+    name="injected_temperature_drift_seed_1355",
+    seed=1355,
+    length=40,
+    injections=(Drift(channel="temperature", onset=30, duration=5, rate=0.5),),
+    **_EVALUATION_DEGRADATION_PROFILE,
+)
+
+SCENARIO_INJECTED_TEMPERATURE_DRIFT_SEED_1356 = ScenarioConfig(
+    name="injected_temperature_drift_seed_1356",
+    seed=1356,
+    length=40,
+    injections=(Drift(channel="temperature", onset=30, duration=5, rate=0.5),),
+    **_EVALUATION_DEGRADATION_PROFILE,
+)
+
+SCENARIO_INJECTED_TEMPERATURE_DRIFT_SEED_1357 = ScenarioConfig(
+    name="injected_temperature_drift_seed_1357",
+    seed=1357,
+    length=40,
+    injections=(Drift(channel="temperature", onset=30, duration=5, rate=0.5),),
+    **_EVALUATION_DEGRADATION_PROFILE,
+)
+
+# All 5 injected_temperature_drift seed variants, including the original --
+# consumed by edge.eval.u06_seed_repetition_report_injected_temperature_drift.
+# Order is fixed and deterministic.
+INJECTED_TEMPERATURE_DRIFT_SEED_REPETITION_SCENARIOS: tuple[ScenarioConfig, ...] = (
+    SCENARIO_INJECTED_TEMPERATURE_DRIFT,
+    SCENARIO_INJECTED_TEMPERATURE_DRIFT_SEED_1354,
+    SCENARIO_INJECTED_TEMPERATURE_DRIFT_SEED_1355,
+    SCENARIO_INJECTED_TEMPERATURE_DRIFT_SEED_1356,
+    SCENARIO_INJECTED_TEMPERATURE_DRIFT_SEED_1357,
+)
+
 SCENARIO_INJECTED_PRESSURE_STUCK_AT = ScenarioConfig(
     name="injected_pressure_stuck_at",
     seed=1340,

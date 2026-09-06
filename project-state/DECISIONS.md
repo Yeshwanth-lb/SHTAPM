@@ -2041,3 +2041,27 @@ An additive, descriptive-only `ScenarioMetadata`/`EVALUATION_SCENARIO_METADATA` 
 - No permanent numeric snapshot from running this report is pasted into this document.
 
 **Not done by this increment:** U06's status in the UNDECIDED list above is unchanged: fully open, zero partial resolution. Broader 5-seed coverage across the remaining 7 scenarios, channel-matched comparison, DQN-policy inclusion, and any human sign-off accepting the Operational Definitions Proposal all remain open, separate questions.
+
+---
+
+## U06 — Seed-Repetition Report (Injected Temperature Drift) Implementation Note (IMPLEMENTATION RECORD, NOT A DECISION)
+**(U06 REMAINS FULLY UNDECIDED/OPEN. This is an implementation record for the third U06 seed-repetition increment — it establishes 5-seed coverage for a third scenario shape (injected_temperature_drift), per the "U06 -- Operational Definitions Proposal" section D's proposed minimum. It defines no new axis, metric, threshold, or verdict, and does not resolve U06.)**
+
+- **Date implemented:** 2026-09-06
+- **Files changed:** `edge/eval/rl_baseline_eval.py` (additive only — 4 new `ScenarioConfig` constants plus one grouping tuple; no existing scenario, function signature, or behavior changed), `edge/eval/u06_seed_repetition_report_injected_temperature_drift.py` (new), `edge/tests/test_u06_seed_repetition_report_injected_temperature_drift.py` (new). No other file modified — `EpisodeRecord`, `TransitionRecord`, `active_injection_labels`, all three existing axis modules, `u06_diagnostic_report.py`, the existing clean-degradation and injected_current_spike seed-repetition modules, `edge/eval/rl_training.py`, `edge/rl/reward.py`, `edge/rl/fallback_gate.py`, `edge/rl/policy.py`, `edge/rl/environment.py`, and every hardware/driver/actuator/relay/GPIO file are untouched.
+
+**What this increment does:**
+- Adds `SCENARIO_INJECTED_TEMPERATURE_DRIFT_SEED_1354/1355/1356/1357` (seeds 1354–1357, none colliding with any existing evaluation-scenario seed 1337–1353 or `TRAINING_SCENARIOS` seed 2001/2002), each reusing `SCENARIO_INJECTED_TEMPERATURE_DRIFT`'s exact profile (length, health range, degradation rate, channel config, and its `Drift` injection unchanged) with only `seed` differing, plus a grouping tuple `INJECTED_TEMPERATURE_DRIFT_SEED_REPETITION_SCENARIOS` (the original plus all four variants — 5 total).
+- Adds a pure function, `build_seed_repetition_report()`, in a new sibling module mirroring the two existing seed-repetition reports' exact structure — running both existing baselines over all 5 seeds and calling all three existing axis summary functions unmodified on each of the resulting 10 `EpisodeRecord`s. No average, pooled rate, min, max, range, or variability statistic across seeds is computed anywhere (confirmed by the same AST-based division/builtin-statistic checks used in both prior increments).
+- **This is now the third of nine scenario shapes with 5-seed coverage.** Includes an optional `main()` printer matching the existing diagnostic-entry convention.
+- **Empirical note (diagnostic, not a claim):** for this scenario and episode length, all 5 seeds produce byte-identical `cumulative_reward`/`final_health`/axis-summary values — the same behavior already observed for both the clean-degradation and injected_current_spike seed sets. This is reported as a diagnostic observation about the current degradation-generator/scenario scale, for transparency only — it is NOT investigated, explained, or resolved by this increment, and must NOT be read as proof that seed variation is impossible, that executions were pooled or shared, or that the policy is accurate or safe. This disclaimer is documented directly in the module's own docstring, not only in this note.
+
+**What this increment explicitly does NOT do:**
+- **Does not complete section D's proposed minimum** — 6 injection-type scenarios (StuckAt, BiasFDI, RampFDI, Replay, ConstantSpoof, AdaptiveStealthFDI) still have only their single, original seed each; broader 5-seed coverage across them remains unfinished.
+- Defines no new U06 axis, comparison, definition, denominator, or metric.
+- Computes no threshold, verdict, or pass/fail judgment, and makes no real-world accuracy, safety, effectiveness, validation, or production-readiness claim anywhere.
+- Does not implement channel matching or DQN-policy evaluation.
+- Does not modify either existing seed-repetition module — all three exist side by side, structurally identical in shape.
+- No permanent numeric snapshot from running this report is pasted into this document.
+
+**Not done by this increment:** U06's status in the UNDECIDED list above is unchanged: fully open, zero partial resolution. Broader 5-seed coverage across the remaining 6 scenarios, channel-matched comparison, DQN-policy inclusion, and any human sign-off accepting the Operational Definitions Proposal all remain open, separate questions.
