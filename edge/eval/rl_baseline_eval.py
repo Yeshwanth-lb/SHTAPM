@@ -658,6 +658,72 @@ SCENARIO_INJECTED_VIBRATION_REPLAY = ScenarioConfig(
     **_EVALUATION_DEGRADATION_PROFILE,
 )
 
+# ---- Seed-repetition variants of SCENARIO_INJECTED_VIBRATION_REPLAY (U06
+# scoping) -- seventh scenario shape covered by this pattern, after
+# SCENARIO_CLEAN_DEGRADATION's, SCENARIO_INJECTED_CURRENT_SPIKE's,
+# SCENARIO_INJECTED_TEMPERATURE_DRIFT's, SCENARIO_INJECTED_PRESSURE_
+# STUCK_AT's, SCENARIO_INJECTED_HUMIDITY_BIAS_FDI's, and SCENARIO_INJECTED_
+# GAS_RAMP_FDI's own 5-seed sets. Four additional scenarios reusing
+# SCENARIO_INJECTED_VIBRATION_REPLAY's own profile EXACTLY (length, health
+# range, degradation rate, vibration config, and its Replay injection
+# unchanged) -- only ``seed`` differs. Per the "U06 -- Operational
+# Definitions Proposal"'s own section D (proposed minimum: at least 5
+# distinct seeds per scenario), still only 7 of 9 scenarios now have
+# 5-seed coverage; the remaining 2 injection-type scenarios remain
+# unfinished. Seeds 1370-1373 -- distinct from every existing evaluation-
+# scenario seed (1337-1369), every TRAINING_SCENARIOS seed (2001, 2002),
+# and edge.eval.rl_training.SEED_FIXTURE (1337, a training-run RNG seed,
+# unrelated to any ScenarioConfig). Not added to INJECTION_TYPE_SCENARIOS,
+# EVALUATION_SCENARIO_METADATA, or default_scenarios() -- consumed
+# explicitly by edge.eval.u06_seed_repetition_report_injected_vibration_replay
+# instead, matching the six prior seed-repetition sets' own convention.
+# ``source_onset=0, duration=5`` still ends at frame 5, at/before
+# ``onset=30``, for every variant below (only ``seed`` differs, so
+# Replay's own validation constraint depends on none of the changed
+# fields and continues to be satisfied unconditionally).
+SCENARIO_INJECTED_VIBRATION_REPLAY_SEED_1370 = ScenarioConfig(
+    name="injected_vibration_replay_seed_1370",
+    seed=1370,
+    length=40,
+    injections=(Replay(channel="vibration", onset=30, duration=5, source_onset=0),),
+    **_EVALUATION_DEGRADATION_PROFILE,
+)
+
+SCENARIO_INJECTED_VIBRATION_REPLAY_SEED_1371 = ScenarioConfig(
+    name="injected_vibration_replay_seed_1371",
+    seed=1371,
+    length=40,
+    injections=(Replay(channel="vibration", onset=30, duration=5, source_onset=0),),
+    **_EVALUATION_DEGRADATION_PROFILE,
+)
+
+SCENARIO_INJECTED_VIBRATION_REPLAY_SEED_1372 = ScenarioConfig(
+    name="injected_vibration_replay_seed_1372",
+    seed=1372,
+    length=40,
+    injections=(Replay(channel="vibration", onset=30, duration=5, source_onset=0),),
+    **_EVALUATION_DEGRADATION_PROFILE,
+)
+
+SCENARIO_INJECTED_VIBRATION_REPLAY_SEED_1373 = ScenarioConfig(
+    name="injected_vibration_replay_seed_1373",
+    seed=1373,
+    length=40,
+    injections=(Replay(channel="vibration", onset=30, duration=5, source_onset=0),),
+    **_EVALUATION_DEGRADATION_PROFILE,
+)
+
+# All 5 injected_vibration_replay seed variants, including the original --
+# consumed by edge.eval.u06_seed_repetition_report_injected_vibration_replay.
+# Order is fixed and deterministic.
+INJECTED_VIBRATION_REPLAY_SEED_REPETITION_SCENARIOS: tuple[ScenarioConfig, ...] = (
+    SCENARIO_INJECTED_VIBRATION_REPLAY,
+    SCENARIO_INJECTED_VIBRATION_REPLAY_SEED_1370,
+    SCENARIO_INJECTED_VIBRATION_REPLAY_SEED_1371,
+    SCENARIO_INJECTED_VIBRATION_REPLAY_SEED_1372,
+    SCENARIO_INJECTED_VIBRATION_REPLAY_SEED_1373,
+)
+
 SCENARIO_INJECTED_CURRENT_CONSTANT_SPOOF = ScenarioConfig(
     name="injected_current_constant_spoof",
     seed=1344,
