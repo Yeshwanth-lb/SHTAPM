@@ -1973,3 +1973,24 @@ An additive, descriptive-only `ScenarioMetadata`/`EVALUATION_SCENARIO_METADATA` 
 - Chooses no acceptable rate, computes no verdict, and makes no claim of validation, safety, accuracy, or production readiness anywhere — confirmed by dedicated tests.
 
 **Not done by this increment:** U06's status in the UNDECIDED list above is unchanged: fully open, zero partial resolution. Channel-matched comparison (for any axis) remains an open question.
+
+---
+
+## U06 — Aggregate Diagnostic Report Implementation Note (IMPLEMENTATION RECORD, NOT A DECISION)
+**(U06 REMAINS FULLY UNDECIDED/OPEN. This is an implementation record for the aggregate diagnostic report increment — it assembles the three already-committed, unmodified axis (i)/(ii)/(iii) summaries across the complete evaluation-scenario taxonomy into one report. It defines no new axis, metric, threshold, or verdict, and does not resolve U06.)**
+
+- **Date implemented:** 2026-09-06
+- **Files changed:** `edge/eval/u06_diagnostic_report.py` (new), `edge/tests/test_u06_diagnostic_report.py` (new). No existing file modified — `EpisodeRecord`, `TransitionRecord`, `active_injection_labels`, all three existing axis modules (`u06_rate_summary.py`, `u06_tracker_agreement.py`, `u06_ground_truth_rate_summary.py`), `edge/eval/rl_baseline_eval.py`, `edge/eval/rl_training.py`, `edge/rl/reward.py`, `edge/rl/fallback_gate.py`, `edge/rl/policy.py`, `edge/rl/environment.py`, and every hardware/driver/actuator/relay/GPIO file are untouched.
+
+**What this increment does:**
+- Adds a pure function, `build_diagnostic_report() -> AggregateDiagnosticReport`, that runs both existing deterministic baselines (`run_baseline_policy_episode`, `run_pure_fallback_episode`) over the complete existing evaluation-scenario taxonomy (`SCENARIO_CLEAN_DEGRADATION` plus all eight `INJECTION_TYPE_SCENARIOS` members) and, for each of the resulting 18 `EpisodeRecord`s, calls all three existing axis summary functions (`summarize_episode_rates`, `summarize_tracker_agreement`, `summarize_ground_truth_rates`) unmodified.
+- The report is **diagnostic, opt-in, scenario-separated, and simulation-only**: `AggregateDiagnosticReport.results` is a flat, ordered tuple of 18 independent `ScenarioBaselineResult`s — no cross-scenario or cross-baseline aggregate rate, average, or pooled statistic is computed anywhere (confirmed by a dedicated test asserting the report dataclass carries no such field, and by an AST-based test confirming the module contains no division operation of its own — every rate comes from the three wrapped functions).
+- Includes an optional `main()` printer matching the existing `python -m edge.eval.<module>` diagnostic-entry convention already used by `rl_baseline_eval.py`/`rl_training.py`.
+
+**What this increment explicitly does NOT do:**
+- Defines no new U06 axis, comparison, definition, denominator, or metric — it only assembles the three already-committed functions' own outputs.
+- Computes no threshold, verdict, or pass/fail judgment, and makes no real-world accuracy, safety, effectiveness, validation, or production-readiness claim anywhere — confirmed by dedicated source-scan tests.
+- Does not implement channel matching or DQN-policy evaluation.
+- No permanent numeric snapshot from running this report is pasted into this document — the report's numbers are diagnostic and reproducible by running the module directly, not a fixed record.
+
+**Not done by this increment:** U06's status in the UNDECIDED list above is unchanged: fully open, zero partial resolution. Channel-matched comparison, DQN-policy inclusion, and any human sign-off accepting the Operational Definitions Proposal all remain open, separate questions.
