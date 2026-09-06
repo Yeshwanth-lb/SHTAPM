@@ -585,6 +585,68 @@ SCENARIO_INJECTED_GAS_RAMP_FDI = ScenarioConfig(
     **_EVALUATION_DEGRADATION_PROFILE,
 )
 
+# ---- Seed-repetition variants of SCENARIO_INJECTED_GAS_RAMP_FDI (U06
+# scoping) -- sixth scenario shape covered by this pattern, after
+# SCENARIO_CLEAN_DEGRADATION's, SCENARIO_INJECTED_CURRENT_SPIKE's,
+# SCENARIO_INJECTED_TEMPERATURE_DRIFT's, SCENARIO_INJECTED_PRESSURE_
+# STUCK_AT's, and SCENARIO_INJECTED_HUMIDITY_BIAS_FDI's own 5-seed sets.
+# Four additional scenarios reusing SCENARIO_INJECTED_GAS_RAMP_FDI's own
+# profile EXACTLY (length, health range, degradation rate, vibration
+# config, and its RampFDI injection unchanged) -- only ``seed`` differs.
+# Per the "U06 -- Operational Definitions Proposal"'s own section D
+# (proposed minimum: at least 5 distinct seeds per scenario), still only
+# 6 of 9 scenarios now have 5-seed coverage; the remaining 3 injection-type
+# scenarios remain unfinished. Seeds 1366-1369 -- distinct from every
+# existing evaluation-scenario seed (1337-1365), every TRAINING_SCENARIOS
+# seed (2001, 2002), and edge.eval.rl_training.SEED_FIXTURE (1337, a
+# training-run RNG seed, unrelated to any ScenarioConfig). Not added to
+# INJECTION_TYPE_SCENARIOS, EVALUATION_SCENARIO_METADATA, or
+# default_scenarios() -- consumed explicitly by edge.eval.
+# u06_seed_repetition_report_injected_gas_ramp_fdi instead, matching the
+# five prior seed-repetition sets' own convention.
+SCENARIO_INJECTED_GAS_RAMP_FDI_SEED_1366 = ScenarioConfig(
+    name="injected_gas_ramp_fdi_seed_1366",
+    seed=1366,
+    length=40,
+    injections=(RampFDI(channel="gas", onset=28, duration=8, slope=0.8),),
+    **_EVALUATION_DEGRADATION_PROFILE,
+)
+
+SCENARIO_INJECTED_GAS_RAMP_FDI_SEED_1367 = ScenarioConfig(
+    name="injected_gas_ramp_fdi_seed_1367",
+    seed=1367,
+    length=40,
+    injections=(RampFDI(channel="gas", onset=28, duration=8, slope=0.8),),
+    **_EVALUATION_DEGRADATION_PROFILE,
+)
+
+SCENARIO_INJECTED_GAS_RAMP_FDI_SEED_1368 = ScenarioConfig(
+    name="injected_gas_ramp_fdi_seed_1368",
+    seed=1368,
+    length=40,
+    injections=(RampFDI(channel="gas", onset=28, duration=8, slope=0.8),),
+    **_EVALUATION_DEGRADATION_PROFILE,
+)
+
+SCENARIO_INJECTED_GAS_RAMP_FDI_SEED_1369 = ScenarioConfig(
+    name="injected_gas_ramp_fdi_seed_1369",
+    seed=1369,
+    length=40,
+    injections=(RampFDI(channel="gas", onset=28, duration=8, slope=0.8),),
+    **_EVALUATION_DEGRADATION_PROFILE,
+)
+
+# All 5 injected_gas_ramp_fdi seed variants, including the original --
+# consumed by edge.eval.u06_seed_repetition_report_injected_gas_ramp_fdi.
+# Order is fixed and deterministic.
+INJECTED_GAS_RAMP_FDI_SEED_REPETITION_SCENARIOS: tuple[ScenarioConfig, ...] = (
+    SCENARIO_INJECTED_GAS_RAMP_FDI,
+    SCENARIO_INJECTED_GAS_RAMP_FDI_SEED_1366,
+    SCENARIO_INJECTED_GAS_RAMP_FDI_SEED_1367,
+    SCENARIO_INJECTED_GAS_RAMP_FDI_SEED_1368,
+    SCENARIO_INJECTED_GAS_RAMP_FDI_SEED_1369,
+)
+
 SCENARIO_INJECTED_VIBRATION_REPLAY = ScenarioConfig(
     name="injected_vibration_replay",
     seed=1343,
