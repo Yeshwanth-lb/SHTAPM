@@ -2402,3 +2402,24 @@ An additive, descriptive-only `ScenarioMetadata`/`EVALUATION_SCENARIO_METADATA` 
 - Computes no threshold, verdict, or pass/fail judgment, and makes no real-world accuracy, safety, effectiveness, validation, or production-readiness claim anywhere.
 
 **Not done by this increment:** U06's status in the UNDECIDED list above is unchanged: fully open, zero partial resolution. `sample_seq` runtime deduplication, DQN-policy inclusion, and confidence-interval/uncertainty reporting all remain open, separate questions, not addressed here.
+
+---
+
+## U06 — Sample_seq Runtime Deduplication Evaluation Implementation Note (IMPLEMENTATION RECORD, NOT A DECISION)
+**(U06 REMAINS FULLY UNDECIDED/OPEN. This is an implementation record closing out the evaluation of `sample_seq` runtime deduplication from the complete U06 roadmap audit above — it records a conclusion already established by the earlier plumbing-and-invariant-proof increment, adds no new code, and does not resolve U06.)**
+
+- **Date recorded:** 2026-09-06
+- **Files changed:** `project-state/DECISIONS.md` only (this note). No code file modified — `edge/eval/u06_tracker_agreement.py`, `edge/eval/u06_channel_agreement.py`, and `edge/eval/rl_baseline_eval.py` are all untouched.
+
+**What this note records:**
+- `sample_seq` runtime deduplication was evaluated (design proposal, then plumbing and an invariant proof, both already committed). The proof established that, across every committed evaluation scenario and both baselines, `transition_consumed=True` transitions already have `sample_seq` values that are unique and strictly increasing within each episode — guaranteed structurally by `edge/rl/environment.py`'s own cursor-advancement logic (`_feed_next_frame` always advances by exactly one frame, or raises rather than repeating one) and its immediate-termination-on-`safe_stop` logic (at most one `transition_consumed=False` transition can ever exist per episode).
+- **Conclusion: runtime deduplication logic is currently unnecessary.** Adding it to `u06_tracker_agreement.py` or `u06_channel_agreement.py` today would be a defensive no-op, changing no currently-reported number.
+- This should be revisited only if that invariant is ever violated by a future environment change (for example, a new action type with different transition semantics) — not on a fixed schedule, and not as standing open work.
+
+**What this note explicitly does NOT do:**
+- Does not implement `sample_seq` runtime deduplication anywhere.
+- Does not modify `edge/eval/u06_tracker_agreement.py` or `edge/eval/u06_channel_agreement.py`.
+- Does not implement DQN-policy evaluation or confidence-interval/uncertainty reporting.
+- Introduces no threshold, verdict, pass/fail gate, reward change, pooling, or real-world claim.
+
+**Not done by this note:** U06's status in the UNDECIDED list above is unchanged: fully open, zero partial resolution. DQN-policy inclusion and confidence-interval/uncertainty reporting remain open, separate questions, each still requiring its own prerequisite methodology decision before any implementation.

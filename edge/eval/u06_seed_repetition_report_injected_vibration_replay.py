@@ -1,8 +1,9 @@
 """U06 seed-repetition report -- injected_vibration_replay scenario shape
--- pure, additive, opt-in. Runs the three existing, independently-
+-- pure, additive, opt-in. Runs the four existing, independently-
 committed U06 axis summaries (axis (i): ``edge.eval.u06_rate_summary``;
 axis (ii): ``edge.eval.u06_tracker_agreement``; axis (iii): ``edge.eval.
-u06_ground_truth_rate_summary``) across the five injected_vibration_replay
+u06_ground_truth_rate_summary``; channel-agreement: ``edge.eval.
+u06_channel_agreement``) across the five injected_vibration_replay
 seed variants in ``edge.eval.rl_baseline_eval.
 INJECTED_VIBRATION_REPLAY_SEED_REPETITION_SCENARIOS`` for both existing
 deterministic baselines, reporting every (seed, baseline) result
@@ -22,7 +23,7 @@ data_source=synthetic · execution_mode=simulation · model_status=diagnostic_un
 
 SCOPE -- ONE SCENARIO SHAPE, FIVE SEEDS, NO NEW METRIC: this module
 defines no new U06 axis, comparison, definition, denominator, or metric.
-It calls exactly the three already-committed, unmodified summary functions
+It calls exactly the four already-committed, unmodified summary functions
 on ``EpisodeRecord``s produced by the two already-committed, unmodified
 baseline runners, over five already-committed ``ScenarioConfig``s that
 share one shape (a single, unchanged vibration-channel ``Replay``
@@ -121,7 +122,7 @@ increment.)
 DIAGNOSTIC ONLY -- NO THRESHOLD, NO VERDICT, NO REAL-WORLD CLAIM: this
 module produces no pass/fail judgment and no accuracy, safety,
 effectiveness, validation, or production-readiness claim of any kind, for
-any seed, baseline, or axis. Every number any of the three wrapped
+any seed, baseline, or axis. Every number any of the four wrapped
 summary functions produces retains whatever disclaimers that function's
 own module docstring already attaches to it -- this module adds no new
 interpretation, only assembles per-seed results into one flat report. U06
@@ -210,7 +211,7 @@ class SeedRepetitionReport:
 
 
 def build_seed_repetition_report() -> SeedRepetitionReport:
-    """Run all three existing U06 axis summaries over every (seed,
+    """Run all four existing U06 axis summaries over every (seed,
     baseline) pair across the five injected_vibration_replay seed
     variants, for both existing deterministic baselines -- see module
     docstring. Pure: reads only already-committed scenario/baseline/
