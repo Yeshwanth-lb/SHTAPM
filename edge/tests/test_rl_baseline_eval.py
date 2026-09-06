@@ -253,6 +253,70 @@ def test_transition_record_carries_substitution_fields():
         assert t.transition_substitution_mode in (None, "hold_last_value")
 
 
+# ---------------------------------------------------------------------------
+# active_injection_labels (U06 scoping) -- descriptive raw injection facts
+# only. NOT a false-isolation/missed-fault verdict, rate, or comparison
+# result. See edge/rl/environment.py's INJECTION-LABEL RETENTION section.
+# ---------------------------------------------------------------------------
+
+
+def test_transition_record_active_injection_labels_field_exists_and_defaults_addable():
+    """Existing behavior regression guard: the new field must be present
+    and additive -- every other TransitionRecord field is unaffected."""
+    record = run_baseline_policy_episode(SCENARIO)
+    for t in record.transitions:
+        assert isinstance(t.active_injection_labels, tuple)
+
+
+def test_clean_scenario_has_no_active_injection_labels():
+    record = run_baseline_policy_episode(SCENARIO_CLEAN_DEGRADATION)
+    assert all(t.active_injection_labels == () for t in record.transitions)
+
+
+def test_injected_scenario_reports_active_injection_labels_during_its_window():
+    record = run_baseline_policy_episode(SCENARIO_INJECTED_CURRENT_SPIKE)
+    labeled_steps = [t for t in record.transitions if t.active_injection_labels]
+    assert len(labeled_steps) > 0
+    for t in labeled_steps:
+        assert t.active_injection_labels == ("spike",)
+
+
+def test_active_injection_labels_are_purely_descriptive_strings():
+    record = run_baseline_policy_episode(SCENARIO_INJECTED_CURRENT_SPIKE)
+    for t in record.transitions:
+        for label in t.active_injection_labels:
+            assert isinstance(label, str)
+
+
+def test_existing_transition_record_fields_unchanged_by_new_field():
+    """Regression guard: adding active_injection_labels must not change any
+    other TransitionRecord field's value for the existing scenarios."""
+    record = run_baseline_policy_episode(SCENARIO)
+    for t in record.transitions:
+        assert isinstance(t.requested_action, str | None)
+        assert isinstance(t.approved_action, str)
+        assert isinstance(t.fallback_used, bool)
+        assert isinstance(t.safety_status, str)
+        assert isinstance(t.reward_components, dict)
+
+
+def test_run_episode_makes_no_false_isolation_or_missed_fault_claim():
+    """No field, docstring, or test may compute or claim a false-isolation
+    rate, missed-fault rate, threshold, or verdict from active_injection_labels."""
+    import edge.eval.rl_baseline_eval as module
+
+    source = inspect.getsource(module)
+    forbidden = (
+        "false_isolation_rate",
+        "missed_fault_rate",
+        "false-isolation rate is",
+        "missed-fault rate is",
+    )
+    lowered = source.lower()
+    for phrase in forbidden:
+        assert phrase not in lowered
+
+
 def test_no_substitution_occurs_on_clean_untracked_data():
     """Neither baseline should have anything to substitute on this
     scenario -- no injections, no forced tracking."""

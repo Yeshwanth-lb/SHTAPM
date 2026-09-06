@@ -107,11 +107,22 @@ own still-fully-open status in ``DECISIONS.md``. KNOWN, INTENTIONAL GAPS
 channel with at most one fault/attack -- no simultaneous multi-channel or
 multi-fault scenario exists; no scenario besides ``SCENARIO_CLEAN_
 DEGRADATION`` covers a degradation profile other than the one shared shape
-reused throughout this taxonomy; ``InjectionResult.labels`` (the
-per-frame ground truth ``Injection.apply()`` already computes) is still
-discarded by ``edge.rl.environment.SHTAPMSimulationEnvironment.__init__``
-(``frames = injection.apply(frames).frames``) -- unchanged by this
-increment.
+reused throughout this taxonomy.
+
+INJECTION-LABEL RETENTION (U06 scoping, follow-up increment -- see
+``edge.rl.environment``'s own INJECTION-LABEL RETENTION docstring section):
+``edge.rl.environment.SHTAPMSimulationEnvironment`` now retains each
+injection's ``InjectionResult.labels`` (previously discarded) and exposes
+each step's ``sample_seq`` in ``EnvironmentStepResult.info``. This module's
+``TransitionRecord`` gains one new, defaulted, purely descriptive field,
+``active_injection_labels`` (a tuple of raw ``injection_type`` name strings
+active at that step's ``sample_seq``, e.g. ``("spike",)``) -- populated in
+``_run_episode`` from ``result.info["sample_seq"]`` joined against the
+environment's own retained labels. This is NOT a false-isolation or
+missed-fault verdict, NOT a rate, and NOT a comparison against
+``safety_status``/``requested_action``/etc. -- no such comparison is
+implemented anywhere in this module. U06 remains fully open (see
+``DECISIONS.md``).
 """
 
 from __future__ import annotations
@@ -476,6 +487,12 @@ class TransitionRecord:
     safe_stop_terminated_without_transition: bool
     transition_substitution_mode: str | None
     substituted_channels: tuple[str, ...]
+    # Descriptive, raw injection-type facts only (e.g. "spike") active at this
+    # step's sample_seq -- NOT a false-isolation/missed-fault verdict, NOT a
+    # rate, NOT a comparison result. See edge/rl/environment.py's own
+    # INJECTION-LABEL RETENTION docstring section (U06 scoping). Defaulted so
+    # every existing TransitionRecord construction call site is unaffected.
+    active_injection_labels: tuple[str, ...] = ()
     execution_mode: str = EXECUTION_MODE
     data_source: str = DATA_SOURCE
     model_status: str = MODEL_STATUS
@@ -625,6 +642,15 @@ def _run_episode(
             policy_validated=policy_validated,
             confidence=confidence,
         )
+        # Descriptive-only, raw injection-ground-truth facts for this step's
+        # sample_seq (result.info["sample_seq"] -- see edge/rl/environment.py's
+        # INJECTION-LABEL RETENTION docstring section, U06 scoping). NOT a
+        # false-isolation/missed-fault verdict, rate, or comparison result.
+        sample_seq = result.info["sample_seq"]
+        active_labels = (
+            env._labels_by_sample_seq.get(sample_seq, ()) if sample_seq is not None else ()
+        )
+        active_injection_labels = tuple(label.injection_type.value for label in active_labels)
         transitions.append(
             TransitionRecord(
                 episode_index=0,
@@ -646,6 +672,7 @@ def _run_episode(
                 ),
                 transition_substitution_mode=result.info["transition_substitution_mode"],
                 substituted_channels=tuple(result.info["substituted_channels"]),
+                active_injection_labels=active_injection_labels,
             )
         )
         state = result.state

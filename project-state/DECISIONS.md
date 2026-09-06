@@ -1886,3 +1886,24 @@ An additive, descriptive-only `ScenarioMetadata`/`EVALUATION_SCENARIO_METADATA` 
 - No ground-truth comparison, rate calculation, reward-weight selection, normalization, gate change, policy change, or DQN change was made.
 
 **Not done by this increment:** no false-isolation or missed-critical-fault rate is computed or claimed; no numeric threshold is chosen; no claim of real-world, validated, safe, accurate, optimal, or production-ready behavior is made for any scenario. U06's status in the UNDECIDED list above is unchanged: fully open, zero partial resolution.
+
+---
+
+## U06 — Injection-Label Retention Implementation Note (IMPLEMENTATION RECORD, NOT A DECISION)
+**(U06 REMAINS FULLY UNDECIDED/OPEN. This is an implementation record for the smallest approved label-retention increment scoped in the "U06 scenario-taxonomy implementation plan" review above — it documents what was added, not a resolution of false-isolation/missed-fault definitions, rates, comparisons, or reward weights.)**
+
+- **Date implemented:** 2026-09-06
+- **Files changed:** `edge/rl/environment.py`, `edge/eval/rl_baseline_eval.py`, `edge/tests/test_rl_environment.py`, `edge/tests/test_rl_baseline_eval.py`. No reward, fallback-gate, policy, DQN, or hardware/actuation file changed.
+
+**What this increment does:**
+- `SHTAPMSimulationEnvironment.__init__` now retains each injection's `InjectionResult.labels` (previously discarded every loop iteration) into `self._labels_by_sample_seq: dict[int, tuple[Label, ...]]`, keyed by `sample_seq`, containing only `active=True` entries, with multiple simultaneous injections on different channels both retained (never overwritten) as separate tuple entries at the same key.
+- `step()` now exposes the current frame's `sample_seq` in `EnvironmentStepResult.info["sample_seq"]`, sourced from the same `self._latest_raw.sample_seq` identity `_build_state()` already uses.
+- `edge/eval/rl_baseline_eval.py`'s `TransitionRecord` gains one new, defaulted field, `active_injection_labels: tuple[str, ...] = ()` — raw `injection_type` name strings (e.g. `("spike",)`) active at that step's `sample_seq`, populated in `_run_episode` by joining `result.info["sample_seq"]` against the environment's retained labels.
+
+**What this increment explicitly does NOT do:**
+- No comparison between `Label.active`/`Label.channel`/`Label.injection_type` and `safety_status`, `requested_action`, `approved_action`, `fallback_used`, `policy_status`, or `reward_components.isolation_appropriateness` is implemented.
+- No false-isolation rate, missed-critical-fault rate, threshold, or verdict is computed, stored, or claimed anywhere.
+- No reward, fallback-gate, policy, transition, or DQN logic changed — `self._frames` generation is byte-identical to before this increment; only the previously-discarded `.labels` output of the same, already-existing `injection.apply()` calls is now also captured.
+- No claim of real-world fault detection, real false-isolation rate, acceptable threshold, policy effectiveness, safety, or production readiness is made.
+
+**Not done by this increment:** U06's status in the UNDECIDED list above is unchanged: fully open, zero partial resolution. This is a data-plumbing increment only, preparing the inputs a future, separate, not-yet-approved comparison increment would need.

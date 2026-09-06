@@ -217,6 +217,30 @@ reconstruction, divergence scoring, any proportional/graded isolation
 effect, any ``reduce_weight`` numeric scaling, any health-recovery model,
 any failure-ETA override, any new ``RLAction`` member, and any per-channel
 RL action targeting.
+
+INJECTION-LABEL RETENTION (U06 scoping -- see ``project-state/DECISIONS.md``'s
+"U06 -- Operational Definitions Proposal" and its label-retention scoping
+report): each injection's own ``edge.injection.injections.InjectionResult.
+labels`` (per-frame synthetic ground truth: which channel/injection-type was
+active at which ``sample_seq``) is now retained into
+``self._labels_by_sample_seq: dict[int, tuple[Label, ...]]`` at construction
+-- keyed by ``sample_seq``, only ``active=True`` entries kept, one tuple per
+key so multiple simultaneous injections (different channels active at the
+same ``sample_seq``) are never overwritten. This is PURELY ADDITIVE: it
+changes no frame generation, transition behavior, reward computation, gate
+decision, or policy logic anywhere -- ``self._frames`` is built exactly as
+before (each injection's ``.frames`` output feeds the next, unchanged);
+only ``.labels`` (previously discarded every loop iteration) is now also
+captured, on the side, from the SAME already-existing ``apply()`` calls.
+``step()`` additionally now exposes the current frame's ``sample_seq`` in
+``EnvironmentStepResult.info["sample_seq"]`` (sourced from
+``self._latest_raw.sample_seq``, the same identity ``_build_state()``
+already uses to index ``self._health``) -- this is the join key a FUTURE,
+NOT-YET-IMPLEMENTED increment would need to compare labels against
+``gate_decision.safety_status``/``requested_action``/etc. NOTHING in this
+increment performs that comparison, computes a rate, chooses a threshold,
+or changes reward/gate/policy/DQN behavior -- U06 remains fully open (see
+``DECISIONS.md``).
 """
 
 from __future__ import annotations
@@ -230,7 +254,7 @@ from app.schemas.contracts import CHANNELS, RLAction, TelemetryMessage
 
 from edge.anomaly.pipeline import P2Pipeline, WindowOutcome
 from edge.anomaly.preprocess import Preprocessor
-from edge.injection.injections import Injection
+from edge.injection.injections import Injection, Label
 from edge.models.degradation_generator import SyntheticDegradationGenerator
 from edge.pipeline.isolation_tracker import IsolationFallbackTracker
 from edge.pipeline.monitor import LiveP2Monitor, RawChannelValues
@@ -280,9 +304,19 @@ class SHTAPMSimulationEnvironment:
     ) -> None:
         trajectory = generator.generate(timestamps)
         frames = list(trajectory.frames)
+        labels_by_sample_seq: dict[int, tuple[Label, ...]] = {}
         for injection in injections:
-            frames = injection.apply(frames).frames
+            result = injection.apply(frames)
+            frames = result.frames
+            for label in result.labels:
+                if not label.active:
+                    continue
+                labels_by_sample_seq[label.sample_seq] = (
+                    *labels_by_sample_seq.get(label.sample_seq, ()),
+                    label,
+                )
         self._frames = frames
+        self._labels_by_sample_seq = labels_by_sample_seq
         self._health = trajectory.health  # ground truth is unaffected by injections (see docstring)
 
         fit_buffer_size = preprocessor.window_size + (fit_window_count - 1) * preprocessor.step
@@ -464,6 +498,7 @@ class SHTAPMSimulationEnvironment:
             "execution_mode": EXECUTION_MODE,
             "data_source": DATA_SOURCE,
             "model_status": MODEL_STATUS,
+            "sample_seq": self._latest_raw.sample_seq if self._latest_raw is not None else None,
             "requested_action": requested_value,
             "approved_action": gate_decision.approved_action.value,
             "fallback_used": gate_decision.fallback_used,

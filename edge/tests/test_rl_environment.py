@@ -457,6 +457,90 @@ def test_injections_are_layered_onto_the_generated_trajectory():
 
 
 # ---------------------------------------------------------------------------
+# Injection-label retention (U06 scoping) -- NOT a false-isolation/missed-
+# fault comparison, NOT a rate, NOT a verdict. See module docstring's
+# INJECTION-LABEL RETENTION section.
+# ---------------------------------------------------------------------------
+
+
+def test_injected_scenario_retains_active_labels():
+    spike = Spike(channel="current", onset=5, duration=3, amplitude=100.0)
+    env = _environment(injections=[spike])
+    assert len(env._labels_by_sample_seq) > 0
+
+
+def test_clean_scenario_retains_no_active_labels():
+    env = _environment()  # no injections
+    assert env._labels_by_sample_seq == {}
+
+
+def test_labels_align_with_the_correct_sample_seq_values():
+    spike = Spike(channel="current", onset=5, duration=3, amplitude=100.0)
+    env = _environment(injections=[spike])
+    expected_sample_seqs = {env._frames[i].sample_seq for i in range(5, 8)}
+    assert set(env._labels_by_sample_seq.keys()) == expected_sample_seqs
+    for labels in env._labels_by_sample_seq.values():
+        assert all(label.active for label in labels)
+        assert all(label.channel == "current" for label in labels)
+
+
+def test_injection_window_follows_onset_and_duration_exactly():
+    onset, duration = 5, 3
+    spike = Spike(channel="current", onset=onset, duration=duration, amplitude=100.0)
+    env = _environment(injections=[spike])
+    active_indices = {
+        i
+        for i in range(len(env._frames))
+        if env._frames[i].sample_seq in env._labels_by_sample_seq
+    }
+    expected_indices = set(range(onset, onset + duration))
+    assert active_indices == expected_indices
+
+
+def test_multi_injection_environment_retains_overlapping_labels_from_different_channels():
+    """Test-only multi-injection scenario (no committed scenario uses more
+    than one injection) -- confirms labels from two simultaneous injections
+    on different channels are both retained, not overwritten."""
+    from edge.injection.injections import Drift
+
+    spike = Spike(channel="current", onset=5, duration=3, amplitude=100.0)
+    drift = Drift(channel="temperature", onset=5, duration=3, rate=0.5)
+    env = _environment(injections=[spike, drift])
+
+    overlapping_sample_seq = env._frames[5].sample_seq
+    labels_here = env._labels_by_sample_seq[overlapping_sample_seq]
+    channels_here = {label.channel for label in labels_here}
+    assert channels_here == {"current", "temperature"}
+    assert len(labels_here) == 2
+
+
+def test_sample_seq_is_exposed_in_step_result_info():
+    env = _environment()
+    env.reset()
+    result = env.step(RLAction.continue_)
+    assert result.info["sample_seq"] is not None
+    assert isinstance(result.info["sample_seq"], int)
+
+
+def test_label_retention_does_not_change_frame_generation_or_step_result_shape():
+    """Regression guard: retaining labels must not alter self._frames or any
+    existing EnvironmentStepResult field's meaning."""
+    spike = Spike(channel="current", onset=5, duration=3, amplitude=100.0)
+    env_with = _environment(injections=[spike])
+    env_without_labels_access = _environment(injections=[spike])
+
+    assert [f.sensors.current for f in env_with._frames] == [
+        f.sensors.current for f in env_without_labels_access._frames
+    ]
+
+    env_with.reset()
+    result = env_with.step(RLAction.continue_)
+    assert isinstance(result, EnvironmentStepResult)
+    assert isinstance(result.reward, RewardResult)
+    assert isinstance(result.gate_decision, GateDecision)
+
+
+# ---------------------------------------------------------------------------
 # Action-dependent transition: safe-stop phantom-frame fix
 # ---------------------------------------------------------------------------
 
