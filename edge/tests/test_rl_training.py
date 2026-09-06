@@ -302,6 +302,29 @@ def test_evaluation_scenarios_reuse_the_existing_baseline_scenarios():
     assert SCENARIO_INJECTED_CURRENT_SPIKE in EVALUATION_SCENARIOS
 
 
+def test_training_scenarios_are_unchanged_by_the_taxonomy_expansion():
+    """Regression guard: TRAINING_SCENARIOS must stay exactly training_a/
+    training_b, untouched by the U06 scenario-taxonomy increment."""
+    assert [s.name for s in TRAINING_SCENARIOS] == ["training_a", "training_b"]
+    assert [s.seed for s in TRAINING_SCENARIOS] == [2001, 2002]
+
+
+def test_evaluation_scenarios_now_cover_every_injection_type():
+    from edge.injection.injections import InjectionType
+
+    injected = [s for s in EVALUATION_SCENARIOS if s.injections]
+    covered = {s.injections[0].injection_type for s in injected}
+    assert covered == set(InjectionType)
+    assert len(EVALUATION_SCENARIOS) == 9  # 1 clean + 8 injection-type scenarios
+
+
+def test_evaluation_scenario_names_and_seeds_are_all_unique():
+    names = [s.name for s in EVALUATION_SCENARIOS]
+    seeds = [s.seed for s in EVALUATION_SCENARIOS]
+    assert len(names) == len(set(names))
+    assert len(seeds) == len(set(seeds))
+
+
 # ---------------------------------------------------------------------------
 # evaluate_greedy(): comparison with baselines
 # ---------------------------------------------------------------------------

@@ -5,12 +5,16 @@ exists here -- see the module's own docstring.
 
 from __future__ import annotations
 
-from app.schemas.contracts import RLAction
+import inspect
+
+from app.schemas.contracts import CHANNELS, RLAction
 
 from edge.eval.rl_baseline_eval import (
     ACTION_DEPENDENT_COMPARISON_CAVEAT,
     DATA_SOURCE,
+    EVALUATION_SCENARIO_METADATA,
     EXECUTION_MODE,
+    INJECTION_TYPE_SCENARIOS,
     MODEL_STATUS,
     SCENARIO_CLEAN_DEGRADATION,
     SCENARIO_INJECTED_CURRENT_SPIKE,
@@ -22,6 +26,7 @@ from edge.eval.rl_baseline_eval import (
     run_baseline_policy_episode,
     run_pure_fallback_episode,
 )
+from edge.injection.injections import InjectionType
 from edge.rl.reward import DECISION_ONLY_WEIGHTS_FIXTURE, SIMULATION_REWARD_WEIGHTS_FIXTURE
 
 SCENARIO = SCENARIO_CLEAN_DEGRADATION
@@ -350,6 +355,164 @@ def test_no_prognosis_failure_eta_is_always_none():
     every recorded failure_eta must honestly be None, never fabricated."""
     record = run_baseline_policy_episode(SCENARIO)
     assert record.final_failure_eta is None
+
+
+# ---------------------------------------------------------------------------
+# U06 scenario-taxonomy coverage (see module docstring's INJECTION-TYPE
+# SCENARIO TAXONOMY section). None of these tests claim improved accuracy,
+# safety, false-isolation performance, or U06 resolution -- they only check
+# that the scenario/metadata definitions are internally consistent.
+# ---------------------------------------------------------------------------
+
+_ALL_EVALUATION_SCENARIOS = (SCENARIO_CLEAN_DEGRADATION, *INJECTION_TYPE_SCENARIOS)
+
+
+def test_every_injection_type_is_represented_by_a_scenario():
+    covered = {
+        scenario.injections[0].injection_type
+        for scenario in INJECTION_TYPE_SCENARIOS
+        if scenario.injections
+    }
+    assert covered == set(InjectionType)
+
+
+def test_evaluation_scenario_names_are_unique():
+    names = [s.name for s in _ALL_EVALUATION_SCENARIOS]
+    assert len(names) == len(set(names))
+
+
+def test_evaluation_scenario_seeds_are_unique():
+    seeds = [s.seed for s in _ALL_EVALUATION_SCENARIOS]
+    assert len(seeds) == len(set(seeds))
+
+
+def test_every_injected_scenario_has_a_valid_bounded_injection_window():
+    for scenario in INJECTION_TYPE_SCENARIOS:
+        assert len(scenario.injections) == 1, "exactly one injection per scenario (single-fault)"
+        injection = scenario.injections[0]
+        assert injection.channel in CHANNELS
+        assert injection.onset >= 0
+        assert injection.duration >= 1
+        assert injection.onset + injection.duration <= scenario.length
+
+
+def test_no_scenario_injects_more_than_one_channel_simultaneously():
+    """Documents the intentional multi-channel/multi-fault coverage gap
+    (see module docstring) rather than assuming it away."""
+    for scenario in _ALL_EVALUATION_SCENARIOS:
+        channels = {injection.channel for injection in scenario.injections}
+        assert len(channels) <= 1
+
+
+def test_replay_scenario_satisfies_its_own_constructor_constraints():
+    replay_scenarios = [
+        s
+        for s in INJECTION_TYPE_SCENARIOS
+        if s.injections and s.injections[0].injection_type is InjectionType.REPLAY
+    ]
+    assert len(replay_scenarios) == 1
+    injection = replay_scenarios[0].injections[0]
+    assert injection.source_onset >= 0
+    assert injection.source_onset + injection.duration <= injection.onset
+    assert injection.source_onset + injection.duration <= replay_scenarios[0].length
+
+
+def test_clean_scenario_has_no_injections():
+    assert SCENARIO_CLEAN_DEGRADATION.injections == ()
+
+
+def test_existing_scenarios_remain_behaviorally_unchanged():
+    """Regression guard: SCENARIO_CLEAN_DEGRADATION and
+    SCENARIO_INJECTED_CURRENT_SPIKE must keep their exact original field
+    values -- this increment is additive-only, not a rewrite."""
+    assert SCENARIO_CLEAN_DEGRADATION.seed == 1337
+    assert SCENARIO_CLEAN_DEGRADATION.length == 40
+    assert SCENARIO_CLEAN_DEGRADATION.start_health == 1.0
+    assert SCENARIO_CLEAN_DEGRADATION.end_health == 0.2
+    assert SCENARIO_CLEAN_DEGRADATION.degradation_rate == 1.0
+    assert SCENARIO_CLEAN_DEGRADATION.injections == ()
+
+    assert SCENARIO_INJECTED_CURRENT_SPIKE.seed == 1338
+    assert SCENARIO_INJECTED_CURRENT_SPIKE.length == 40
+    spike = SCENARIO_INJECTED_CURRENT_SPIKE.injections[0]
+    assert spike.channel == "current"
+    assert spike.onset == 32
+    assert spike.duration == 5
+    assert spike.amplitude == 50.0
+
+    assert default_scenarios() == (SCENARIO_CLEAN_DEGRADATION, SCENARIO_INJECTED_CURRENT_SPIKE)
+
+
+def test_new_injection_scenarios_produce_identical_episodes_across_runs():
+    """Fixed seeds must reproduce the same scenario/episode results --
+    same determinism convention as the pre-existing scenarios' own tests."""
+    for scenario in INJECTION_TYPE_SCENARIOS:
+        first = run_baseline_policy_episode(scenario)
+        second = run_baseline_policy_episode(scenario)
+        assert first.cumulative_reward == second.cumulative_reward
+        assert first.step_count == second.step_count
+        assert first.approved_action_histogram == second.approved_action_histogram
+
+
+def test_evaluation_scenario_metadata_covers_every_evaluation_scenario():
+    for scenario in _ALL_EVALUATION_SCENARIOS:
+        assert scenario.name in EVALUATION_SCENARIO_METADATA
+
+
+def test_evaluation_scenario_metadata_is_explicit_and_labeled_held_out_evaluation():
+    for scenario in _ALL_EVALUATION_SCENARIOS:
+        metadata = EVALUATION_SCENARIO_METADATA[scenario.name]
+        assert metadata.name == scenario.name
+        assert metadata.purpose
+        assert metadata.classification in ("clean", "fault", "attack")
+        assert metadata.scenario_set == "evaluation"
+        assert metadata.known_limitations
+
+
+def test_evaluation_scenario_metadata_injection_fields_match_the_scenario():
+    for scenario in INJECTION_TYPE_SCENARIOS:
+        metadata = EVALUATION_SCENARIO_METADATA[scenario.name]
+        injection = scenario.injections[0]
+        assert metadata.injection_type is injection.injection_type
+        assert metadata.affected_channel == injection.channel
+        assert metadata.onset == injection.onset
+        assert metadata.duration == injection.duration
+        expected_window = (injection.onset, injection.onset + injection.duration)
+        assert metadata.expected_active_window == expected_window
+
+
+def test_clean_scenario_metadata_has_no_injection_fields():
+    metadata = EVALUATION_SCENARIO_METADATA[SCENARIO_CLEAN_DEGRADATION.name]
+    assert metadata.classification == "clean"
+    assert metadata.injection_type is None
+    assert metadata.affected_channel is None
+    assert metadata.onset is None
+    assert metadata.duration is None
+    assert metadata.expected_active_window is None
+
+
+def test_metadata_and_scenario_definitions_make_no_forbidden_claims():
+    """No test, docstring, or metadata field may claim improved accuracy,
+    safety, false-isolation performance, validation, or U06 resolution."""
+    import edge.eval.rl_baseline_eval as module
+
+    source = inspect.getsource(module)
+    forbidden = (
+        "u06 is resolved",
+        "u06 is partially resolved",
+        "resolves u06",
+        "false-isolation rate is acceptable",
+        "acceptable false-isolation rate",
+        "improves false isolation",
+        "improves accuracy",
+        "is safer than",
+        "is more accurate",
+        "this scenario is validated",
+        "these scenarios are validated",
+    )
+    lowered = source.lower()
+    for phrase in forbidden:
+        assert phrase not in lowered
 
 
 # ---------------------------------------------------------------------------

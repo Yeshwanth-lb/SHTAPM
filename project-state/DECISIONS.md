@@ -1847,3 +1847,42 @@ as decided (not any rate — the definitions):
 - U06's status in the UNDECIDED list above is unchanged: fully open, zero
   partial resolution. This subsection is a proposal for one future decision
   item, not that decision.
+
+---
+
+## U06 — Scenario-Taxonomy Implementation Note (IMPLEMENTATION RECORD, NOT A DECISION)
+**(U06 REMAINS FULLY UNDECIDED/OPEN. This is an implementation record for
+the smallest approved scenario-taxonomy increment scoped in the two U06
+proposal sections above — it documents what was added, not a resolution of
+false-isolation/missed-fault definitions, rates, or reward weights.)**
+
+- **Date implemented:** 2026-09-06
+- **Files changed:** `edge/eval/rl_baseline_eval.py`, `edge/eval/rl_training.py`,
+  `edge/tests/test_rl_baseline_eval.py`, `edge/tests/test_rl_training.py`. No
+  reward, environment, fallback-gate, policy, or DQN file changed.
+
+**Scenario inventory (final, this increment):**
+
+| Scenario | Seed | Channel | Injection type | Onset | Duration | Parameters | Active window |
+|---|---|---|---|---|---|---|---|
+| `clean_degradation` (unchanged) | 1337 | — | none | — | — | — | — |
+| `injected_current_spike` (unchanged) | 1338 | current | Spike | 32 | 5 | amplitude=50.0 | [32, 37) |
+| `injected_temperature_drift` | 1339 | temperature | Drift | 30 | 5 | rate=0.5 | [30, 35) |
+| `injected_pressure_stuck_at` | 1340 | pressure | StuckAt | 30 | 5 | (default held_value) | [30, 35) |
+| `injected_humidity_bias_fdi` | 1341 | humidity | BiasFDI | 30 | 5 | bias=5.0 | [30, 35) |
+| `injected_gas_ramp_fdi` | 1342 | gas | RampFDI | 28 | 8 | slope=0.8 | [28, 36) |
+| `injected_vibration_replay` | 1343 | vibration | Replay | 30 | 5 | source_onset=0 | [30, 35) |
+| `injected_current_constant_spoof` | 1344 | current | ConstantSpoof | 30 | 5 | value=0.0 | [30, 35) |
+| `injected_temperature_adaptive_stealth_fdi` | 1345 | temperature | AdaptiveStealthFDI | 25 | 10 | rate=0.5, residual_cap=2.0 | [25, 35) |
+
+All nine scenarios share the same reused degradation profile (`start_health=1.0`, `end_health=0.2`, `degradation_rate=1.0`, `vibration` 0.03→1.2, `length=40`) except `injected_current_spike`/`clean_degradation`'s own pre-existing identical shape — unchanged from before this increment. All nine are in `EVALUATION_SCENARIOS`; `TRAINING_SCENARIOS` (`training_a` seed 2001, `training_b` seed 2002) is untouched. No tuning scenario set was introduced.
+
+An additive, descriptive-only `ScenarioMetadata`/`EVALUATION_SCENARIO_METADATA` structure was added in `edge/eval/rl_baseline_eval.py`, recording each scenario's purpose, clean/fault/attack classification, injection type, channel, onset/duration/parameters, expected active window, scenario set, and known limitations — this changes no existing `ScenarioConfig` field, constructor, or function signature, and is not consumed by any training/evaluation/reward code path.
+
+**Intentional, documented gaps (not addressed by this increment):**
+- Every scenario injects at most one channel with at most one fault/attack — no simultaneous multi-channel or multi-fault scenario exists.
+- No scenario besides `clean_degradation` covers a degradation profile other than the one shared shape reused throughout this taxonomy.
+- `InjectionResult.labels` (the per-frame ground truth `Injection.apply()` already computes) is still discarded by `SHTAPMSimulationEnvironment.__init__` — not threaded through by this increment, per this increment's own approved scope.
+- No ground-truth comparison, rate calculation, reward-weight selection, normalization, gate change, policy change, or DQN change was made.
+
+**Not done by this increment:** no false-isolation or missed-critical-fault rate is computed or claimed; no numeric threshold is chosen; no claim of real-world, validated, safe, accurate, optimal, or production-ready behavior is made for any scenario. U06's status in the UNDECIDED list above is unchanged: fully open, zero partial resolution.

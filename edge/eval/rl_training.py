@@ -108,7 +108,14 @@ from edge.anomaly.preprocess import Preprocessor
 from edge.eval.rl_baseline_eval import (
     FIT_WINDOW_COUNT_FIXTURE,
     SCENARIO_CLEAN_DEGRADATION,
+    SCENARIO_INJECTED_CURRENT_CONSTANT_SPOOF,
     SCENARIO_INJECTED_CURRENT_SPIKE,
+    SCENARIO_INJECTED_GAS_RAMP_FDI,
+    SCENARIO_INJECTED_HUMIDITY_BIAS_FDI,
+    SCENARIO_INJECTED_PRESSURE_STUCK_AT,
+    SCENARIO_INJECTED_TEMPERATURE_ADAPTIVE_STEALTH_FDI,
+    SCENARIO_INJECTED_TEMPERATURE_DRIFT,
+    SCENARIO_INJECTED_VIBRATION_REPLAY,
     STEP_FIXTURE,
     WINDOW_SIZE_FIXTURE,
     ScenarioConfig,
@@ -182,9 +189,25 @@ TRAINING_SCENARIOS: tuple[ScenarioConfig, ...] = (
     ),
 )
 
+# Extended per U06 scoping (see edge/eval/rl_baseline_eval.py's own
+# INJECTION-TYPE SCENARIO TAXONOMY docstring section and
+# project-state/DECISIONS.md's "U06 -- Operational Definitions Proposal"):
+# one held-out evaluation scenario per edge.injection.injections.
+# InjectionType member, all still disjoint in name/seed from
+# TRAINING_SCENARIOS above. No scenario here is added to TRAINING_SCENARIOS
+# or to any tuning set (none exists) -- see that section for the full list
+# of intentional gaps (single-channel/single-fault only, no cross-check
+# against InjectionResult.labels).
 EVALUATION_SCENARIOS: tuple[ScenarioConfig, ...] = (
     SCENARIO_CLEAN_DEGRADATION,
     SCENARIO_INJECTED_CURRENT_SPIKE,
+    SCENARIO_INJECTED_TEMPERATURE_DRIFT,
+    SCENARIO_INJECTED_PRESSURE_STUCK_AT,
+    SCENARIO_INJECTED_HUMIDITY_BIAS_FDI,
+    SCENARIO_INJECTED_GAS_RAMP_FDI,
+    SCENARIO_INJECTED_VIBRATION_REPLAY,
+    SCENARIO_INJECTED_CURRENT_CONSTANT_SPOOF,
+    SCENARIO_INJECTED_TEMPERATURE_ADAPTIVE_STEALTH_FDI,
 )
 
 

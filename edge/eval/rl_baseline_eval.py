@@ -88,6 +88,30 @@ episodes may now reflect both decision quality and the resulting
 simulated observation path, not decision quality alone, since two
 baselines can diverge into different observed telemetry once their
 approved actions differ.
+
+INJECTION-TYPE SCENARIO TAXONOMY (U06 scoping -- see ``project-state/
+DECISIONS.md``'s "U06 -- Operational Definitions Proposal" and its
+scenario-taxonomy implementation plan): one held-out evaluation scenario
+per ``edge.injection.injections.InjectionType`` member now exists below
+(``SCENARIO_INJECTED_CURRENT_SPIKE`` plus seven new siblings), each
+single-channel, reusing the same degradation profile
+``SCENARIO_CLEAN_DEGRADATION`` already uses. ``EVALUATION_SCENARIO_
+METADATA`` (below) is a purely descriptive, additive lookup -- it changes
+no existing ``ScenarioConfig`` field, no constructor, and no function
+signature; it exists only so a reader/future harness does not need to
+reconstruct each scenario's classification and injection parameters from
+``scenario.injections[0].__dict__`` by hand. NONE of this wires any
+ground-truth comparison, rate calculation, or reward change -- see U06's
+own still-fully-open status in ``DECISIONS.md``. KNOWN, INTENTIONAL GAPS
+(not addressed by this increment): every scenario here injects at most one
+channel with at most one fault/attack -- no simultaneous multi-channel or
+multi-fault scenario exists; no scenario besides ``SCENARIO_CLEAN_
+DEGRADATION`` covers a degradation profile other than the one shared shape
+reused throughout this taxonomy; ``InjectionResult.labels`` (the
+per-frame ground truth ``Injection.apply()`` already computes) is still
+discarded by ``edge.rl.environment.SHTAPMSimulationEnvironment.__init__``
+(``frames = injection.apply(frames).frames``) -- unchanged by this
+increment.
 """
 
 from __future__ import annotations
@@ -104,7 +128,18 @@ from edge.anomaly.physics_rule import TrendSignPhysicsRule
 from edge.anomaly.pipeline import P2Pipeline
 from edge.anomaly.policy import SeverityThresholdFlagPolicy
 from edge.anomaly.preprocess import Preprocessor
-from edge.injection.injections import Injection, Spike
+from edge.injection.injections import (
+    AdaptiveStealthFDI,
+    BiasFDI,
+    ConstantSpoof,
+    Drift,
+    Injection,
+    InjectionType,
+    RampFDI,
+    Replay,
+    Spike,
+    StuckAt,
+)
 from edge.models.degradation_generator import (
     ChannelDegradationConfig,
     SyntheticDegradationGenerator,
@@ -170,6 +205,250 @@ SCENARIO_INJECTED_CURRENT_SPIKE = ScenarioConfig(
     channels={"vibration": ChannelDegradationConfig(healthy_value=0.03, degraded_value=1.2)},
     injections=(Spike(channel="current", onset=32, duration=5, amplitude=50.0),),
 )
+
+# ---- One held-out evaluation scenario per InjectionType (U06 scoping) -----
+# Each reuses SCENARIO_CLEAN_DEGRADATION's own degradation profile (length,
+# health range, degradation rate, vibration config) unchanged, varying only
+# the single injected channel/fault. Seeds 1339-1345 -- distinct from every
+# TRAINING_SCENARIOS seed (2001, 2002) and from 1337/1338 above. See module
+# docstring's INJECTION-TYPE SCENARIO TAXONOMY section for scope and gaps.
+_EVALUATION_DEGRADATION_PROFILE = {
+    "start_health": 1.0,
+    "end_health": 0.2,
+    "degradation_rate": 1.0,
+    "channels": {"vibration": ChannelDegradationConfig(healthy_value=0.03, degraded_value=1.2)},
+}
+
+SCENARIO_INJECTED_TEMPERATURE_DRIFT = ScenarioConfig(
+    name="injected_temperature_drift",
+    seed=1339,
+    length=40,
+    injections=(Drift(channel="temperature", onset=30, duration=5, rate=0.5),),
+    **_EVALUATION_DEGRADATION_PROFILE,
+)
+
+SCENARIO_INJECTED_PRESSURE_STUCK_AT = ScenarioConfig(
+    name="injected_pressure_stuck_at",
+    seed=1340,
+    length=40,
+    injections=(StuckAt(channel="pressure", onset=30, duration=5),),
+    **_EVALUATION_DEGRADATION_PROFILE,
+)
+
+SCENARIO_INJECTED_HUMIDITY_BIAS_FDI = ScenarioConfig(
+    name="injected_humidity_bias_fdi",
+    seed=1341,
+    length=40,
+    injections=(BiasFDI(channel="humidity", onset=30, duration=5, bias=5.0),),
+    **_EVALUATION_DEGRADATION_PROFILE,
+)
+
+SCENARIO_INJECTED_GAS_RAMP_FDI = ScenarioConfig(
+    name="injected_gas_ramp_fdi",
+    seed=1342,
+    length=40,
+    injections=(RampFDI(channel="gas", onset=28, duration=8, slope=0.8),),
+    **_EVALUATION_DEGRADATION_PROFILE,
+)
+
+SCENARIO_INJECTED_VIBRATION_REPLAY = ScenarioConfig(
+    name="injected_vibration_replay",
+    seed=1343,
+    length=40,
+    # source segment [0, 5) ends at 5, at/before onset=30 -- satisfies
+    # Replay._validate_against()'s own "source must end at or before onset"
+    # and in-bounds-of-stream requirements (see edge/injection/injections.py).
+    injections=(Replay(channel="vibration", onset=30, duration=5, source_onset=0),),
+    **_EVALUATION_DEGRADATION_PROFILE,
+)
+
+SCENARIO_INJECTED_CURRENT_CONSTANT_SPOOF = ScenarioConfig(
+    name="injected_current_constant_spoof",
+    seed=1344,
+    length=40,
+    injections=(ConstantSpoof(channel="current", onset=30, duration=5, value=0.0),),
+    **_EVALUATION_DEGRADATION_PROFILE,
+)
+
+SCENARIO_INJECTED_TEMPERATURE_ADAPTIVE_STEALTH_FDI = ScenarioConfig(
+    name="injected_temperature_adaptive_stealth_fdi",
+    seed=1345,
+    length=40,
+    injections=(
+        AdaptiveStealthFDI(
+            channel="temperature", onset=25, duration=10, rate=0.5, residual_cap=2.0
+        ),
+    ),
+    **_EVALUATION_DEGRADATION_PROFILE,
+)
+
+# All 8 InjectionType-covering scenarios, in InjectionType declaration order
+# (edge/injection/injections.py's own DRIFT/SPIKE/STUCK_AT/BIAS_FDI/RAMP_FDI/
+# REPLAY/CONSTANT_SPOOF/ADAPTIVE_STEALTH_FDI ordering) -- NOT included in
+# default_scenarios() (unchanged below); consumed explicitly by
+# edge.eval.rl_training.EVALUATION_SCENARIOS instead.
+INJECTION_TYPE_SCENARIOS: tuple[ScenarioConfig, ...] = (
+    SCENARIO_INJECTED_TEMPERATURE_DRIFT,
+    SCENARIO_INJECTED_CURRENT_SPIKE,
+    SCENARIO_INJECTED_PRESSURE_STUCK_AT,
+    SCENARIO_INJECTED_HUMIDITY_BIAS_FDI,
+    SCENARIO_INJECTED_GAS_RAMP_FDI,
+    SCENARIO_INJECTED_VIBRATION_REPLAY,
+    SCENARIO_INJECTED_CURRENT_CONSTANT_SPOOF,
+    SCENARIO_INJECTED_TEMPERATURE_ADAPTIVE_STEALTH_FDI,
+)
+
+
+@dataclass(frozen=True)
+class ScenarioMetadata:
+    """Purely descriptive, additive documentation for one evaluation
+    scenario -- changes no ``ScenarioConfig`` field, constructor, or
+    function signature anywhere. Simulation-only (see module docstring):
+    never a claim about real pump/sensor/attack behavior, and never itself
+    a false-isolation/missed-fault measurement -- U06 remains fully open
+    (see ``project-state/DECISIONS.md``)."""
+
+    name: str
+    purpose: str
+    classification: str  # "clean" | "fault" | "attack"
+    injection_type: InjectionType | None
+    affected_channel: str | None
+    onset: int | None
+    duration: int | None
+    parameters: Mapping[str, float] | None
+    expected_active_window: tuple[int, int] | None
+    scenario_set: str  # "training" | "evaluation"
+    known_limitations: str
+
+
+# One entry per evaluation scenario named above (plus SCENARIO_CLEAN_
+# DEGRADATION) -- keyed by ScenarioConfig.name. Not consumed by any
+# production or training code path; a reference table only.
+EVALUATION_SCENARIO_METADATA: dict[str, ScenarioMetadata] = {
+    SCENARIO_CLEAN_DEGRADATION.name: ScenarioMetadata(
+        name=SCENARIO_CLEAN_DEGRADATION.name,
+        purpose="Zero-fault baseline: wear-out degradation only, no injection.",
+        classification="clean",
+        injection_type=None,
+        affected_channel=None,
+        onset=None,
+        duration=None,
+        parameters=None,
+        expected_active_window=None,
+        scenario_set="evaluation",
+        known_limitations="Single degradation profile only; no injection of any kind.",
+    ),
+    SCENARIO_INJECTED_CURRENT_SPIKE.name: ScenarioMetadata(
+        name=SCENARIO_INJECTED_CURRENT_SPIKE.name,
+        purpose="Fault-type coverage: sudden additive spike on current.",
+        classification="fault",
+        injection_type=InjectionType.SPIKE,
+        affected_channel="current",
+        onset=32,
+        duration=5,
+        parameters={"amplitude": 50.0},
+        expected_active_window=(32, 37),
+        scenario_set="evaluation",
+        known_limitations="Single-channel, single-fault only; no multi-channel/multi-fault case.",
+    ),
+    SCENARIO_INJECTED_TEMPERATURE_DRIFT.name: ScenarioMetadata(
+        name=SCENARIO_INJECTED_TEMPERATURE_DRIFT.name,
+        purpose="Fault-type coverage: gradual additive drift on temperature.",
+        classification="fault",
+        injection_type=InjectionType.DRIFT,
+        affected_channel="temperature",
+        onset=30,
+        duration=5,
+        parameters={"rate": 0.5},
+        expected_active_window=(30, 35),
+        scenario_set="evaluation",
+        known_limitations="Single-channel, single-fault only; no multi-channel/multi-fault case.",
+    ),
+    SCENARIO_INJECTED_PRESSURE_STUCK_AT.name: ScenarioMetadata(
+        name=SCENARIO_INJECTED_PRESSURE_STUCK_AT.name,
+        purpose="Fault-type coverage: sensor freezes at its value on pressure.",
+        classification="fault",
+        injection_type=InjectionType.STUCK_AT,
+        affected_channel="pressure",
+        onset=30,
+        duration=5,
+        parameters={},
+        expected_active_window=(30, 35),
+        scenario_set="evaluation",
+        known_limitations=(
+            "Single-channel, single-fault only; default held_value (value at onset), "
+            "not an explicit override."
+        ),
+    ),
+    SCENARIO_INJECTED_HUMIDITY_BIAS_FDI.name: ScenarioMetadata(
+        name=SCENARIO_INJECTED_HUMIDITY_BIAS_FDI.name,
+        purpose="Attack-type coverage: constant additive bias false-data-injection on humidity.",
+        classification="attack",
+        injection_type=InjectionType.BIAS_FDI,
+        affected_channel="humidity",
+        onset=30,
+        duration=5,
+        parameters={"bias": 5.0},
+        expected_active_window=(30, 35),
+        scenario_set="evaluation",
+        known_limitations="Single-channel, single-attack only; no multi-channel/multi-fault case.",
+    ),
+    SCENARIO_INJECTED_GAS_RAMP_FDI.name: ScenarioMetadata(
+        name=SCENARIO_INJECTED_GAS_RAMP_FDI.name,
+        purpose="Attack-type coverage: cumulative ramping false-data-injection on gas.",
+        classification="attack",
+        injection_type=InjectionType.RAMP_FDI,
+        affected_channel="gas",
+        onset=28,
+        duration=8,
+        parameters={"slope": 0.8},
+        expected_active_window=(28, 36),
+        scenario_set="evaluation",
+        known_limitations="Single-channel, single-attack only; no multi-channel/multi-fault case.",
+    ),
+    SCENARIO_INJECTED_VIBRATION_REPLAY.name: ScenarioMetadata(
+        name=SCENARIO_INJECTED_VIBRATION_REPLAY.name,
+        purpose="Attack-type coverage: replay of earlier own-channel values on vibration.",
+        classification="attack",
+        injection_type=InjectionType.REPLAY,
+        affected_channel="vibration",
+        onset=30,
+        duration=5,
+        parameters={"source_onset": 0.0},
+        expected_active_window=(30, 35),
+        scenario_set="evaluation",
+        known_limitations=(
+            "Single-channel, single-attack only; replayed segment is pre-degradation "
+            "(source_onset=0), not a later/more-degraded segment."
+        ),
+    ),
+    SCENARIO_INJECTED_CURRENT_CONSTANT_SPOOF.name: ScenarioMetadata(
+        name=SCENARIO_INJECTED_CURRENT_CONSTANT_SPOOF.name,
+        purpose="Attack-type coverage: pin to a constant spoofed value on current.",
+        classification="attack",
+        injection_type=InjectionType.CONSTANT_SPOOF,
+        affected_channel="current",
+        onset=30,
+        duration=5,
+        parameters={"value": 0.0},
+        expected_active_window=(30, 35),
+        scenario_set="evaluation",
+        known_limitations="Single-channel, single-attack only; no multi-channel/multi-fault case.",
+    ),
+    SCENARIO_INJECTED_TEMPERATURE_ADAPTIVE_STEALTH_FDI.name: ScenarioMetadata(
+        name=SCENARIO_INJECTED_TEMPERATURE_ADAPTIVE_STEALTH_FDI.name,
+        purpose="Attack-type coverage: bias that grows then caps below a fixed residual bound.",
+        classification="attack",
+        injection_type=InjectionType.ADAPTIVE_STEALTH_FDI,
+        affected_channel="temperature",
+        onset=25,
+        duration=10,
+        parameters={"rate": 0.5, "residual_cap": 2.0},
+        expected_active_window=(25, 35),
+        scenario_set="evaluation",
+        known_limitations="Single-channel, single-attack only; no multi-channel/multi-fault case.",
+    ),
+}
 
 
 def default_scenarios() -> tuple[ScenarioConfig, ...]:
