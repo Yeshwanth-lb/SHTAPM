@@ -1928,3 +1928,26 @@ An additive, descriptive-only `ScenarioMetadata`/`EVALUATION_SCENARIO_METADATA` 
 - Changes no reward, gate, policy, transition, or DQN behavior — the function only reads an already-produced `EpisodeRecord`, never constructs or calls the environment/gate/reward/policy modules.
 
 **Not done by this increment:** U06's status in the UNDECIDED list above is unchanged: fully open, zero partial resolution. Axes (ii) and (iii) remain unimplemented proposals/open questions, as does any acceptable-rate decision.
+
+---
+
+## U06 — Axis (ii) Coarse Tracker-vs-Injection Agreement Implementation Note (IMPLEMENTATION RECORD, NOT A DECISION)
+**(U06 REMAINS FULLY UNDECIDED/OPEN. This is an implementation record for the narrowest approved axis (ii) increment scoped in the preceding axis (ii) scoping review — it implements a coarse, presence-only tracker-vs-injection agreement summary as an additive simulation-only diagnostic. It does not resolve U06, choose a threshold or verdict, implement channel-matched comparison, or implement axis (iii).)**
+
+- **Date implemented:** 2026-09-06
+- **Files changed:** `edge/eval/u06_tracker_agreement.py` (new), `edge/tests/test_u06_tracker_agreement.py` (new). No existing file modified — `EpisodeRecord`, `TransitionRecord`, `active_injection_labels`'s shape, `edge/rl/environment.py`, `edge/rl/reward.py`, `edge/rl/fallback_gate.py`, `edge/rl/policy.py`, `edge/eval/rl_training.py`, and every hardware/driver/actuator/relay/GPIO file are untouched.
+
+**What this increment does:**
+- Adds a pure function, `summarize_tracker_agreement(record: EpisodeRecord) -> TrackerAgreementSummary`, comparing `bool(active_injection_labels)` (coarse, presence-only injection ground truth) against `safety_status == "isolation_active"` (the deterministic tracker's own derived state), per newly observed frame.
+- **Unit of comparison:** only transitions with `transition_consumed=True` are included — a `safe_stop` no-op step re-derives `safety_status` from the same already-processed outcome a preceding real step already scored (its exposed `sample_seq` duplicates that step's value, per the injection-label-retention increment's own documented behavior), so including it would double-count one observation as two. `sample_seq` deduplication was deliberately NOT implemented in this first increment — `transition_consumed=True` filtering is the smaller, sufficient fix for this specific double-counting risk.
+- Reports a four-way classification (agreement-active, agreement-nominal, tracker-missed-injection, tracker-flagged-without-injection) plus an overall `agreement_rate` (`None` iff zero observations), a `no_injection` breakdown, and a `per_injection_type` breakdown keyed by each injection type name — never one pooled miss rate across types. An observation naming multiple simultaneous injection types is attributed to each type.
+- The module docstring explicitly documents that "tracker flagged without injection" is not necessarily a false positive (organic degradation can independently affect trust bands) and that "tracker missed injection" is not evidence of detector failure, especially for intentionally-evasive types like `AdaptiveStealthFDI` — injection *attempted* is not the same as injection *detectable*.
+
+**What this increment explicitly does NOT do:**
+- Does not implement channel-matched comparison — `TransitionRecord` does not currently carry tracked-channel data, and this increment does not add it.
+- Does not widen `active_injection_labels`'s shape or add any tracked-channel field to `TransitionRecord`.
+- Does not implement axis (iii) (ground-truth-anchored decision-quality rates) — still an unimplemented, open proposal.
+- Does not deduplicate by `sample_seq` — an open design question for a possible future increment, not resolved here.
+- Chooses no acceptable agreement rate, computes no verdict, and makes no claim of validation, safety, accuracy, or production readiness anywhere — confirmed by dedicated tests.
+
+**Not done by this increment:** U06's status in the UNDECIDED list above is unchanged: fully open, zero partial resolution. Channel-matched axis (ii), `sample_seq` deduplication, and axis (iii) all remain unimplemented, open questions.
