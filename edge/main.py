@@ -8,14 +8,13 @@ hand-written ``drivers[channel] = XDriver()`` lines:
     registry.build_drivers(...) → Sampler → TelemetryMessage → Publisher → Mosquitto
                                                               ↘ LiveP2Monitor (observe-only)
 
-DEFAULT BEHAVIOR IS UNCHANGED from before this file used the registry:
-``_DEFAULT_CHANNEL_SPECS`` names DS18B20 (temperature) as the sole real
+``_DEFAULT_CHANNEL_SPECS`` names ADXL335 (vibration) as the sole real
 driver and every other channel as a fake constant, matching this bench's
-actual current wiring exactly — ADXL335, BMP280, INA219, and DHT22 are
-implemented (edge/drivers/{adxl335,bmp280,ina219,dht22}.py, each
+actual current wiring exactly — DS18B20, BMP280, INA219, and DHT22 are
+implemented (edge/drivers/{ds18b20,bmp280,ina219,dht22}.py, each
 individually hardware-validated earlier) but temporarily physically
-disconnected, so they'd be permanently unhealthy here and block every frame
-(Sampler.sample_once() requires all six channels healthy).
+disconnected, so they'd be permanently unhealthy here and block every
+frame (Sampler.sample_once() requires all six channels healthy).
 
 RECONNECTING A SENSOR IS NOW A CONFIGURATION CHANGE, not a code edit: set
 ``SHTAPM_DRIVER_<CHANNEL>=real`` (e.g. ``SHTAPM_DRIVER_VIBRATION=real``) to
@@ -137,8 +136,8 @@ log = logging.getLogger("shtapm.edge.main")
 # (edge.drivers.registry.resolve_channel_specs_from_env) — never by editing
 # this table for a one-off run.
 _DEFAULT_CHANNEL_SPECS: dict[str, DriverSpec] = {
-    "temperature": DriverSpec(kind="real"),  # DS18B20Driver(), the only sensor wired right now
-    "vibration": DriverSpec(kind="fake", fake_mode="constant", params={"value": 0.03}),
+    "temperature": DriverSpec(kind="fake", fake_mode="constant", params={"value": 26.0}),
+    "vibration": DriverSpec(kind="real"),  # ADXL335Driver(), the only sensor wired right now
     "pressure": DriverSpec(kind="fake", fake_mode="constant", params={"value": 1013.0}),
     "humidity": DriverSpec(kind="fake", fake_mode="constant", params={"value": 45.0}),
     "gas": DriverSpec(kind="fake", fake_mode="constant", params={"value": 150.0}),
