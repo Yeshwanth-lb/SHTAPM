@@ -85,6 +85,47 @@ Last confirmed: commit `054caa6`, 2026-09-07 — see `IMPLEMENTATION_LOG.md`'s
 implied by re-running this** — it demonstrates the pipeline runs and
 publishes, nothing about the correctness of its outputs.
 
+## 6. U05 bench-capture offline analysis (infrastructure ready; no real
+capture exists yet — see `DECISIONS.md`'s U05 entries)
+
+```
+PYTHONPATH=backend:. python -m pytest edge/tests/test_u05_capture_loader.py edge/tests/test_u05_divergence_analysis.py -v
+```
+These are hardware-free, fixture-only tests of the loading/windowing/
+residual/scoring *infrastructure* — they prove the pipeline mechanics, not
+any real-world result. Once a real bench capture file exists (per §5), the
+actual analysis is:
+
+```python
+from edge.eval.u05_capture_loader import load_telemetry_capture, windows_from_capture, ordered_messages
+from edge.eval.u05_divergence_analysis import compute_residuals, score_residuals
+from edge.pipeline.divergence import DivergenceScorer
+from edge.anomaly.preprocess import Preprocessor
+
+preprocessor = Preprocessor(median_kernel=1, low_pass_alpha=1.0)  # matches edge/main.py's own identity config
+with open("telemetry_capture_nominal.jsonl") as f:
+    nominal = load_telemetry_capture(f)
+windows = windows_from_capture(nominal, preprocessor)
+messages = ordered_messages(nominal)
+
+twin = ...  # a real, caller-supplied TwinReconstructor -- e.g. LSTMTwinReconstructor;
+            # NOT trained on real data anywhere in this repo yet -- see module docstring
+residuals = compute_residuals(windows, messages, twin)
+
+scorer = DivergenceScorer()
+scorer.fit(residuals)  # fit ONLY on a capture segment you consider clean/nominal
+
+# Score a second (e.g. fault) capture the same way, then:
+summary = score_residuals(other_capture_residuals, scorer)  # descriptive stats only -- no threshold
+```
+`score_residuals` reports mean/min/max z-score per channel — **never a
+threshold, verdict, or fault/nominal label**. Choosing `divergence_threshold`
+from this evidence remains a separate, explicit human decision (U05).
+`compute_residuals`/`score_residuals` invent no reconstruction algorithm,
+divergence formula, or numeric value — they only wire together the
+already-approved `TwinReconstructor` seam and `DivergenceScorer` (D018 pt.1)
+over real captured data.
+
 ## What this file is NOT
 
 Not a claim that any number produced by section 2 is validated, accurate,
