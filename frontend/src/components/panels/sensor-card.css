@@ -1,0 +1,56 @@
+.sensor-card {
+  padding: 16px 18px;
+  display: grid;
+  gap: 8px;
+  align-content: start;
+}
+
+.sensor-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.sensor-card__head h3 {
+  margin: 0;
+}
+
+.sensor-card__value {
+  margin: 2px 0 0;
+  line-height: 1.1;
+}
+
+.sensor-card__unit {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-left: 4px;
+}
+
+.sensor-card__meta {
+  margin: 0;
+  font-size: 11px;
+}
+
+/* No reading yet: dim the whole card so it cannot be mistaken for live data. */
+.sensor-card--unavailable {
+  opacity: 0.55;
+}
+
+.sensor-card--unavailable .sensor-card__value {
+  color: var(--text-muted);
+}
+
+.spark {
+  width: 100%;
+  height: 44px;
+  overflow: visible;
+  margin-top: 4px;
+}
+
+.spark--empty {
+  height: 44px;
+  display: flex;
+  align-items: center;
+  font-size: 11px;
+}

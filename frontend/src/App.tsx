@@ -9,6 +9,7 @@ import { MeshBackground } from "./components/aurora/MeshBackground";
 import { AuthProvider } from "./features/auth/AuthContext";
 import { LoginScreen } from "./features/auth/LoginScreen";
 import { RequireAuth } from "./features/auth/RequireAuth";
+import { DevicePage } from "./pages/DevicePage";
 import { Overview } from "./pages/Overview";
 import "./styles/fonts.css";
 import "./styles/aurora.css";
@@ -23,6 +24,8 @@ function Routes() {
       <AppShell>
         {path === "/" ? (
           <Overview />
+        ) : path === "/device" ? (
+          <DevicePage />
         ) : (
           // Unknown or not-yet-built path. Honest, not a fabricated screen.
           <p className="t-muted" data-testid="not-built">

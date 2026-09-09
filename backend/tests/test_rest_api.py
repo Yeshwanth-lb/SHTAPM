@@ -560,10 +560,11 @@ def test_channels_returns_all_six_in_contract_order_even_with_no_registry_rows(c
     assert r.status_code == 200
     rows = r.json()
     assert [row["channel"] for row in rows] == list(CHANNELS)
-    # No sensors row exists for pump-01 -- registry fields are null, not invented.
+    # No sensors row exists for pump-01 -- PROVENANCE fields stay null, never
+    # invented. `unit` is deliberately excluded: it describes the channel (PRD
+    # §12.1), not the part behind it, and is asserted separately below.
     for row in rows:
         assert row["part"] is None
-        assert row["unit"] is None
         assert row["is_proxy"] is None
         assert row["display_hue"] is None
 
@@ -636,3 +637,94 @@ def test_channels_merges_stored_registry_rows_when_they_exist(
 def test_channels_requires_device_access(client, seed):
     r = client.get("/api/devices/pump-02/channels", headers=_auth(_operator_token(client)))
     assert r.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Readings pagination + canonical channel units (device monitoring page)
+# ---------------------------------------------------------------------------
+
+
+def _add_readings(session_factory, count: int) -> None:
+    with session_factory() as db:
+        device = db.query(Device).filter(Device.device_id == "pump-01").one()
+        for i in range(count):
+            db.add(
+                SensorReading(
+                    device_id=device.id,
+                    ts=datetime(2026, 9, 10, 12, 0, i, tzinfo=UTC),
+                    sample_seq=1000 + i,
+                    temperature=20.0 + i,
+                    vibration=0.1,
+                    pressure=1013.0,
+                    humidity=50.0,
+                    gas=150.0,
+                    current=0.0,
+                    healthy_mask=63,
+                )
+            )
+        db.commit()
+
+
+def test_readings_limit_returns_the_most_recent_rows_oldest_first(client, seed, session_factory):
+    """A live chart wants the newest window, but plotted left-to-right in time.
+    Taking the first N ascending would return the OLDEST rows instead."""
+    _add_readings(session_factory, 10)
+    r = client.get("/api/devices/pump-01/readings?limit=3", headers=_auth(_operator_token(client)))
+    assert r.status_code == 200
+    rows = r.json()
+    assert len(rows) == 3
+    seqs = [row["sample_seq"] for row in rows]
+    assert seqs == sorted(seqs)  # oldest-first ordering preserved
+    assert seqs == [1007, 1008, 1009]  # the newest three, not the oldest three
+
+
+def test_readings_without_limit_is_unchanged(client, seed, session_factory):
+    """Existing callers must be unaffected by the new optional parameter."""
+    _add_readings(session_factory, 5)
+    r = client.get("/api/devices/pump-01/readings", headers=_auth(_operator_token(client)))
+    assert r.status_code == 200
+    # 5 added here + the 1 the `seed` fixture creates.
+    assert len(r.json()) == 6
+
+
+def test_readings_limit_is_capped(client, seed):
+    r = client.get(
+        "/api/devices/pump-01/readings?limit=99999", headers=_auth(_operator_token(client))
+    )
+    assert r.status_code == 422  # rejected by validation, never an unbounded query
+
+
+def test_readings_limit_rejects_zero_and_negative(client, seed):
+    token = _auth(_operator_token(client))
+    assert client.get("/api/devices/pump-01/readings?limit=0", headers=token).status_code == 422
+    assert client.get("/api/devices/pump-01/readings?limit=-1", headers=token).status_code == 422
+
+
+def test_channels_supply_the_canonical_unit_without_a_registry_row(client, seed):
+    """A unit belongs to the CHANNEL, not the part behind it, so it is safe to
+    report with no sensors row. Provenance fields must stay unasserted."""
+    r = client.get("/api/devices/pump-01/channels", headers=_auth(_operator_token(client)))
+    assert r.status_code == 200
+    rows = {row["channel"]: row for row in r.json()}
+    assert rows["temperature"]["unit"] == "°C"
+    assert rows["vibration"]["unit"] == "g"
+    assert rows["pressure"]["unit"] == "hPa"
+    assert rows["humidity"]["unit"] == "%"
+    assert rows["gas"]["unit"] == "ppm"
+    assert rows["current"]["unit"] == "A"
+    # Supplying a unit must NOT imply a sensor is known.
+    for row in rows.values():
+        assert row["part"] is None
+        assert row["source"] == "unknown"
+
+
+def test_a_registry_row_overrides_the_canonical_unit(client, seed, session_factory):
+    with session_factory() as db:
+        device = db.query(Device).filter(Device.device_id == "pump-01").one()
+        db.add(Sensor(device_id=device.id, channel=Channel.pressure, part="BMP280", unit="kPa"))
+        db.commit()
+
+    r = client.get("/api/devices/pump-01/channels", headers=_auth(_operator_token(client)))
+    rows = {row["channel"]: row for row in r.json()}
+    assert rows["pressure"]["unit"] == "kPa"  # stored value wins
+    assert rows["temperature"]["unit"] == "°C"  # others still fall back

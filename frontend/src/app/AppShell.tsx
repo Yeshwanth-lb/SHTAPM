@@ -21,7 +21,7 @@ interface NavItem {
 // this foundation slice.
 const NAV: NavItem[] = [
   { label: "Overview", path: "/" },
-  { label: "Device", path: "/device", phase: "next" },
+  { label: "Device", path: "/device" },
   { label: "Devices", path: "/devices", phase: "next" },
   { label: "Ledger", path: "/ledger", phase: "next" },
   { label: "Settings", path: "/settings", phase: "next" },

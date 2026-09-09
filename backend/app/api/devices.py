@@ -41,6 +41,28 @@ from app.services import ledger as ledger_service
 
 router = APIRouter(prefix="/api/devices", tags=["devices"])
 
+# Engineering unit of each frozen channel, per PRD §12.1's sensor table. This
+# is a property of the CHANNEL definition, not a claim about which part is
+# wired: `pressure` is hPa whether a BMP280 is connected or the channel is a
+# placeholder constant. Provenance stays in `part`/`source`, which remain null/
+# "unknown" until the backend is actually told (see ChannelOut).
+#
+# Mirrors edge/drivers/registry.py's own `_UNITS` — same six values, and the
+# real drivers emit exactly these (e.g. DS18B20Driver/DHT22AdafruitTemperature
+# both use "°C"). A `sensors` registry row, when one exists, overrides this.
+_CANONICAL_CHANNEL_UNITS: dict[str, str] = {
+    "temperature": "°C",
+    "vibration": "g",
+    "pressure": "hPa",
+    "humidity": "%",
+    "gas": "ppm",
+    "current": "A",
+}
+
+# Cap on a single readings page. At 1 Hz an uncapped query grows without bound
+# (~86k rows/device/day), which a browser chart must never pull.
+_MAX_READINGS_LIMIT = 5000
+
 
 class _Body(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -135,9 +157,13 @@ class ChannelOut(_Body):
     """One frozen channel's provenance.
 
     Three different kinds of fact, deliberately not blended:
-      * ``part``/``unit``/``is_proxy``/``display_hue`` — STORED, from the
-        Doc05 §05.2 ``sensors`` registry. ``null`` when no row exists yet
-        (nothing seeds that table today), never invented.
+      * ``part``/``is_proxy``/``display_hue`` — STORED, from the Doc05 §05.2
+        ``sensors`` registry. ``null`` when no row exists yet (nothing seeds
+        that table today), never invented.
+      * ``unit`` — the CHANNEL's engineering unit (PRD §12.1), used when the
+        registry has no row. A unit is a property of the channel, not of the
+        part behind it, so supplying it asserts nothing about provenance: a
+        placeholder `pressure` is still hPa. A registry row overrides it.
       * ``source`` — DECLARED configuration (``SHTAPM_CHANNEL_SOURCES``),
         because the wire frame cannot express it. ``"unknown"`` when this
         backend was not told; a UI must render that differently from
@@ -271,9 +297,17 @@ def get_readings(
     from_: datetime | None = Query(default=None, alias="from"),
     to: datetime | None = Query(default=None),
     agg: str = Query(default="raw"),
+    limit: int | None = Query(default=None, ge=1, le=_MAX_READINGS_LIMIT),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> list[SensorReadingOut]:
+    """Raw readings, oldest-first.
+
+    ``limit`` (optional, added for the device history chart) returns the MOST
+    RECENT ``limit`` rows, still oldest-first so a chart can plot them without
+    reversing. Omitting it preserves the previous unbounded behaviour exactly,
+    so existing callers are unaffected.
+    """
     if agg != "raw":
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
@@ -286,7 +320,12 @@ def get_readings(
         query = query.filter(SensorReading.ts >= from_)
     if to is not None:
         query = query.filter(SensorReading.ts <= to)
-    rows = query.order_by(SensorReading.ts).all()
+    if limit is None:
+        rows = query.order_by(SensorReading.ts).all()
+    else:
+        # Newest-first + limit, then flip: taking the FIRST n ascending would
+        # return the oldest rows, which is the opposite of what a live chart wants.
+        rows = list(reversed(query.order_by(SensorReading.ts.desc()).limit(limit).all()))
     return [SensorReadingOut.model_validate(r, from_attributes=True) for r in rows]
 
 
@@ -342,7 +381,7 @@ def get_channels(
         ChannelOut(
             channel=channel,
             part=getattr(rows.get(channel), "part", None),
-            unit=getattr(rows.get(channel), "unit", None),
+            unit=getattr(rows.get(channel), "unit", None) or _CANONICAL_CHANNEL_UNITS.get(channel),
             is_proxy=getattr(rows.get(channel), "is_proxy", None),
             display_hue=getattr(rows.get(channel), "display_hue", None),
             source=settings.source_for(channel),
