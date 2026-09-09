@@ -8,7 +8,7 @@ import { useEffect, useState, type FormEvent } from "react";
 
 import { navigate } from "../../app/router";
 import { GlassTile } from "../../components/aurora/GlassTile";
-import { ApiError } from "../../lib/api";
+import { apiBase, describeRequestFailure, isApiError } from "../../lib/api";
 import { useAuth } from "./AuthContext";
 import "./login.css";
 
@@ -32,12 +32,15 @@ export function LoginScreen() {
       await signIn(email, password);
       navigate("/");
     } catch (err: unknown) {
-      if (err instanceof ApiError) {
+      if (isApiError(err)) {
         setError(err.status === 401 ? "Invalid email or password." : err.message);
       } else {
-        // Network/CORS failure — distinct from a rejected credential, and the
-        // operator needs to know which so they check the backend, not the password.
-        setError("Could not reach the backend. Check that it is running.");
+        // Not an HTTP response at all. Carry the underlying reason through:
+        // DNS failure, connection refused, a CORS block and a malformed body
+        // are all very different problems, and collapsing them into one
+        // sentence made this take three rounds to diagnose once already.
+        // describeRequestFailure() never includes credentials or tokens.
+        setError(`Could not reach the backend at ${apiBase()} — ${describeRequestFailure(err)}`);
       }
       setBusy(false);
     }

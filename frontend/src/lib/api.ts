@@ -61,6 +61,8 @@ export interface DeviceOut {
 
 export class ApiError extends Error {
   readonly status: number;
+  /** Brand: see isApiError(). */
+  readonly isApiError = true as const;
 
   constructor(status: number, message: string) {
     super(message);
@@ -69,12 +71,48 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Prefer this over `err instanceof ApiError`.
+ *
+ * `instanceof` compares class identity, which breaks if this module is ever
+ * evaluated twice (a stale Vite HMR graph, or the same file reached through
+ * two different specifiers). The failure is silent and nasty: a real HTTP
+ * error stops being recognised as one and gets reported as a network outage,
+ * which is precisely the confusion this codebase already hit once. A branded
+ * property survives duplicate module instances.
+ */
+export function isApiError(err: unknown): err is ApiError {
+  return typeof err === "object" && err !== null && (err as ApiError).isApiError === true;
+}
+
+/** Non-sensitive description of a thrown value, safe to show or log. */
+export function describeRequestFailure(err: unknown): string {
+  if (isApiError(err)) return `HTTP ${err.status}: ${err.message}`;
+  if (err instanceof TypeError) {
+    // What fetch throws for DNS failure, connection refused, and CORS blocks.
+    // The browser deliberately withholds which, so say so rather than guess.
+    return `Network or CORS failure (${err.message})`;
+  }
+  if (err instanceof Error) return `${err.name}: ${err.message}`;
+  return String(err);
+}
+
 async function request<T>(path: string, init: RequestInit, token?: string): Promise<T> {
   const headers = new Headers(init.headers);
   headers.set("Content-Type", "application/json");
   if (token) headers.set("Authorization", `Bearer ${token}`);
 
-  const response = await fetch(`${apiBase()}${path}`, { ...init, headers });
+  const url = `${apiBase()}${path}`;
+  let response: Response;
+  try {
+    response = await fetch(url, { ...init, headers });
+  } catch (err) {
+    // Log the URL actually used: the commonest cause of an unreachable API is
+    // the base resolving to the wrong host, and that is invisible otherwise.
+    // Method and URL only -- never the body (passwords) or the token.
+    console.error(`[shtapm] ${init.method ?? "GET"} ${url} failed:`, describeRequestFailure(err));
+    throw err;
+  }
   if (!response.ok) {
     // FastAPI returns {"detail": "..."} — fall back to the status text when a
     // proxy or network error produces something else.
