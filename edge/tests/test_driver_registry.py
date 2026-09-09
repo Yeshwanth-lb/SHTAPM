@@ -31,8 +31,11 @@ def _fixed_clock() -> str:
 
 
 def _default_specs() -> dict[str, DriverSpec]:
-    """Mirrors edge/main.py's _DEFAULT_CHANNEL_SPECS exactly -- today's
-    actual bench state (DS18B20 real, five fake constants)."""
+    """A representative one-real/five-fake table for exercising the registry
+    MECHANISM (build_drivers + env resolution). Deliberately NOT a mirror of
+    edge/main.py's _DEFAULT_CHANNEL_SPECS: the bench's real wiring changes,
+    and these mechanism tests should not churn with it. main.py's own table
+    is asserted directly in test_edge_main_bench_wiring.py."""
     return {
         "temperature": DriverSpec(kind="real"),
         "vibration": DriverSpec(kind="fake", fake_mode="constant", params={"value": 0.03}),

@@ -8,16 +8,27 @@ hand-written ``drivers[channel] = XDriver()`` lines:
     registry.build_drivers(...) → Sampler → TelemetryMessage → Publisher → Mosquitto
                                                               ↘ LiveP2Monitor (observe-only)
 
-``_DEFAULT_CHANNEL_SPECS`` names ADXL335 (vibration) and DHT22 (humidity,
-via the Adafruit CircuitPython backend — edge/drivers/dht22_adafruit.py,
-GPIO17, ``use_pulseio=False`` — NOT the kernel-IIO edge/drivers/dht22.py,
-which remains in the repo unused for now; see dht22_adafruit.py's own
-docstring for why) as the real drivers, and every other channel as a fake
-constant, matching this bench's actual current wiring — DS18B20, BMP280,
-and INA219 are implemented (edge/drivers/{ds18b20,bmp280,ina219}.py, each
-individually hardware-validated earlier) but temporarily physically
-disconnected, so they'd be permanently unhealthy here and block every
-frame (Sampler.sample_once() requires all six channels healthy).
+``_DEFAULT_CHANNEL_SPECS`` names FOUR real drivers, matching this bench's
+actual current wiring:
+
+  - vibration   ADXL335, MCP3008 CH0-2 over SPI0 CE0 (SPI enabled)
+  - humidity    DHT22 via the Adafruit CircuitPython backend
+                (edge/drivers/dht22_adafruit.py, GPIO17,
+                ``use_pulseio=False``) — NOT the kernel-IIO
+                edge/drivers/dht22.py, which remains in the repo unused
+                for now; see dht22_adafruit.py's own docstring for why
+  - temperature DS18B20, kernel 1-Wire on GPIO4 — needs
+                ``dtoverlay=w1-gpio,gpiopin=4`` in config.txt and a 4.7k
+                pull-up to 3.3V
+  - pressure    BMP280, I2C bus 1 at address 0x76 (I2C enabled)
+
+``gas`` and ``current`` remain fake constants: INA219 is implemented
+(edge/drivers/ina219.py, individually hardware-validated earlier) but is
+still physically disconnected, and gas (MQ-135) has no driver at all. A
+physically disconnected sensor declared ``kind="real"`` here would be
+permanently unhealthy and would block every frame
+(Sampler.sample_once() requires all six channels healthy) — which is why
+this table tracks the bench's real wiring rather than its aspirations.
 
 RECONNECTING A SENSOR IS NOW A CONFIGURATION CHANGE, not a code edit: set
 ``SHTAPM_DRIVER_<CHANNEL>=real`` (e.g. ``SHTAPM_DRIVER_VIBRATION=real``) to
@@ -139,9 +150,9 @@ log = logging.getLogger("shtapm.edge.main")
 # (edge.drivers.registry.resolve_channel_specs_from_env) — never by editing
 # this table for a one-off run.
 _DEFAULT_CHANNEL_SPECS: dict[str, DriverSpec] = {
-    "temperature": DriverSpec(kind="fake", fake_mode="constant", params={"value": 26.0}),
-    "vibration": DriverSpec(kind="real"),  # ADXL335Driver(), the only sensor wired right now
-    "pressure": DriverSpec(kind="fake", fake_mode="constant", params={"value": 1013.0}),
+    "temperature": DriverSpec(kind="real"),  # DS18B20Driver(), 1-Wire GPIO4
+    "vibration": DriverSpec(kind="real"),  # ADXL335Driver(), MCP3008 CH0-2 / SPI0 CE0
+    "pressure": DriverSpec(kind="real"),  # BMP280Driver(), I2C bus 1 @ 0x76
     "humidity": DriverSpec(kind="real"),  # DHT22AdafruitDriver(), GPIO17
     "gas": DriverSpec(kind="fake", fake_mode="constant", params={"value": 150.0}),
     "current": DriverSpec(kind="fake", fake_mode="constant", params={"value": 0.0}),
