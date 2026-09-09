@@ -14,7 +14,7 @@ from app.schemas.contracts import CHANNELS
 from edge.drivers.adxl335 import ADXL335Driver
 from edge.drivers.base import Sensor, SensorDriver
 from edge.drivers.bmp280 import BMP280Driver
-from edge.drivers.dht22 import DHT22Driver
+from edge.drivers.dht22_adafruit import DHT22AdafruitDriver
 from edge.drivers.ds18b20 import DS18B20Driver
 from edge.drivers.ina219 import INA219Driver
 from edge.drivers.registry import (
@@ -117,7 +117,7 @@ def test_realistic_fake_missing_required_param_fails_clearly():
         ("temperature", DS18B20Driver),
         ("vibration", ADXL335Driver),
         ("pressure", BMP280Driver),
-        ("humidity", DHT22Driver),
+        ("humidity", DHT22AdafruitDriver),  # registry's real humidity driver since 7f264a1
         ("current", INA219Driver),
     ],
 )
