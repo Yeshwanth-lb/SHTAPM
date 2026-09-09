@@ -11,6 +11,13 @@ aggregates Doc05 §05.3 describes in prose (``readings_1min``,
 exists yet, exact column shape unspecified); ``agg`` therefore only
 accepts ``"raw"`` (the default) here, and any other value is a clear 400
 rather than a silently-wrong aggregation.
+
+``channels`` (Doc05 §05.2 ``sensors`` registry) answers "what is behind
+each of the six frozen channels, and is it real?" — the question the wire
+frame itself cannot answer, since a placeholder constant and a measured
+value are both just floats. See ``ChannelOut`` for exactly which parts of
+that answer are stored, which are declared configuration, and which are
+honestly reported as unknown.
 """
 
 from __future__ import annotations
@@ -24,10 +31,12 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, require_device_access, require_role, scope_devices_query
+from app.core.config import ChannelSourceSettings
 from app.core.db import get_db
-from app.models import Decision, Device, SensorReading, Threshold, User
+from app.models import Decision, Device, Sensor, SensorReading, Threshold, User
 from app.models.enums import DeviceStatus, UserRole
-from app.schemas.contracts import Attribution, HealthState, RLAction
+from app.schemas.contracts import CHANNELS, Attribution, HealthState, RLAction
+from app.schemas.decision_diagnostic import DIAGNOSTIC_PROVENANCE
 from app.services import ledger as ledger_service
 
 router = APIRouter(prefix="/api/devices", tags=["devices"])
@@ -83,11 +92,66 @@ class DecisionOut(_Body):
     anomaly_severity: float | None
     attribution: Attribution | None
     reason: str | None
+    # Per-channel trust (Doc05 §05.2 decisions.trust_*). These columns have
+    # always been written by the decision_diagnostic ingestion path; they were
+    # simply absent from this response schema, so the six scores the trust
+    # panel needs were unreachable over REST.
+    trust_temperature: float | None
+    trust_vibration: float | None
+    trust_pressure: float | None
+    trust_humidity: float | None
+    trust_gas: float | None
+    trust_current: float | None
     health_state: HealthState | None
     failure_eta: float | None
     rl_action: RLAction | None
     isolated_channels: list[str] | None
     substituted_channels: list[str] | None
+
+
+class DecisionProvenanceOut(_Body):
+    """The decision producer's own self-labelling.
+
+    Sourced from ``DecisionDiagnosticMessage``'s ``Literal`` fields, which are
+    invariant by construction — the only producer that writes to ``decisions``
+    is the diagnostic path, and it can emit exactly one value for each. They
+    are therefore reported here as the constants they are, NOT stored per row:
+    Doc05 §05.2's ``decisions`` table defines no such columns, and persisting
+    an invariant on every 1 Hz row would add a schema deviation and ~86k
+    identical strings a day for no recoverable information.
+
+    If a second producer with a different provenance is ever added, this stops
+    being invariant and must become real per-row columns (schema change,
+    migration, and a Doc05 amendment). Until then this is the honest shape.
+    """
+
+    execution_mode: str
+    data_source: str
+    model_status: str
+    note: str
+
+
+class ChannelOut(_Body):
+    """One frozen channel's provenance.
+
+    Three different kinds of fact, deliberately not blended:
+      * ``part``/``unit``/``is_proxy``/``display_hue`` — STORED, from the
+        Doc05 §05.2 ``sensors`` registry. ``null`` when no row exists yet
+        (nothing seeds that table today), never invented.
+      * ``source`` — DECLARED configuration (``SHTAPM_CHANNEL_SOURCES``),
+        because the wire frame cannot express it. ``"unknown"`` when this
+        backend was not told; a UI must render that differently from
+        ``"placeholder"``, which is a positive claim that nothing is
+        connected.
+      * ``channel`` — the frozen contract's own channel name.
+    """
+
+    channel: str
+    part: str | None
+    unit: str | None
+    is_proxy: bool | None
+    display_hue: str | None
+    source: str
 
 
 class ThresholdOut(_Body):
@@ -242,6 +306,49 @@ def get_decisions(
         query = query.filter(Decision.ts <= to)
     rows = query.order_by(Decision.ts).all()
     return [DecisionOut.model_validate(r, from_attributes=True) for r in rows]
+
+
+@router.get("/{device_id}/decisions/provenance", response_model=DecisionProvenanceOut)
+def get_decisions_provenance(
+    device_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> DecisionProvenanceOut:
+    """How decision rows for this device were produced. See
+    ``DecisionProvenanceOut`` for why these are constants, not stored values."""
+    require_device_access(db, current_user, device_id)
+    return DecisionProvenanceOut(**DIAGNOSTIC_PROVENANCE)
+
+
+@router.get("/{device_id}/channels", response_model=list[ChannelOut])
+def get_channels(
+    device_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[ChannelOut]:
+    """Per-channel provenance for the six frozen channels, in contract order.
+
+    Always returns all six — a channel with no ``sensors`` row is reported
+    with null registry fields rather than omitted, so a client can never
+    silently miss one.
+    """
+    device = require_device_access(db, current_user, device_id)
+    rows = {
+        row.channel.value if hasattr(row.channel, "value") else str(row.channel): row
+        for row in db.query(Sensor).filter(Sensor.device_id == device.id).all()
+    }
+    settings = ChannelSourceSettings.from_env()
+    return [
+        ChannelOut(
+            channel=channel,
+            part=getattr(rows.get(channel), "part", None),
+            unit=getattr(rows.get(channel), "unit", None),
+            is_proxy=getattr(rows.get(channel), "is_proxy", None),
+            display_hue=getattr(rows.get(channel), "display_hue", None),
+            source=settings.source_for(channel),
+        )
+        for channel in CHANNELS
+    ]
 
 
 @router.get("/{device_id}/thresholds", response_model=ThresholdOut)

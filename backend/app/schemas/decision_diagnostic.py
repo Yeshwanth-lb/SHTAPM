@@ -64,3 +64,19 @@ class DecisionDiagnosticMessage(_Strict):
     execution_mode: Literal["live"] = "live"
     data_source: Literal["edge_live_pipeline"] = "edge_live_pipeline"
     model_status: Literal["diagnostic_unvalidated"] = "diagnostic_unvalidated"
+
+
+# The three self-labelling fields above, as the constants they are. Single
+# source of truth for anything that needs to REPORT provenance (e.g. the REST
+# decisions-provenance endpoint) without duplicating the literals by hand.
+# Derived from the model itself, so it cannot drift from the schema.
+DIAGNOSTIC_PROVENANCE: dict[str, str] = {
+    "execution_mode": "live",
+    "data_source": "edge_live_pipeline",
+    "model_status": "diagnostic_unvalidated",
+    "note": (
+        "Produced by the edge diagnostic pipeline. anomaly_flag comes from "
+        "NullDetector, which never flags by design: these rows prove the "
+        "pipeline executes end-to-end, and make no validated detection claim."
+    ),
+}

@@ -8,7 +8,11 @@ Reads env vars (TRD §02.7). No secrets are logged. Credentials
 from __future__ import annotations
 
 import os
+from collections.abc import Mapping
 from dataclasses import dataclass
+from typing import ClassVar
+
+from app.schemas.contracts import CHANNELS
 
 
 @dataclass(frozen=True)
@@ -54,3 +58,65 @@ class AuthSettings:
             jwt_refresh_ttl_days=int(os.environ.get("JWT_REFRESH_TTL_DAYS", "7")),
             password_bcrypt_rounds=int(os.environ.get("PASSWORD_BCRYPT_ROUNDS", "12")),
         )
+
+
+@dataclass(frozen=True)
+class ChannelSourceSettings:
+    """Which frozen channels are fed by a physically-connected sensor on the
+    edge, and which are placeholder constants.
+
+    NOT DERIVABLE FROM THE DATA. The frozen telemetry contract carries six
+    plain floats and no provenance marker, so a placeholder constant is
+    byte-identical on the wire to a real reading — the backend cannot infer
+    this and must be told. It is declared here rather than guessed.
+
+    ``SHTAPM_CHANNEL_SOURCES`` is a comma-separated ``<channel>=<source>``
+    list, e.g.::
+
+        SHTAPM_CHANNEL_SOURCES=temperature=live,humidity=live,vibration=live
+
+    Recognised sources are ``live`` (physically connected sensor) and
+    ``placeholder`` (fake constant, no sensor). Any channel not named is
+    reported as ``unknown`` — deliberately NOT defaulted to either value,
+    because "we were not told" and "we know it is fake" are different claims
+    and a dashboard must not present the first as the second.
+
+    This mirrors the edge's own ``SHTAPM_DRIVER_<CHANNEL>`` convention
+    (edge/drivers/registry.py) but is a SEPARATE declaration on a separate
+    machine: it is what this backend has been told, not what the edge is
+    actually running. Keep the two in step when the bench is rewired.
+    """
+
+    sources: Mapping[str, str]
+
+    VALID_SOURCES: ClassVar[frozenset[str]] = frozenset({"live", "placeholder"})
+    UNKNOWN: ClassVar[str] = "unknown"
+
+    @classmethod
+    def from_env(cls, env: Mapping[str, str] | None = None) -> ChannelSourceSettings:
+        raw = (os.environ if env is None else env).get("SHTAPM_CHANNEL_SOURCES", "").strip()
+        if not raw:
+            return cls(sources={})
+        parsed: dict[str, str] = {}
+        for item in raw.split(","):
+            item = item.strip()
+            if not item:
+                continue
+            channel, _, source = item.partition("=")
+            channel, source = channel.strip(), source.strip()
+            if channel not in CHANNELS:
+                raise RuntimeError(
+                    f"SHTAPM_CHANNEL_SOURCES names unknown channel {channel!r} "
+                    f"(expected one of {sorted(CHANNELS)})"
+                )
+            if source not in cls.VALID_SOURCES:
+                raise RuntimeError(
+                    f"SHTAPM_CHANNEL_SOURCES={channel}={source!r} must be "
+                    f"one of {sorted(cls.VALID_SOURCES)}"
+                )
+            parsed[channel] = source
+        return cls(sources=parsed)
+
+    def source_for(self, channel: str) -> str:
+        """Declared source for one channel, or ``"unknown"`` when undeclared."""
+        return self.sources.get(channel, self.UNKNOWN)

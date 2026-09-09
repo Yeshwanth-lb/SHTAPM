@@ -28,10 +28,11 @@ from app.api.users import router as users_router  # noqa: E402
 from app.core.config import AuthSettings  # noqa: E402
 from app.core.db import get_db  # noqa: E402
 from app.core.security import hash_password  # noqa: E402
-from app.models import Alert, Base, Device, SensorReading, User  # noqa: E402
+from app.models import Alert, Base, Device, Sensor, SensorReading, User  # noqa: E402
 from app.models.enums import AlertSeverity, AlertType, UserRole  # noqa: E402
-from app.schemas.contracts import Attribution, TrustScores  # noqa: E402
+from app.schemas.contracts import CHANNELS, Attribution, Channel, TrustScores  # noqa: E402
 from app.schemas.decision_diagnostic import (  # noqa: E402
+    DIAGNOSTIC_PROVENANCE,  # noqa: E402
     ChannelAttribution,
     DecisionDiagnosticMessage,
 )
@@ -324,6 +325,14 @@ def test_get_decisions_returns_partial_diagnostic_row(client, seed, session_fact
     row = rows[0]
     assert row["anomaly_flag"] is True
     assert row["anomaly_severity"] == 0.66
+    # The six per-channel trust scores the trust panel needs: written by the
+    # ingestion path all along, now actually reachable over REST.
+    assert row["trust_temperature"] == 0.9
+    assert row["trust_vibration"] == 0.2
+    assert row["trust_pressure"] == 0.9
+    assert row["trust_humidity"] == 0.9
+    assert row["trust_gas"] == 0.9
+    assert row["trust_current"] == 0.9
     # Fields this diagnostic payload cannot honestly populate stay NULL --
     # never a fabricated health/action/isolation/attribution claim.
     assert row["health_state"] is None
@@ -395,9 +404,7 @@ def test_alerts_invalid_status_filter_is_400(client, seed):
 
 
 def test_alerts_status_open_filter(client, seed):
-    r = client.get(
-        "/api/alerts", params={"status": "open"}, headers=_auth(_operator_token(client))
-    )
+    r = client.get("/api/alerts", params={"status": "open"}, headers=_auth(_operator_token(client)))
     assert r.status_code == 200
     assert len(r.json()) == 1
 
@@ -480,9 +487,7 @@ def test_admin_updates_user_role(client, seed):
     users = client.get("/api/users", headers=_auth(token)).json()
     analyst_id = next(u["id"] for u in users if u["email"] == "analyst@example.com")
 
-    r = client.patch(
-        f"/api/users/{analyst_id}", json={"is_active": False}, headers=_auth(token)
-    )
+    r = client.patch(f"/api/users/{analyst_id}", json={"is_active": False}, headers=_auth(token))
     assert r.status_code == 200
     assert r.json()["is_active"] is False
 
@@ -513,3 +518,121 @@ def test_admin_reads_system_health(client, seed):
 def test_non_admin_cannot_read_system_health(client, seed):
     r = client.get("/api/system/health", headers=_auth(_operator_token(client)))
     assert r.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# Decision provenance + per-channel provenance (UI needs to distinguish a
+# measured value from a placeholder constant; the wire frame cannot say).
+# ---------------------------------------------------------------------------
+
+
+def test_decisions_provenance_reports_the_producers_self_labelling(client, seed):
+    r = client.get(
+        "/api/devices/pump-01/decisions/provenance", headers=_auth(_operator_token(client))
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["execution_mode"] == "live"
+    assert body["data_source"] == "edge_live_pipeline"
+    assert body["model_status"] == "diagnostic_unvalidated"
+    assert "NullDetector" in body["note"]
+
+
+def test_decisions_provenance_matches_the_schema_constant_exactly():
+    """Guards against the endpoint and the message schema drifting apart."""
+    assert set(DIAGNOSTIC_PROVENANCE) == {
+        "execution_mode",
+        "data_source",
+        "model_status",
+        "note",
+    }
+
+
+def test_decisions_provenance_requires_device_access(client, seed):
+    r = client.get(
+        "/api/devices/pump-02/decisions/provenance", headers=_auth(_operator_token(client))
+    )
+    assert r.status_code == 404  # unowned device: 404, never 403
+
+
+def test_channels_returns_all_six_in_contract_order_even_with_no_registry_rows(client, seed):
+    r = client.get("/api/devices/pump-01/channels", headers=_auth(_operator_token(client)))
+    assert r.status_code == 200
+    rows = r.json()
+    assert [row["channel"] for row in rows] == list(CHANNELS)
+    # No sensors row exists for pump-01 -- registry fields are null, not invented.
+    for row in rows:
+        assert row["part"] is None
+        assert row["unit"] is None
+        assert row["is_proxy"] is None
+        assert row["display_hue"] is None
+
+
+def test_channels_source_is_unknown_when_not_declared(client, seed, monkeypatch):
+    """'We were not told' must never be reported as 'we know it is fake'."""
+    monkeypatch.delenv("SHTAPM_CHANNEL_SOURCES", raising=False)
+    r = client.get("/api/devices/pump-01/channels", headers=_auth(_operator_token(client)))
+    assert r.status_code == 200
+    assert {row["source"] for row in r.json()} == {"unknown"}
+
+
+def test_channels_reports_declared_live_and_placeholder_sources(client, seed, monkeypatch):
+    monkeypatch.setenv(
+        "SHTAPM_CHANNEL_SOURCES",
+        "temperature=live,humidity=live,vibration=live,"
+        "pressure=placeholder,gas=placeholder,current=placeholder",
+    )
+    r = client.get("/api/devices/pump-01/channels", headers=_auth(_operator_token(client)))
+    assert r.status_code == 200
+    by_channel = {row["channel"]: row["source"] for row in r.json()}
+    assert by_channel == {
+        "temperature": "live",
+        "humidity": "live",
+        "vibration": "live",
+        "pressure": "placeholder",
+        "gas": "placeholder",
+        "current": "placeholder",
+    }
+
+
+def test_channels_partially_declared_leaves_the_rest_unknown(client, seed, monkeypatch):
+    monkeypatch.setenv("SHTAPM_CHANNEL_SOURCES", "vibration=live")
+    r = client.get("/api/devices/pump-01/channels", headers=_auth(_operator_token(client)))
+    by_channel = {row["channel"]: row["source"] for row in r.json()}
+    assert by_channel["vibration"] == "live"
+    assert by_channel["pressure"] == "unknown"
+
+
+def test_channels_merges_stored_registry_rows_when_they_exist(
+    client, seed, session_factory, monkeypatch
+):
+    monkeypatch.setenv("SHTAPM_CHANNEL_SOURCES", "vibration=live")
+    with session_factory() as db:
+        device = db.query(Device).filter(Device.device_id == "pump-01").one()
+        db.add(
+            Sensor(
+                device_id=device.id,
+                channel=Channel.vibration,
+                part="ADXL335",
+                unit="g",
+                is_proxy=False,
+                display_hue="--aurora-teal",
+            )
+        )
+        db.commit()
+
+    r = client.get("/api/devices/pump-01/channels", headers=_auth(_operator_token(client)))
+    assert r.status_code == 200
+    rows = {row["channel"]: row for row in r.json()}
+    assert rows["vibration"]["part"] == "ADXL335"
+    assert rows["vibration"]["unit"] == "g"
+    assert rows["vibration"]["is_proxy"] is False
+    assert rows["vibration"]["display_hue"] == "--aurora-teal"
+    assert rows["vibration"]["source"] == "live"
+    assert rows["temperature"]["part"] is None  # still six rows, unstored ones null
+    assert len(rows) == len(CHANNELS)
+
+
+def test_channels_requires_device_access(client, seed):
+    r = client.get("/api/devices/pump-02/channels", headers=_auth(_operator_token(client)))
+    assert r.status_code == 404
