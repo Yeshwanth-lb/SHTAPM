@@ -8,15 +8,15 @@ hand-written ``drivers[channel] = XDriver()`` lines:
     registry.build_drivers(...) → Sampler → TelemetryMessage → Publisher → Mosquitto
                                                               ↘ LiveP2Monitor (observe-only)
 
-``_DEFAULT_CHANNEL_SPECS`` matches this bench's actual wiring — FOUR real
-drivers across three physical sensors, two fake constants:
+``_DEFAULT_CHANNEL_SPECS`` matches this bench's actual wiring — THREE real
+channels across two physical sensors, three fake constants:
 
   channel      sensor / interface                       driver
   ----------   --------------------------------------   ----------------------
   temperature  DHT22 ambient air, GPIO17 (shared)       DHT22AdafruitTemperature
   humidity     DHT22 %RH, GPIO17 (shared)               DHT22Adafruit
   vibration    ADXL335, MCP3008 CH0-2 over SPI0 CE0     ADXL335
-  pressure     BMP280, I2C bus 1 at address 0x76        BMP280
+  pressure     — (BMP280 implemented, not connected)    fake constant 1013.0
   gas          — (no MQ-135 driver implemented)         fake constant 150.0
   current      — (INA219 implemented, not connected)    fake constant 0.0
 
@@ -43,12 +43,18 @@ for one run; no pipeline, contract, topic, or downstream change is involved.
 Note it measures a different physical quantity, so a model fitted on ambient
 air is not automatically valid for a contact probe.
 
-``gas`` and ``current`` are fake constants: INA219 is implemented
-(edge/drivers/ina219.py, individually hardware-validated earlier) but is not
-physically connected, and gas (MQ-135) has no driver at all. A disconnected
-sensor declared ``kind="real"`` here would be permanently unhealthy and
-would block every frame (Sampler.sample_once() requires all six channels
-healthy) — which is why this table tracks the bench's real wiring.
+``pressure``, ``gas`` and ``current`` are fake constants. BMP280
+(edge/drivers/bmp280.py) and INA219 (edge/drivers/ina219.py) are both
+implemented and were each individually hardware-validated earlier, but
+neither is physically connected right now; gas (MQ-135) has no driver at
+all. Both implemented drivers stay registered as their channels' real
+drivers, so connecting either one is a one-line change here
+(``DriverSpec(kind="real")``) or ``SHTAPM_DRIVER_PRESSURE=real`` /
+``SHTAPM_DRIVER_CURRENT=real`` for a single run — nothing else moves. A
+disconnected sensor declared ``kind="real"`` would be permanently unhealthy
+and would block every frame (Sampler.sample_once() requires all six
+channels healthy) — which is why this table tracks the bench's real wiring
+rather than what is merely implemented.
 
 RECONNECTING A SENSOR IS NOW A CONFIGURATION CHANGE, not a code edit: set
 ``SHTAPM_DRIVER_<CHANNEL>=real`` (e.g. ``SHTAPM_DRIVER_VIBRATION=real``) to
@@ -174,7 +180,8 @@ _DEFAULT_CHANNEL_SPECS: dict[str, DriverSpec] = {
     # DS18B20 stays available as kind="alternate" if that hardware is added.
     "temperature": DriverSpec(kind="real"),  # DHT22AdafruitTemperatureDriver(), GPIO17
     "vibration": DriverSpec(kind="real"),  # ADXL335Driver(), MCP3008 CH0-2 / SPI0 CE0
-    "pressure": DriverSpec(kind="real"),  # BMP280Driver(), I2C bus 1 @ 0x76
+    # BMP280 not connected yet; stays this channel's real driver for when it is.
+    "pressure": DriverSpec(kind="fake", fake_mode="constant", params={"value": 1013.0}),
     "humidity": DriverSpec(kind="real"),  # DHT22AdafruitDriver(), GPIO17
     "gas": DriverSpec(kind="fake", fake_mode="constant", params={"value": 150.0}),
     "current": DriverSpec(kind="fake", fake_mode="constant", params={"value": 0.0}),

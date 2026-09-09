@@ -15,11 +15,12 @@ each driver's own ``_open_*`` method), so constructing the exact bench
 table proves it can't raise ``UnsupportedDriverError`` at boot without
 needing a Pi, an SPI/I2C bus, or a 1-Wire probe.
 
-Current bench state asserted below (2026-09-09): four real channels across
-three sensors — DHT22 serving BOTH temperature (ambient air) and humidity,
-ADXL335 (vibration), BMP280 (pressure) — with gas and current fake
-constants. When the bench is reconfigured, update this file WITH main.py —
-a failure here means the two disagree.
+Current bench state asserted below (2026-09-09): three real channels across
+two sensors — DHT22 serving BOTH temperature (ambient air) and humidity, and
+ADXL335 (vibration) — with pressure, gas and current fake constants. BMP280
+is implemented and remains pressure's registered real driver, but is not
+physically connected. When the bench is reconfigured, update this file WITH
+main.py — a failure here means the two disagree.
 
 Sourcing temperature from the DHT22 is the APPROVED project configuration
 (supervisor decision, DECISIONS.md D028), not a stopgap. DS18B20 remains
@@ -53,10 +54,9 @@ from edge.main import _DEFAULT_CHANNEL_SPECS
 _EXPECTED_REAL: dict[str, type[SensorDriver]] = {
     "temperature": DHT22AdafruitTemperatureDriver,  # ambient air, shared DHT22 (D028)
     "vibration": ADXL335Driver,
-    "pressure": BMP280Driver,
     "humidity": DHT22AdafruitDriver,  # same physical sensor as temperature
 }
-_EXPECTED_FAKE_CONSTANTS = {"gas": 150.0, "current": 0.0}
+_EXPECTED_FAKE_CONSTANTS = {"pressure": 1013.0, "gas": 150.0, "current": 0.0}
 
 
 def test_default_specs_cover_exactly_the_frozen_channels():
@@ -121,12 +121,11 @@ def test_a_disconnected_sensor_can_be_reverted_to_fake_by_env_without_a_code_edi
     escape hatch (see edge/main.py's module docstring)."""
     resolved = resolve_channel_specs_from_env(
         _DEFAULT_CHANNEL_SPECS,
-        env={"SHTAPM_DRIVER_TEMPERATURE": "fake", "SHTAPM_DRIVER_PRESSURE": "fake"},
+        env={"SHTAPM_DRIVER_TEMPERATURE": "fake", "SHTAPM_DRIVER_VIBRATION": "fake"},
     )
-    for channel in ("temperature", "pressure"):
+    for channel in ("temperature", "vibration"):
         assert resolved[channel].kind == "fake"
-    for channel in ("vibration", "humidity"):
-        assert resolved[channel].kind == "real"
+    assert resolved["humidity"].kind == "real"
     assert _DEFAULT_CHANNEL_SPECS["temperature"].kind == "real"  # not mutated
 
 
@@ -153,3 +152,18 @@ def test_the_ds18b20_alternate_is_selectable_by_env_without_a_code_edit():
     )
     assert resolved["temperature"] == DriverSpec(kind="alternate")
     assert _DEFAULT_CHANNEL_SPECS["temperature"].kind == "real"  # not mutated
+
+
+def test_connecting_bmp280_later_is_a_one_line_change():
+    """BMP280 is implemented and stays pressure's registered real driver while
+    the sensor is unplugged, so wiring it up is flipping this one spec — the
+    same promise made for every other channel on this bench."""
+    connected = dict(_DEFAULT_CHANNEL_SPECS)
+    connected["pressure"] = DriverSpec(kind="real")
+
+    drivers = build_drivers(connected)
+
+    assert isinstance(drivers["pressure"], BMP280Driver)
+    assert set(drivers) == set(CHANNELS)
+    for channel, expected_cls in _EXPECTED_REAL.items():
+        assert isinstance(drivers[channel], expected_cls)  # nothing else moved
