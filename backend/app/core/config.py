@@ -120,3 +120,40 @@ class ChannelSourceSettings:
     def source_for(self, channel: str) -> str:
         """Declared source for one channel, or ``"unknown"`` when undeclared."""
         return self.sources.get(channel, self.UNKNOWN)
+
+
+@dataclass(frozen=True)
+class CorsSettings:
+    """Browser origins allowed to call this API.
+
+    ``CORS_ALLOWED_ORIGINS`` has been documented in ``.env.example`` since P0
+    but was never read by anything — so a browser served from any origin other
+    than the API's own was blocked, and the failure surfaced in the UI as a
+    generic network error rather than as a CORS message (a blocked
+    cross-origin fetch rejects with a TypeError, not an HTTP status).
+
+    Comma-separated absolute origins, e.g.::
+
+        CORS_ALLOWED_ORIGINS=http://localhost:5173,http://192.168.1.20:5173
+
+    Origins are matched exactly by the browser (scheme + host + port), so the
+    Pi's LAN origin must be listed explicitly — ``localhost`` does not cover it.
+
+    ``"*"`` is accepted but deliberately NOT the default: this API is a
+    credential-bearing admin surface. Note the wildcard also cannot be combined
+    with ``allow_credentials=True`` per the CORS spec; this project sends bearer
+    tokens in a header rather than cookies, so credentials stay off and the
+    wildcard remains usable for a throwaway demo.
+    """
+
+    allowed_origins: tuple[str, ...]
+
+    DEFAULT: ClassVar[str] = "http://localhost:5173"
+
+    @classmethod
+    def from_env(cls, env: Mapping[str, str] | None = None) -> CorsSettings:
+        raw = (os.environ if env is None else env).get("CORS_ALLOWED_ORIGINS")
+        if raw is None:
+            raw = cls.DEFAULT
+        origins = tuple(item.strip() for item in raw.split(",") if item.strip())
+        return cls(allowed_origins=origins)

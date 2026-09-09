@@ -39,6 +39,7 @@ import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.alerts import router as alerts_router
 from app.api.auth import router as auth_router
@@ -46,7 +47,7 @@ from app.api.devices import router as devices_router
 from app.api.ledger import router as ledger_router
 from app.api.system import router as system_router
 from app.api.users import router as users_router
-from app.core.config import AuthSettings, DatabaseSettings, MqttSettings
+from app.core.config import AuthSettings, CorsSettings, DatabaseSettings, MqttSettings
 from app.core.db import make_engine, make_session_factory
 from app.models import Base
 from app.mqtt.consumer import TelemetryConsumer
@@ -96,7 +97,28 @@ async def lifespan(app: FastAPI):
         engine.dispose()
 
 
+def configure_cors(app: FastAPI, settings: CorsSettings | None = None) -> FastAPI:
+    """Attach CORSMiddleware from CORS_ALLOWED_ORIGINS.
+
+    Separated from module import so tests can exercise it against an explicit
+    settings object instead of process env. ``allow_credentials`` stays False:
+    this API authenticates with a bearer token in the Authorization header, not
+    cookies, so credentialed CORS is unnecessary — and enabling it would make
+    a "*" origin list illegal per the CORS spec.
+    """
+    resolved = settings if settings is not None else CorsSettings.from_env()
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=list(resolved.allowed_origins),
+        allow_credentials=False,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+    return app
+
+
 app = FastAPI(title="SHTAPM backend", lifespan=lifespan)
+configure_cors(app)
 app.include_router(ws_router)
 app.include_router(auth_router)
 app.include_router(devices_router)

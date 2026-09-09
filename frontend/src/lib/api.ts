@@ -6,11 +6,36 @@
 //   POST /api/auth/logout   LogoutRequest -> 204             (api/auth.py)
 //   GET  /api/devices                     -> DeviceOut[]     (api/devices.py)
 //   GET  /api/devices/:id/channels        -> ChannelOut[]    (api/devices.py)
-//
-// Base URL is configurable (TRD §02.7) and falls back to the local backend.
+
+/** Host port the backend is published on (.env.example: container stays 8000). */
+export const DEFAULT_BACKEND_PORT = 8002;
+
+/**
+ * Resolve the API base URL.
+ *
+ * `VITE_API_BASE_URL` (the name .env.example documents) wins when set.
+ * Otherwise the base is derived from the page's own origin, keeping the
+ * backend's host in step with wherever the UI was loaded from: served from
+ * the Pi at 192.168.1.20:5173, the API resolves to 192.168.1.20:8002; opened
+ * on the Pi itself, it resolves to localhost:8002. A hardcoded host would be
+ * wrong for one of those two cases, and `localhost` in particular is the
+ * BROWSER's machine, not the Pi — the bug this replaces.
+ */
+export function resolveApiBase(
+  env: { VITE_API_BASE_URL?: string },
+  location?: { protocol: string; hostname: string },
+): string {
+  const configured = env.VITE_API_BASE_URL;
+  if (configured) return configured.replace(/\/$/, "");
+  if (!location) return `http://localhost:${DEFAULT_BACKEND_PORT}`;
+  return `${location.protocol}//${location.hostname}:${DEFAULT_BACKEND_PORT}`;
+}
 
 export function apiBase(): string {
-  return import.meta.env.VITE_API_BASE ?? "http://localhost:8000";
+  return resolveApiBase(
+    import.meta.env as { VITE_API_BASE_URL?: string },
+    typeof window === "undefined" ? undefined : window.location,
+  );
 }
 
 /** Mirrors backend TokenResponse (api/auth.py). */
