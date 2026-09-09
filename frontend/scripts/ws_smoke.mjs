@@ -65,7 +65,9 @@ ws.addEventListener("message", (ev) => {
     process.exit(1);
   }
   got += 1;
-  console.log(`[smoke] telemetry #${got} device=${f.device_id} seq=${f.sample_seq} temp=${f.sensors.temperature}`);
+  console.log(
+    `[smoke] telemetry #${got} device=${f.device_id} seq=${f.sample_seq} temp=${f.sensors.temperature}`,
+  );
   if (got >= need) {
     clearTimeout(timer);
     ws.close();

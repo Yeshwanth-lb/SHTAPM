@@ -108,3 +108,22 @@
     grid-template-columns: 1fr;
   }
 }
+
+.device__controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.settings__row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.settings__row input {
+  margin-top: 2px;
+}

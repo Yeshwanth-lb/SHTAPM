@@ -1,73 +1,178 @@
-// Interim Overview.
+// Operational overview: is the system working, and what is it seeing?
 //
-// SCOPE: this is NOT the Device Detail cockpit (Doc04 §04.5) — no bento, no
-// uPlot charts, no trust constellation, no health hero. Those come with the
-// screen work that follows. What it does carry now is the one thing the
-// foundation must not defer: explicit real-vs-placeholder labelling for every
-// channel, so no number is ever shown without saying where it came from.
+// Everything here is real: /healthz for transport and ingestion status
+// (unauthenticated, so it works even if a token has expired), /api/devices for
+// the fleet, /api/devices/:id/channels for provenance, /api/alerts for faults.
+// Nothing is synthesised and no status is inferred from the absence of an
+// error — a panel that cannot load says so.
 import { GlassTile } from "../components/aurora/GlassTile";
-import { ChannelProvenanceBadge } from "../components/panels/ChannelProvenanceBadge";
+import { StateBlock, StatusPill } from "../components/aurora/StateBlock";
+import { navigate } from "../app/router";
 import { useAuth } from "../features/auth/AuthContext";
 import { useChannels } from "../features/channels/useChannels";
+import { apiGet, getHealthz, type AlertOut, type DeviceOut, type HealthzOut } from "../lib/api";
+import { useApiResource } from "../lib/useApiResource";
 import { CHANNELS } from "../types/contracts";
-import "./overview.css";
+import "./pages.css";
 
 const DEVICE_ID = import.meta.env.VITE_DEVICE_ID ?? "pump-01";
+const HEALTH_POLL_MS = 5000;
+
+function ok(value: boolean) {
+  return value ? (
+    <StatusPill tone="healthy">Connected</StatusPill>
+  ) : (
+    <StatusPill tone="critical">Down</StatusPill>
+  );
+}
 
 export function Overview() {
   const { tokens } = useAuth();
-  const { channels, loading, error } = useChannels(DEVICE_ID, tokens?.accessToken ?? null);
+  const accessToken = tokens?.accessToken ?? null;
 
-  const liveCount = channels.filter((c) => c.source === "live").length;
+  const health = useApiResource<HealthzOut>(() => getHealthz(), [], {
+    pollMs: HEALTH_POLL_MS,
+  });
+  const devices = useApiResource<DeviceOut[]>(
+    () => apiGet<DeviceOut[]>("/api/devices", accessToken!),
+    [accessToken],
+    { enabled: accessToken !== null },
+  );
+  const alerts = useApiResource<AlertOut[]>(
+    () => apiGet<AlertOut[]>("/api/alerts?status=open", accessToken!),
+    [accessToken],
+    { enabled: accessToken !== null },
+  );
+  const { channels } = useChannels(DEVICE_ID, accessToken);
+
+  const h = health.data;
+  const liveChannels = channels.filter((c) => c.source === "live").length;
+  const declared = channels.filter((c) => c.source !== "unknown").length;
 
   return (
-    <div className="overview">
+    <div className="page">
+      <header className="page__head">
+        <h1 className="t-h1">Overview</h1>
+        <span className="t-label">
+          {health.status === "ready" ? `refreshed every ${HEALTH_POLL_MS / 1000}s` : ""}
+        </span>
+      </header>
+
+      <GlassTile title="System health">
+        {health.status === "loading" && <StateBlock kind="loading" />}
+        {health.status === "error" && (
+          <StateBlock kind="error" title="Backend unreachable" onRetry={health.refresh}>
+            {health.error}
+          </StateBlock>
+        )}
+        {h && (
+          <div className="kv">
+            <div className="kv__item">
+              <span className="kv__label">Backend API</span>
+              <span className="kv__value">{ok(h.status === "ok")}</span>
+            </div>
+            <div className="kv__item">
+              <span className="kv__label">MQTT broker</span>
+              <span className="kv__value" data-testid="mqtt-status">
+                {ok(h.mqtt_connected)}
+              </span>
+            </div>
+            <div className="kv__item">
+              <span className="kv__label">Database</span>
+              <span className="kv__value" data-testid="db-status">
+                {ok(h.db_connected)}
+                {h.db_error && <span className="t-muted mono"> {h.db_error}</span>}
+              </span>
+            </div>
+            <div className="kv__item">
+              <span className="kv__label">WebSocket clients</span>
+              <span className="kv__value tabular">{h.ws_clients}</span>
+            </div>
+            <div className="kv__item">
+              <span className="kv__label">Frames ingested</span>
+              <span className="kv__value tabular" data-testid="telemetry-count">
+                {h.telemetry_count}
+              </span>
+            </div>
+            <div className="kv__item">
+              <span className="kv__label">Devices seen</span>
+              <span className="kv__value tabular" data-testid="device-count">
+                {h.devices.length}
+              </span>
+            </div>
+          </div>
+        )}
+      </GlassTile>
+
       <GlassTile
         title="Signal integrity"
         aside={
-          <span className="t-label tabular" data-testid="live-count">
-            {loading ? "—" : `${liveCount} / ${CHANNELS.length}`}
+          <span className="t-label tabular" data-testid="integrity-summary">
+            {declared === 0 ? "unverified" : `${liveChannels} / ${CHANNELS.length} live`}
           </span>
         }
       >
-        <p className="overview__lede t-muted">
-          Channel provenance for <span className="mono">{DEVICE_ID}</span>. The telemetry contract
-          carries six plain numbers and no provenance marker, so this is declared by the backend,
-          never inferred from the values.
+        <p className="page__lede t-muted">
+          {declared === 0
+            ? "No channel provenance is registered, so every channel reads UNVERIFIED. Values arriving is not evidence a sensor is connected — placeholder constants arrive identically."
+            : `${declared} of ${CHANNELS.length} channels have declared provenance.`}
         </p>
+        <button className="link-btn" onClick={() => navigate("/device")} data-testid="goto-device">
+          Open device monitoring →
+        </button>
+      </GlassTile>
 
-        {error && (
-          <p className="overview__error" role="alert" data-testid="channels-error">
-            Could not load channel provenance: {error}
-          </p>
+      <GlassTile title="Open alerts">
+        {alerts.status === "loading" && <StateBlock kind="loading" />}
+        {alerts.status === "error" && (
+          <StateBlock kind="error" onRetry={alerts.refresh}>
+            {alerts.error}
+          </StateBlock>
         )}
-
-        {loading && !error && <p className="t-muted">Loading…</p>}
-
-        {!loading && !error && (
-          <ul className="overview__channels" data-testid="channel-list">
-            {channels.map((c) => (
-              <li key={c.channel} className="overview__channel glass-inset">
-                <div className="overview__channel-head">
-                  <span className="t-label">{c.channel}</span>
-                  <ChannelProvenanceBadge source={c.source} />
-                </div>
-                <p className="overview__channel-meta t-muted mono">
-                  {c.part ?? "part not registered"}
-                  {c.unit ? ` · ${c.unit}` : ""}
-                  {c.is_proxy ? " · proxy measurement" : ""}
-                </p>
+        {alerts.status === "ready" && (alerts.data?.length ?? 0) === 0 && (
+          <StateBlock kind="empty" title="No open alerts" data-testid="alerts-empty">
+            Nothing has raised an alert. Note that no component publishes alerts yet, so this panel
+            stays empty by design rather than because the system is quiet.
+          </StateBlock>
+        )}
+        {(alerts.data?.length ?? 0) > 0 && (
+          <ul className="page__list">
+            {alerts.data!.slice(0, 5).map((a) => (
+              <li key={a.id}>
+                <StatusPill tone={a.severity === "critical" ? "critical" : "warning"}>
+                  {a.severity}
+                </StatusPill>{" "}
+                <span className="mono">{a.device_id}</span> — {a.message}
               </li>
             ))}
           </ul>
         )}
       </GlassTile>
 
-      <GlassTile title="Next">
-        <p className="t-muted overview__lede">
-          Device cockpit, trust constellation, ledger, settings and user administration follow. Live
-          charts are not wired in this slice.
-        </p>
+      <GlassTile title="Devices">
+        {devices.status === "loading" && <StateBlock kind="loading" />}
+        {devices.status === "error" && (
+          <StateBlock kind="error" onRetry={devices.refresh}>
+            {devices.error}
+          </StateBlock>
+        )}
+        {devices.status === "ready" && (devices.data?.length ?? 0) === 0 && (
+          <StateBlock kind="empty" title="No devices registered" />
+        )}
+        {(devices.data?.length ?? 0) > 0 && (
+          <ul className="page__list">
+            {devices.data!.map((d) => (
+              <li key={d.id}>
+                <button className="link-btn" onClick={() => navigate("/device")}>
+                  <span className="mono">{d.device_id}</span>
+                </button>{" "}
+                <span className="t-muted">
+                  {d.status} · last seen {d.last_seen_at ?? "never"}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
       </GlassTile>
     </div>
   );

@@ -9,10 +9,41 @@ import { MeshBackground } from "./components/aurora/MeshBackground";
 import { AuthProvider } from "./features/auth/AuthContext";
 import { LoginScreen } from "./features/auth/LoginScreen";
 import { RequireAuth } from "./features/auth/RequireAuth";
+import { AlertsPage } from "./pages/AlertsPage";
 import { DevicePage } from "./pages/DevicePage";
+import { DevicesPage } from "./pages/DevicesPage";
+import { HistoryPage } from "./pages/HistoryPage";
 import { Overview } from "./pages/Overview";
+import { SettingsPage } from "./pages/SettingsPage";
+import { SystemPage } from "./pages/SystemPage";
+import { UsersPage } from "./pages/UsersPage";
 import "./styles/fonts.css";
 import "./styles/aurora.css";
+
+/** Route table. Every entry here is a page backed by real API data; anything
+ *  not listed renders an honest "not found" rather than an empty shell. */
+const PAGES: Record<string, () => JSX.Element> = {
+  "/": Overview,
+  "/device": DevicePage,
+  "/devices": DevicesPage,
+  "/history": HistoryPage,
+  "/alerts": AlertsPage,
+  "/settings": SettingsPage,
+  "/users": UsersPage,
+  "/system": SystemPage,
+};
+
+function Page({ path }: { path: string }) {
+  const Component = PAGES[path];
+  if (!Component) {
+    return (
+      <p className="t-muted" data-testid="not-found">
+        No such page.
+      </p>
+    );
+  }
+  return <Component />;
+}
 
 function Routes() {
   const { path } = useRoute();
@@ -22,16 +53,7 @@ function Routes() {
   return (
     <RequireAuth>
       <AppShell>
-        {path === "/" ? (
-          <Overview />
-        ) : path === "/device" ? (
-          <DevicePage />
-        ) : (
-          // Unknown or not-yet-built path. Honest, not a fabricated screen.
-          <p className="t-muted" data-testid="not-built">
-            Not built yet.
-          </p>
-        )}
+        <Page path={path} />
       </AppShell>
     </RequireAuth>
   );

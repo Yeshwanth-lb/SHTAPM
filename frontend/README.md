@@ -3,6 +3,7 @@
 **P0 M3.5 status: minimal live-telemetry proof.** Not the Aurora dashboard (P5).
 
 Present now:
+
 - React 18 app: `index.html`, `src/main.tsx`, `src/App.tsx`.
 - `src/hooks/useTelemetryWebSocket.ts` — connects `VITE_WS_URL`, accepts only
   frozen-contract telemetry frames, latest-per-device state, capped-backoff reconnect.
@@ -16,12 +17,14 @@ Added in **P5** (not now): Aurora tokens/Tailwind, shadcn/Radix, uPlot/ECharts,
 Framer Motion, Zustand, TanStack Query, routing, the full dashboard.
 
 ## Run (needs backend `/ws` reachable at `VITE_WS_URL`)
+
 ```bash
 npm install
 npm run dev          # http://localhost:5173
 ```
 
 ## Test / build
+
 ```bash
 npm run test         # Vitest + RTL (jsdom)
 npm run typecheck    # tsc --noEmit
@@ -29,6 +32,7 @@ npm run build        # tsc + vite build
 ```
 
 ## Live-path smoke (no npm; needs the stack running)
+
 ```bash
 node scripts/ws_smoke.mjs ws://localhost:8002/ws 2
 ```

@@ -80,7 +80,14 @@ export type WSFrame<T> = { type: WSFrameType } & T;
 export const EXAMPLE_TELEMETRY: TelemetryMessage = {
   device_id: "pump-01",
   ts: "2026-08-09T12:00:00.000Z",
-  sensors: { temperature: 24.5, vibration: 0.03, pressure: 1013.2, humidity: 41.0, gas: 120.0, current: 0.42 },
+  sensors: {
+    temperature: 24.5,
+    vibration: 0.03,
+    pressure: 1013.2,
+    humidity: 41.0,
+    gas: 120.0,
+    current: 0.42,
+  },
   sample_seq: 123,
 };
 
@@ -88,7 +95,14 @@ export const EXAMPLE_DECISION: DecisionMessage = {
   device_id: "pump-01",
   ts: "2026-08-09T12:00:03.000Z",
   anomaly: { flag: true, severity: 0.82, attribution: "attack", reason: "pressure vs current" },
-  trust: { temperature: 0.95, vibration: 0.93, pressure: 0.21, humidity: 0.9, gas: 0.88, current: 0.97 },
+  trust: {
+    temperature: 0.95,
+    vibration: 0.93,
+    pressure: 0.21,
+    humidity: 0.9,
+    gas: 0.88,
+    current: 0.97,
+  },
   health: "warning",
   failure_eta: 142,
   rl_action: "isolate",

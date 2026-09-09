@@ -27,7 +27,14 @@ const validFrame = {
   type: "telemetry",
   device_id: "pump-01",
   ts: "2026-08-09T12:00:00.000Z",
-  sensors: { temperature: 26, vibration: 0.03, pressure: 1013, humidity: 45, gas: 150, current: 0.42 },
+  sensors: {
+    temperature: 26,
+    vibration: 0.03,
+    pressure: 1013,
+    humidity: 45,
+    gas: 150,
+    current: 0.42,
+  },
   sample_seq: 4,
 };
 

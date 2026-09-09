@@ -1,11 +1,6 @@
 import { describe, it, expect } from "vitest";
 
-import {
-  CHANNELS,
-  EXAMPLE_DECISION,
-  EXAMPLE_LEDGER,
-  EXAMPLE_TELEMETRY,
-} from "../types/contracts";
+import { CHANNELS, EXAMPLE_DECISION, EXAMPLE_LEDGER, EXAMPLE_TELEMETRY } from "../types/contracts";
 
 // P0 M2: the TS mirror is compile-time-checked by tsc; these runtime checks
 // assert the canonical examples keep the frozen field set (D006/D007). Real

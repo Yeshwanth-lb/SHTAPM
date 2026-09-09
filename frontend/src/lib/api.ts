@@ -6,6 +6,11 @@
 //   POST /api/auth/logout   LogoutRequest -> 204             (api/auth.py)
 //   GET  /api/devices                     -> DeviceOut[]     (api/devices.py)
 //   GET  /api/devices/:id/channels        -> ChannelOut[]    (api/devices.py)
+//   GET  /api/devices/:id/readings        -> SensorReadingOut[] (api/devices.py)
+//   GET  /api/alerts                      -> AlertOut[]      (api/alerts.py)
+//   GET  /api/users                       -> UserOut[]       (api/users.py, admin)
+//   GET  /api/system/health               -> SystemHealthOut (api/system.py, admin)
+//   GET  /healthz                         -> HealthzOut      (app/main.py, no auth)
 
 /** Host port the backend is published on (.env.example: container stays 8000). */
 export const DEFAULT_BACKEND_PORT = 8002;
@@ -157,4 +162,56 @@ export function getDevices(accessToken: string): Promise<DeviceOut[]> {
 
 export function apiGet<T>(path: string, accessToken: string): Promise<T> {
   return request<T>(path, { method: "GET" }, accessToken);
+}
+
+/** Mirrors backend AlertOut (api/alerts.py). */
+export interface AlertOut {
+  id: string;
+  device_id: string;
+  ts: string;
+  severity: "info" | "warning" | "critical";
+  type: "fault" | "attack" | "system";
+  channel: string | null;
+  message: string;
+  reason: string | null;
+  acknowledged_by: string | null;
+  acknowledged_at: string | null;
+}
+
+/** Mirrors backend UserOut (api/users.py). */
+export interface UserOut {
+  id: string;
+  email: string;
+  full_name: string | null;
+  role: "operator" | "analyst" | "admin";
+  is_active: boolean;
+  created_at: string;
+  last_login_at: string | null;
+}
+
+/** Mirrors backend SystemHealthOut (api/system.py). Admin-only. */
+export interface SystemHealthOut {
+  mqtt_connected: boolean;
+  db_connected: boolean;
+  ws_clients: number;
+  telemetry_count: number;
+  e2e_latency_ms: number | null;
+}
+
+/** Mirrors the unauthenticated /healthz payload (app/main.py). */
+export interface HealthzOut {
+  status: string;
+  mqtt_connected: boolean;
+  db_connected: boolean;
+  db_error: string | null;
+  telemetry_count: number;
+  devices: string[];
+  ws_clients: number;
+}
+
+/** /healthz needs no token — it is the one probe available before sign-in. */
+export async function getHealthz(): Promise<HealthzOut> {
+  const response = await fetch(`${apiBase()}/healthz`);
+  if (!response.ok) throw new ApiError(response.status, response.statusText);
+  return (await response.json()) as HealthzOut;
 }

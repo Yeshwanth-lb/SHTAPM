@@ -1,0 +1,4 @@
+# Build output and generated files — never hand-formatted.
+dist/
+node_modules/
+package-lock.json

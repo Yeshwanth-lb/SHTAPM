@@ -1,0 +1,204 @@
+.state {
+  padding: 18px 16px;
+  border-radius: 12px;
+  background: var(--glass-inset);
+  border: 1px solid var(--glass-border);
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+}
+
+.state__title {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.state__body {
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.state--error {
+  border-color: rgba(255, 92, 122, 0.28);
+  background: rgba(255, 92, 122, 0.07);
+}
+
+.state--error .state__title {
+  color: var(--status-critical);
+}
+
+.state__retry {
+  border: 1px solid var(--glass-border-strong);
+  background: var(--glass-2);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 12px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.state__retry:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+/* Status pill — label carries meaning; colour reinforces it. */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  border: 1px solid var(--glass-border);
+  white-space: nowrap;
+}
+
+.pill--healthy {
+  color: var(--status-healthy);
+  border-color: rgba(52, 228, 176, 0.3);
+  background: rgba(52, 228, 176, 0.08);
+}
+
+.pill--warning {
+  color: var(--status-warning);
+  border-color: rgba(245, 183, 64, 0.3);
+  background: rgba(245, 183, 64, 0.08);
+}
+
+.pill--critical {
+  color: var(--status-critical);
+  border-color: rgba(255, 92, 122, 0.3);
+  background: rgba(255, 92, 122, 0.08);
+}
+
+.pill--muted {
+  color: var(--text-muted);
+}
+
+/* Shared page scaffolding used by the data pages. */
+.page {
+  display: grid;
+  gap: 16px;
+}
+
+.page__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.page__head h1 {
+  margin: 0;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.data-table th {
+  text-align: left;
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  font-weight: 500;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--glass-border);
+  white-space: nowrap;
+}
+
+.data-table td {
+  padding: 9px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  color: var(--text-primary);
+}
+
+.data-table tbody tr:hover {
+  background: var(--glass-1);
+}
+
+.table-scroll {
+  overflow-x: auto;
+}
+
+.kv {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 12px;
+}
+
+.kv__item {
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--glass-inset);
+  border: 1px solid var(--glass-border);
+  display: grid;
+  gap: 5px;
+}
+
+.kv__label {
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.kv__value {
+  font-size: 18px;
+  color: var(--text-hero);
+  font-variant-numeric: tabular-nums;
+  word-break: break-word;
+}
+
+.toolbar {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.toolbar__btn {
+  border: 1px solid var(--glass-border);
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 12px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: color var(--motion-fast) var(--ease-out);
+}
+
+.toolbar__btn:hover {
+  color: var(--text-primary);
+  background: var(--glass-2);
+}
+
+.toolbar__btn.is-active {
+  color: var(--text-hero);
+  background: var(--glass-2);
+  border-color: var(--glass-border-strong);
+}
+
+.link-btn {
+  border: 0;
+  background: none;
+  color: var(--status-info);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 0;
+  text-align: left;
+}
+
+.link-btn:hover {
+  text-decoration: underline;
+}

@@ -17,17 +17,21 @@ interface NavItem {
   phase?: string;
 }
 
-// Paths mirror the screens Doc03/Doc04 describe. Only Overview is routable in
-// this foundation slice.
+// Every entry below is enabled only because its page is backed by a real API
+// endpoint. A `phase` tag renders the item disabled — used for screens whose
+// backing data does not exist yet, so a nav item never leads to an empty shell.
 const NAV: NavItem[] = [
   { label: "Overview", path: "/" },
   { label: "Device", path: "/device" },
-  { label: "Devices", path: "/devices", phase: "next" },
+  { label: "Devices", path: "/devices" },
+  { label: "History", path: "/history" },
+  { label: "Alerts", path: "/alerts" },
+  { label: "Users", path: "/users" },
+  { label: "System", path: "/system" },
+  { label: "Settings", path: "/settings" },
+  // Ledger blocks are only written by threshold edits, which the UI does not
+  // yet expose, so this page would always be empty. Left disabled on purpose.
   { label: "Ledger", path: "/ledger", phase: "next" },
-  { label: "Settings", path: "/settings", phase: "next" },
-  { label: "Users", path: "/users", phase: "next" },
-  { label: "System", path: "/system", phase: "next" },
-  { label: "Alerts", path: "/alerts", phase: "P3" },
 ];
 
 export function AppShell({ children }: { children: ReactNode }) {

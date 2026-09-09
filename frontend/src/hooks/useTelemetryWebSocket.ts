@@ -29,10 +29,7 @@ export function isTelemetryFrame(x: unknown): x is WSFrame<TelemetryMessage> {
   return CHANNELS.every((c) => typeof s[c] === "number");
 }
 
-export function useTelemetryWebSocket(
-  url: string = wsUrl(),
-  deviceId?: string,
-): TelemetryState {
+export function useTelemetryWebSocket(url: string = wsUrl(), deviceId?: string): TelemetryState {
   const [status, setStatus] = useState<ConnStatus>("connecting");
   const [byDevice, setByDevice] = useState<Record<string, TelemetryMessage>>({});
   const [lastError, setLastError] = useState<string | null>(null);

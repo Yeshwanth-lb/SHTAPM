@@ -7,6 +7,7 @@ a CDN or any external host (TRD §02.2 / §02.5 offline-demo rule). At runtime t
 browser loads local `woff2` referenced by `../../styles/fonts.css`.
 
 ## Expected layout (binaries added in P5)
+
 ```
 assets/fonts/
 ├── geist/Geist-Variable.woff2
@@ -14,6 +15,7 @@ assets/fonts/
 ```
 
 ## P0 status — foundation only
+
 - The `@font-face` contract (`styles/fonts.css`) is fixed now.
 - The **woff2 binaries are NOT yet vendored.** They are added when frontend
   dependencies are installed in P5 — either via an `@fontsource/*` package
