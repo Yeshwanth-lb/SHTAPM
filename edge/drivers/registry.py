@@ -40,7 +40,7 @@ from app.schemas.contracts import CHANNELS
 from edge.drivers.adxl335 import ADXL335Driver
 from edge.drivers.base import Clock, Sensor, SensorDriver, now_iso_ms
 from edge.drivers.bmp280 import BMP280Driver
-from edge.drivers.dht22 import DHT22Driver
+from edge.drivers.dht22_adafruit import DHT22AdafruitDriver
 from edge.drivers.ds18b20 import DS18B20Driver
 from edge.drivers.fake import constant_raw, realistic_raw
 from edge.drivers.ina219 import INA219Driver
@@ -64,7 +64,7 @@ _REAL_DRIVER_CLASSES: dict[str, type[SensorDriver]] = {
     "temperature": DS18B20Driver,
     "vibration": ADXL335Driver,
     "pressure": BMP280Driver,
-    "humidity": DHT22Driver,
+    "humidity": DHT22AdafruitDriver,
     "current": INA219Driver,
 }
 

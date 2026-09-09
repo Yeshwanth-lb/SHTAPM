@@ -8,10 +8,13 @@ hand-written ``drivers[channel] = XDriver()`` lines:
     registry.build_drivers(...) → Sampler → TelemetryMessage → Publisher → Mosquitto
                                                               ↘ LiveP2Monitor (observe-only)
 
-``_DEFAULT_CHANNEL_SPECS`` names ADXL335 (vibration) as the sole real
-driver and every other channel as a fake constant, matching this bench's
-actual current wiring exactly — DS18B20, BMP280, INA219, and DHT22 are
-implemented (edge/drivers/{ds18b20,bmp280,ina219,dht22}.py, each
+``_DEFAULT_CHANNEL_SPECS`` names ADXL335 (vibration) and DHT22 (humidity,
+via the Adafruit CircuitPython backend — edge/drivers/dht22_adafruit.py,
+GPIO17, ``use_pulseio=False`` — NOT the kernel-IIO edge/drivers/dht22.py,
+which remains in the repo unused for now; see dht22_adafruit.py's own
+docstring for why) as the real drivers, and every other channel as a fake
+constant, matching this bench's actual current wiring — DS18B20, BMP280,
+and INA219 are implemented (edge/drivers/{ds18b20,bmp280,ina219}.py, each
 individually hardware-validated earlier) but temporarily physically
 disconnected, so they'd be permanently unhealthy here and block every
 frame (Sampler.sample_once() requires all six channels healthy).
@@ -139,7 +142,7 @@ _DEFAULT_CHANNEL_SPECS: dict[str, DriverSpec] = {
     "temperature": DriverSpec(kind="fake", fake_mode="constant", params={"value": 26.0}),
     "vibration": DriverSpec(kind="real"),  # ADXL335Driver(), the only sensor wired right now
     "pressure": DriverSpec(kind="fake", fake_mode="constant", params={"value": 1013.0}),
-    "humidity": DriverSpec(kind="fake", fake_mode="constant", params={"value": 45.0}),
+    "humidity": DriverSpec(kind="real"),  # DHT22AdafruitDriver(), GPIO17
     "gas": DriverSpec(kind="fake", fake_mode="constant", params={"value": 150.0}),
     "current": DriverSpec(kind="fake", fake_mode="constant", params={"value": 0.0}),
 }
