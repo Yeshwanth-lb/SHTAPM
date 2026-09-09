@@ -1388,6 +1388,80 @@
 
 ---
 
+### D028 — TEMPORARY: DHT22 ambient air temperature substituted for the undetected DS18B20 (deviates from PRD §12.1)
+- **Date:** 2026-09-09
+- **Status:** TEMPORARY, operator-approved, EXPIRES when a DS18B20 is
+  detected on the bench. This is a bench-configuration decision, not a
+  design change.
+- **Context:** The DS18B20 was live on this bench on 2026-09-04 (`adc2eb6`,
+  real read `t=27750` → 27.75 °C) but could not be detected on 2026-09-09
+  (no `28-*` under `/sys/bus/w1/devices`) — a wiring/overlay regression, not
+  a missing part. Rather than publish a fake constant on `temperature`, the
+  operator elected to source it from the DHT22 already serving `humidity`.
+
+- **Decision:** `temperature` is served by `DHT22AdafruitTemperatureDriver`
+  (`edge/drivers/dht22_adafruit.py`) as an explicitly-named **substitute**
+  (`DriverSpec(kind="substitute")`), never as `kind="real"`.
+
+- **This deviates from `docs/SHTAPM_PRD-4.md` §12.1 in two distinct ways,
+  both knowingly accepted:**
+
+  1. **Different physical quantity.** §12.1 specifies `temperature` =
+     DS18B20, *"Motor/bearing temp"*, coverage **"Direct"**. DHT22 measures
+     **ambient air temperature at the sensor**. Not a drop-in equivalent:
+     different quantity, placement, thermal time constant, and failure
+     mode. Any statement that this channel measures motor/bearing
+     temperature is FALSE while this record is in force.
+
+  2. **Temperature and humidity now share one physical part.** §12.1's
+     Design integrity note keeps them separate *"so the cross-sensor
+     correlation term in the trust engine is not silently defeated by two
+     perfectly-correlated channels from one part"*, and states this is
+     "stated openly in the paper and demo". That property is set aside here.
+     Measured scope of the harm, verified by inspection rather than assumed:
+     - `edge/trust/k_correlation.py` is **not** affected today — as
+       implemented it constrains only the current↔vibration pair and assigns
+       `k=1.0` to temperature/humidity (D010). The PRD's stated mechanism is
+       not wired yet.
+     - The **digital twin IS affected**: `LSTMTwinReconstructor` reconstructs
+       each masked channel from the other five, so it would learn a
+       near-deterministic `temperature ≈ f(humidity)` relation that is an
+       artifact of one device reading one air mass — precisely the spurious
+       structure §12.1 warns about.
+
+- **Binding evidence restriction:** telemetry captured while this record is
+  in force **MUST NOT be used as U05 evidence** — not for fitting
+  `DivergenceScorer`, not for training or evaluating the digital twin, and
+  not for deriving `divergence_threshold`. A U05 capture needs a
+  DS18B20-sourced `temperature`; anything learned from the substituted
+  channel would not transfer and would embed the artifact above.
+
+- **Why not a fake constant instead:** a constant contributes no
+  information and produces degenerate zero-variance residuals. The
+  substitute is a genuine physical measurement, correctly labelled — more
+  useful for pipeline shakedown, and no more admissible as evidence.
+
+- **Restoration (no redesign):** `_REAL_DRIVER_CLASSES["temperature"]`
+  remains `DS18B20Driver` — untouched. Restoring is deleting the
+  substitution: `edge/main.py`'s `_DEFAULT_CHANNEL_SPECS["temperature"]`
+  goes back to `DriverSpec(kind="real")` (or `SHTAPM_DRIVER_TEMPERATURE=real`
+  for one run). No pipeline, contract, topic, schema, or consumer change.
+  **This record expires at that moment** and must be marked superseded.
+
+- **Labelling:** the substitution cannot be expressed on the wire (same
+  field, same `°C` unit, frozen contract deliberately unchanged), so it is
+  labelled everywhere else: `edge/main.py` prints a `SUBSTITUTED
+  temperature = DHT22 AMBIENT AIR temp` line on every start, and the
+  driver/registry/bench-wiring-test docstrings all carry the caveat.
+
+- **Does NOT resolve:** U05 (`divergence_threshold` still fully data-gated,
+  now explicitly not satisfiable from this bench state); the DS18B20
+  detection fault itself (unfixed, still the preferred outcome); the P1
+  physical acquisition gate. **Does NOT change:** D001–D027; the frozen
+  contract; `edge/drivers/ds18b20.py`; INA219 and MQ-135 (untouched by
+  instruction); any accuracy or calibration claim — none is made for the
+  DHT22 temperature reading.
+
 ## UNDECIDED (must not be silently resolved — see CURRENT_STATE blockers)
 - U01 — Beta-reputation trust-update formula + recovery dynamics (P2). **Partial:** `h` resolved
   (D009). **Still open:** lambda=0.7 forgetting factor (PENDING approval); `c` consistency signal

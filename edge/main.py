@@ -8,8 +8,10 @@ hand-written ``drivers[channel] = XDriver()`` lines:
     registry.build_drivers(...) → Sampler → TelemetryMessage → Publisher → Mosquitto
                                                               ↘ LiveP2Monitor (observe-only)
 
-``_DEFAULT_CHANNEL_SPECS`` names FOUR real drivers, matching this bench's
-actual current wiring:
+``_DEFAULT_CHANNEL_SPECS`` matches this bench's actual current wiring:
+THREE real drivers, one temporary substitute (see below), two fakes.
+
+Real:
 
   - vibration   ADXL335, MCP3008 CH0-2 over SPI0 CE0 (SPI enabled)
   - humidity    DHT22 via the Adafruit CircuitPython backend
@@ -17,10 +19,32 @@ actual current wiring:
                 ``use_pulseio=False``) — NOT the kernel-IIO
                 edge/drivers/dht22.py, which remains in the repo unused
                 for now; see dht22_adafruit.py's own docstring for why
-  - temperature DS18B20, kernel 1-Wire on GPIO4 — needs
-                ``dtoverlay=w1-gpio,gpiopin=4`` in config.txt and a 4.7k
-                pull-up to 3.3V
   - pressure    BMP280, I2C bus 1 at address 0x76 (I2C enabled)
+
+TEMPORARY: ``temperature`` is a SUBSTITUTE, not its real driver. The
+DS18B20 could not be detected on this bench (no ``28-*`` under
+/sys/bus/w1/devices), so ``temperature`` currently carries the DHT22's
+own AMBIENT AIR temperature — the same physical sensor already serving
+``humidity``, read through one shared device (see
+edge/drivers/dht22_adafruit.py's ``shared_reader``, so both channels cost
+one measurement per cycle, not two).
+
+This is AMBIENT AIR TEMPERATURE, not the motor/bearing temperature PRD
+12.1 specifies for this channel, and PRD 12.1's design-integrity note
+deliberately keeps temperature and humidity on separate parts so the trust
+engine's cross-sensor correlation term is not defeated by two
+perfectly-correlated channels from one device. Both points are knowingly
+set aside here as an operator decision — see the DHT22-ambient-temperature
+record in project-state/DECISIONS.md for the scope, the consequences, and
+what data taken in this state may and may not be used for. The wire frame
+cannot express any of this (same field, same unit), so the caveat has to
+travel with the data.
+
+RESTORING DS18B20 is deleting the substitution, not a redesign: DS18B20Driver
+is untouched and remains registry._REAL_DRIVER_CLASSES["temperature"], so
+this table's temperature entry goes back to ``DriverSpec(kind="real")`` —
+the same one-line edit every other reconnection has been. No pipeline,
+contract, topic, or downstream change is involved.
 
 ``gas`` and ``current`` remain fake constants: INA219 is implemented
 (edge/drivers/ina219.py, individually hardware-validated earlier) but is
@@ -150,7 +174,9 @@ log = logging.getLogger("shtapm.edge.main")
 # (edge.drivers.registry.resolve_channel_specs_from_env) — never by editing
 # this table for a one-off run.
 _DEFAULT_CHANNEL_SPECS: dict[str, DriverSpec] = {
-    "temperature": DriverSpec(kind="real"),  # DS18B20Driver(), 1-Wire GPIO4
+    # TEMPORARY substitute — DHT22 ambient air temp, NOT motor/bearing temp;
+    # DS18B20 undetected. Restore with DriverSpec(kind="real"). See docstring.
+    "temperature": DriverSpec(kind="substitute"),  # DHT22AdafruitTemperatureDriver()
     "vibration": DriverSpec(kind="real"),  # ADXL335Driver(), MCP3008 CH0-2 / SPI0 CE0
     "pressure": DriverSpec(kind="real"),  # BMP280Driver(), I2C bus 1 @ 0x76
     "humidity": DriverSpec(kind="real"),  # DHT22AdafruitDriver(), GPIO17
@@ -336,12 +362,21 @@ def main() -> None:
     signal.signal(signal.SIGTERM, _stop)
 
     real_channels = sorted(ch for ch in CHANNELS if channel_specs[ch].kind == "real")
+    substituted = sorted(ch for ch in CHANNELS if channel_specs[ch].kind == "substitute")
     fake_channels = sorted(ch for ch in CHANNELS if channel_specs[ch].kind == "fake")
     print(
-        f"[edge] driver config: real={real_channels or 'none'} fake={fake_channels or 'none'} → "
+        f"[edge] driver config: real={real_channels or 'none'} "
+        f"substituted={substituted or 'none'} fake={fake_channels or 'none'} → "
         f"{publisher.telemetry_topic} at {rate_hz} Hz (Ctrl-C to stop) "
         f"[P2 monitoring: observe-only, no isolation/actuation/publish]"
     )
+    if "temperature" in substituted:
+        # Loud on every start: the wire frame cannot say this, so the console can.
+        print(
+            "[edge] SUBSTITUTED temperature = DHT22 AMBIENT AIR temp (DS18B20 undetected) — "
+            "NOT motor/bearing temp; shares one sensor with humidity. "
+            "See project-state/DECISIONS.md before using this data as evidence."
+        )
     try:
         runtime.run(should_continue=lambda: running["go"], sleep=time.sleep)
     finally:

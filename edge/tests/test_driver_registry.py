@@ -14,7 +14,7 @@ from app.schemas.contracts import CHANNELS
 from edge.drivers.adxl335 import ADXL335Driver
 from edge.drivers.base import Sensor, SensorDriver
 from edge.drivers.bmp280 import BMP280Driver
-from edge.drivers.dht22_adafruit import DHT22AdafruitDriver
+from edge.drivers.dht22_adafruit import DHT22AdafruitDriver, DHT22AdafruitTemperatureDriver
 from edge.drivers.ds18b20 import DS18B20Driver
 from edge.drivers.ina219 import INA219Driver
 from edge.drivers.registry import (
@@ -290,3 +290,63 @@ def test_env_resolution_reads_os_environ_by_default(monkeypatch):
     monkeypatch.setenv("SHTAPM_DRIVER_PRESSURE", "real")
     resolved = resolve_channel_specs_from_env(defaults)
     assert resolved["pressure"].kind == "real"
+
+
+# ---------------------------------------------------------------------------
+# Substitute drivers -- a real sensor explicitly standing in for a different,
+# unavailable one (today: DHT22 ambient temp for the undetected DS18B20).
+# The invariant these tests protect is that a substitute is only ever reached
+# on purpose, and never displaces the channel's canonical real driver.
+# ---------------------------------------------------------------------------
+
+
+def test_substitute_kind_builds_the_registered_substitute_driver():
+    driver = build_driver("temperature", DriverSpec(kind="substitute"))
+    assert isinstance(driver, DHT22AdafruitTemperatureDriver)
+
+
+def test_real_temperature_is_still_ds18b20_despite_the_substitute():
+    """The whole restoration story: the canonical mapping is untouched, so
+    reconnecting DS18B20 is dropping the substitution, not reversing it."""
+    assert isinstance(build_driver("temperature", DriverSpec(kind="real")), DS18B20Driver)
+
+
+@pytest.mark.parametrize("channel", ["vibration", "pressure", "humidity", "gas", "current"])
+def test_channels_without_a_registered_substitute_fail_clearly(channel):
+    with pytest.raises(UnsupportedDriverError, match="no substitute driver is registered"):
+        build_driver(channel, DriverSpec(kind="substitute"))
+
+
+def test_substitute_is_never_reached_by_falling_back_from_real():
+    """No real -> substitute fallback exists. A channel whose real driver is
+    unavailable must fail or read unhealthy, never quietly become something
+    else (registry module docstring: 'never a silent substitution')."""
+    with pytest.raises(UnsupportedDriverError):
+        build_driver("gas", DriverSpec(kind="real"))  # gas has no real driver at all
+
+
+def test_substitute_invalid_parameters_fail_clearly():
+    with pytest.raises(UnsupportedDriverError, match="invalid substitute-driver parameters"):
+        build_driver("temperature", DriverSpec(kind="substitute", params={"nope": 1}))
+
+
+def test_env_can_select_and_revert_a_substitute():
+    defaults = _default_specs()  # temperature real here
+    to_sub = resolve_channel_specs_from_env(
+        defaults, env={"SHTAPM_DRIVER_TEMPERATURE": "substitute"}
+    )
+    assert to_sub["temperature"] == DriverSpec(kind="substitute")
+
+    back = resolve_channel_specs_from_env(to_sub, env={"SHTAPM_DRIVER_TEMPERATURE": "real"})
+    assert back["temperature"] == DriverSpec(kind="real")
+
+
+def test_env_rejects_an_unknown_kind_naming_all_three():
+    defaults = _default_specs()
+    with pytest.raises(UnsupportedDriverError, match="'real', 'substitute' or 'fake'"):
+        resolve_channel_specs_from_env(defaults, env={"SHTAPM_DRIVER_TEMPERATURE": "bogus"})
+
+
+def test_unknown_kind_error_names_all_three_kinds():
+    with pytest.raises(UnsupportedDriverError, match="'real', 'substitute' or 'fake'"):
+        build_driver("temperature", DriverSpec(kind="pretend"))

@@ -16,7 +16,8 @@ import edge.drivers.dht22_adafruit as dht22_adafruit_module
 from edge.drivers.base import SensorDriver
 from edge.drivers.dht22_adafruit import (
     DHT22AdafruitDriver,
-    DHT22AdafruitHumidityReader,
+    DHT22AdafruitReader,
+    DHT22AdafruitTemperatureDriver,
     dht22_adafruit_raw_read,
 )
 
@@ -36,11 +37,21 @@ class _FakeDHT22Device:
         self.use_pulseio = use_pulseio
         self._script: list = []
         self._i = 0
+        self._temp_script: list = [26.0]
+        self._temp_i = 0
         self.temperature_accessed = False
 
     def _next(self):
         item = self._script[self._i] if self._i < len(self._script) else self._script[-1]
-        self._i += 1
+        self._i += 1  # advance BEFORE raising, so a scripted failure is not re-raised forever
+        if isinstance(item, Exception):
+            raise item
+        return item
+
+    def _next_temp(self):
+        i = self._temp_i
+        item = self._temp_script[i] if i < len(self._temp_script) else self._temp_script[-1]
+        self._temp_i += 1
         if isinstance(item, Exception):
             raise item
         return item
@@ -50,9 +61,9 @@ class _FakeDHT22Device:
         return self._next()
 
     @property
-    def temperature(self):  # pragma: no cover - must never be accessed
+    def temperature(self):
         self.temperature_accessed = True
-        return 26.0
+        return self._next_temp()
 
 
 class _FakeAdafruitDHT:
@@ -67,6 +78,15 @@ class _FakeAdafruitDHT:
         self._device.pin = pin
         self._device.use_pulseio = use_pulseio
         return self._device
+
+
+@pytest.fixture(autouse=True)
+def _clear_shared_readers():
+    """dht22_adafruit caches one reader per (pin, use_pulseio) at module level;
+    drop it around every test so no cached device outlives its patched library."""
+    dht22_adafruit_module.reset_shared_readers()
+    yield
+    dht22_adafruit_module.reset_shared_readers()
 
 
 @pytest.fixture()
@@ -98,7 +118,7 @@ def test_library_not_installed_on_this_dev_machine():
 
 
 def test_reader_raises_import_error_when_library_missing():
-    reader = DHT22AdafruitHumidityReader()
+    reader = DHT22AdafruitReader()
     with pytest.raises(ImportError, match="adafruit_dht/board not installed"):
         reader.read_humidity_percent()
 
@@ -120,33 +140,33 @@ def test_driver_read_returns_unhealthy_not_raise_when_library_missing():
 
 def test_read_humidity_percent_typical(patched_library, fake_device):
     fake_device._script = [62.6]
-    reader = DHT22AdafruitHumidityReader()
+    reader = DHT22AdafruitReader()
     assert reader.read_humidity_percent() == pytest.approx(62.6)
 
 
 def test_default_pin_is_d17(patched_library, fake_device):
     fake_device._script = [45.0]
-    reader = DHT22AdafruitHumidityReader()
+    reader = DHT22AdafruitReader()
     reader.read_humidity_percent()
     assert fake_device.pin == "PIN_D17"
 
 
 def test_explicit_pin_resolves_to_matching_board_attr(patched_library, fake_device):
     fake_device._script = [45.0]
-    reader = DHT22AdafruitHumidityReader(pin=4)
+    reader = DHT22AdafruitReader(pin=4)
     reader.read_humidity_percent()
     assert fake_device.pin == "PIN_D4"
 
 
 def test_use_pulseio_false_is_passed_through(patched_library, fake_device):
     fake_device._script = [45.0]
-    reader = DHT22AdafruitHumidityReader(use_pulseio=False)
+    reader = DHT22AdafruitReader(use_pulseio=False)
     reader.read_humidity_percent()
     assert fake_device.use_pulseio is False
 
 
 def test_unknown_pin_raises_oserror(patched_library):
-    reader = DHT22AdafruitHumidityReader(pin=99)
+    reader = DHT22AdafruitReader(pin=99)
     with pytest.raises(OSError, match="no pin D99"):
         reader.read_humidity_percent()
 
@@ -155,7 +175,7 @@ def test_device_object_created_once_and_reused_across_reads(patched_library, fak
     """Matches Adafruit's own recommended usage -- avoids repeatedly
     re-acquiring the GPIO pin."""
     fake_device._script = [40.0, 41.0, 42.0]
-    reader = DHT22AdafruitHumidityReader()
+    reader = DHT22AdafruitReader()
     reader.read_humidity_percent()
     reader.read_humidity_percent()
     reader.read_humidity_percent()
@@ -164,7 +184,7 @@ def test_device_object_created_once_and_reused_across_reads(patched_library, fak
 
 def test_transient_failure_raises_oserror(patched_library, fake_device):
     fake_device._script = [RuntimeError("Checksum did not validate")]
-    reader = DHT22AdafruitHumidityReader()
+    reader = DHT22AdafruitReader()
     with pytest.raises(OSError, match="failed to read DHT22"):
         reader.read_humidity_percent()
 
@@ -174,7 +194,7 @@ def test_recovers_after_transient_failure(patched_library, fake_device):
     characteristic -- the next read must succeed without recreating the
     device object."""
     fake_device._script = [RuntimeError("Checksum did not validate"), 55.5]
-    reader = DHT22AdafruitHumidityReader()
+    reader = DHT22AdafruitReader()
     with pytest.raises(OSError):
         reader.read_humidity_percent()
     assert reader.read_humidity_percent() == pytest.approx(55.5)
@@ -183,16 +203,21 @@ def test_recovers_after_transient_failure(patched_library, fake_device):
 
 def test_none_humidity_raises_oserror(patched_library, fake_device):
     fake_device._script = [None]
-    reader = DHT22AdafruitHumidityReader()
+    reader = DHT22AdafruitReader()
     with pytest.raises(OSError, match="returned no humidity value"):
         reader.read_humidity_percent()
 
 
-def test_never_reads_temperature(patched_library, fake_device):
-    """Structural guard: mirrors edge/drivers/dht22.py's own discipline --
-    temperature stays DS18B20-only, never sourced from this sensor."""
+def test_reading_humidity_does_not_touch_temperature(patched_library, fake_device):
+    """The humidity path reads only .humidity. (This file's original
+    `test_never_reads_temperature` asserted temperature was NEVER sourced
+    from this sensor -- that discipline was deliberately set aside when the
+    undetected DS18B20 was temporarily substituted by DHT22 ambient temp;
+    see edge/drivers/dht22_adafruit.py's docstring and DECISIONS.md. What
+    remains true, and is asserted here, is that reading one channel never
+    silently pulls the other.)"""
     fake_device._script = [50.0]
-    reader = DHT22AdafruitHumidityReader()
+    reader = DHT22AdafruitReader()
     reader.read_humidity_percent()
     assert fake_device.temperature_accessed is False
 
@@ -263,3 +288,103 @@ def test_driver_matches_kernel_driver_unit_and_shape():
     adafruit_driver = DHT22AdafruitDriver()
     kernel_driver = DHT22Driver(iio_path="/nonexistent")
     assert adafruit_driver.read().unit == kernel_driver.read().unit == "%"
+
+
+# ---------------------------------------------------------------------------
+# TEMPORARY DHT22 ambient-temperature substitution (temperature + humidity from
+# one sensor). Deliberate deviation from PRD 12.1 -- see the module docstring
+# of edge/drivers/dht22_adafruit.py and the DECISIONS.md record it names.
+# These tests cover the mechanism only; nothing here validates the reading or
+# claims it is equivalent to a DS18B20 motor/bearing measurement.
+# ---------------------------------------------------------------------------
+
+
+def test_read_temperature_c_typical(patched_library, fake_device):
+    fake_device._temp_script = [24.5]
+    assert DHT22AdafruitReader().read_temperature_c() == pytest.approx(24.5)
+
+
+def test_temperature_transient_failure_raises_oserror(patched_library, fake_device):
+    fake_device._temp_script = [RuntimeError("checksum did not validate")]
+    with pytest.raises(OSError, match="failed to read DHT22"):
+        DHT22AdafruitReader().read_temperature_c()
+
+
+def test_none_temperature_raises_oserror(patched_library, fake_device):
+    fake_device._temp_script = [None]
+    with pytest.raises(OSError, match="returned no temperature value"):
+        DHT22AdafruitReader().read_temperature_c()
+
+
+def test_temperature_recovers_after_transient_failure(patched_library, fake_device):
+    fake_device._temp_script = [RuntimeError("timing"), 23.0]
+    reader = DHT22AdafruitReader()
+    with pytest.raises(OSError):
+        reader.read_temperature_c()
+    assert reader.read_temperature_c() == pytest.approx(23.0)
+
+
+def test_both_channels_share_one_device_object(patched_library, fake_device):
+    """The point of the shared reader: one adafruit_dht.DHT22 for both
+    channels, so they cannot bit-bang GPIO17 on two independent schedules."""
+    fake_device._script = [61.0]
+    fake_device._temp_script = [24.0]
+
+    reader = dht22_adafruit_module.shared_reader()
+    reader.read_humidity_percent()
+    reader.read_temperature_c()
+
+    assert patched_library.call_count == 1  # device constructed exactly once
+
+
+def test_shared_reader_is_identical_across_both_driver_classes(patched_library, fake_device):
+    humidity = dht22_adafruit_module.dht22_adafruit_raw_read()
+    temperature = dht22_adafruit_module.dht22_adafruit_temperature_raw_read()
+    fake_device._script = [61.0]
+    fake_device._temp_script = [24.0]
+
+    humidity()
+    temperature()
+
+    assert patched_library.call_count == 1
+    assert dht22_adafruit_module.shared_reader() is dht22_adafruit_module.shared_reader()
+
+
+def test_shared_reader_is_keyed_so_a_second_pin_stays_independent(patched_library):
+    assert dht22_adafruit_module.shared_reader(pin=17) is not dht22_adafruit_module.shared_reader(
+        pin=4
+    )
+
+
+def test_reset_shared_readers_drops_the_cache(patched_library):
+    first = dht22_adafruit_module.shared_reader()
+    dht22_adafruit_module.reset_shared_readers()
+    assert dht22_adafruit_module.shared_reader() is not first
+
+
+def test_temperature_driver_reports_celsius_and_satisfies_the_driver_contract(
+    patched_library, fake_device
+):
+    fake_device._temp_script = [24.5]
+    driver = DHT22AdafruitTemperatureDriver()
+    assert isinstance(driver, SensorDriver)
+
+    reading = driver.read()
+    assert reading.healthy is True
+    assert reading.value == pytest.approx(24.5)
+    assert reading.unit == "°C"  # identical to DS18B20Driver's -- contract unchanged
+    assert set(reading.as_dict()) == {"value", "unit", "ts", "healthy"}
+
+
+def test_temperature_driver_returns_unhealthy_instead_of_raising(patched_library, fake_device):
+    fake_device._temp_script = [RuntimeError("checksum did not validate")]
+    reading = DHT22AdafruitTemperatureDriver().read()
+    assert reading.healthy is False
+    assert reading.value is None
+
+
+def test_temperature_driver_unhealthy_when_library_missing():
+    """Unpatched: adafruit_dht is genuinely absent on this dev machine."""
+    reading = DHT22AdafruitTemperatureDriver().read()
+    assert reading.healthy is False
+    assert reading.value is None

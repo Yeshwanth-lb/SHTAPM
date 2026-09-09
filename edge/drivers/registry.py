@@ -40,7 +40,7 @@ from app.schemas.contracts import CHANNELS
 from edge.drivers.adxl335 import ADXL335Driver
 from edge.drivers.base import Clock, Sensor, SensorDriver, now_iso_ms
 from edge.drivers.bmp280 import BMP280Driver
-from edge.drivers.dht22_adafruit import DHT22AdafruitDriver
+from edge.drivers.dht22_adafruit import DHT22AdafruitDriver, DHT22AdafruitTemperatureDriver
 from edge.drivers.ds18b20 import DS18B20Driver
 from edge.drivers.fake import constant_raw, realistic_raw
 from edge.drivers.ina219 import INA219Driver
@@ -66,6 +66,29 @@ _REAL_DRIVER_CLASSES: dict[str, type[SensorDriver]] = {
     "pressure": BMP280Driver,
     "humidity": DHT22AdafruitDriver,
     "current": INA219Driver,
+}
+
+# Explicitly-named stand-ins for a channel whose REAL sensor is unavailable,
+# used when a fake constant would be less useful than a real-but-different
+# measurement. Deliberately a separate mapping from _REAL_DRIVER_CLASSES
+# above, which is never edited to accommodate one: the canonical real driver
+# for a channel stays canonical, so restoring it is deleting the
+# substitution rather than reversing an overwrite.
+#
+# A substitute is NEVER selected implicitly. There is no fallback path from
+# kind="real" to kind="substitute" — an absent real sensor raises/reads
+# unhealthy exactly as before (see this module's "never a silent
+# substitution" contract above). Choosing one is always an explicit
+# DriverSpec(kind="substitute") or SHTAPM_DRIVER_<CHANNEL>=substitute, and
+# edge/main.py names it in its startup line so a running bench cannot hide
+# that it is substituted.
+#
+# temperature: DHT22 ambient air temp standing in for the undetected DS18B20
+# motor/bearing probe. A DIFFERENT PHYSICAL QUANTITY, not a drop-in — see
+# edge/drivers/dht22_adafruit.py's docstring and the DHT22-ambient-
+# temperature record in project-state/DECISIONS.md.
+_SUBSTITUTE_DRIVER_CLASSES: dict[str, type[SensorDriver]] = {
+    "temperature": DHT22AdafruitTemperatureDriver,
 }
 
 # Illustrative, hardware-free engineering fixtures for "realistic" fake
@@ -132,12 +155,17 @@ class UnsupportedDriverError(ValueError):
 @dataclass(frozen=True)
 class DriverSpec:
     """Declarative description of one channel's driver, resolved by
-    ``build_driver()``/``build_drivers()``. Two kinds:
+    ``build_driver()``/``build_drivers()``. Three kinds:
 
     - ``kind="real"``: ``params`` are forwarded as ``**kwargs`` to that
       channel's real driver class (see ``_REAL_DRIVER_CLASSES``); empty
       params use the driver's own hardware defaults (e.g.
       ``BMP280Driver()``'s ``bus_num=1``/``address=0x76``).
+    - ``kind="substitute"``: same, against ``_SUBSTITUTE_DRIVER_CLASSES`` —
+      a real sensor deliberately standing in for a different, unavailable
+      one. Always an explicit choice, never reached by fallback, and never
+      equivalent to the channel's real driver (it may measure a different
+      physical quantity — see that mapping's own comment).
     - ``kind="fake"``: ``fake_mode`` selects ``constant_raw`` (``"constant"``,
       ``params={"value": <float>}``) or ``realistic_raw`` (``"realistic"``,
       ``params={"baseline", "noise_std", "drift_std", "seed"}``, optionally
@@ -146,7 +174,7 @@ class DriverSpec:
       clamping concept.
     """
 
-    kind: str  # "real" | "fake"
+    kind: str  # "real" | "substitute" | "fake"
     fake_mode: str | None = None  # "constant" | "realistic" (kind="fake" only)
     params: Mapping[str, Any] = field(default_factory=dict)
 
@@ -173,6 +201,22 @@ def _build_real_driver(channel: str, spec: DriverSpec) -> SensorDriver:
     except TypeError as e:
         raise UnsupportedDriverError(
             f"invalid real-driver parameters {dict(spec.params)!r} for channel "
+            f"{channel!r} ({driver_cls.__name__}): {e}"
+        ) from e
+
+
+def _build_substitute_driver(channel: str, spec: DriverSpec) -> SensorDriver:
+    driver_cls = _SUBSTITUTE_DRIVER_CLASSES.get(channel)
+    if driver_cls is None:
+        raise UnsupportedDriverError(
+            f"no substitute driver is registered for channel {channel!r} "
+            f"(channels with a substitute: {sorted(_SUBSTITUTE_DRIVER_CLASSES)})"
+        )
+    try:
+        return driver_cls(**spec.params)
+    except TypeError as e:
+        raise UnsupportedDriverError(
+            f"invalid substitute-driver parameters {dict(spec.params)!r} for channel "
             f"{channel!r} ({driver_cls.__name__}): {e}"
         ) from e
 
@@ -214,10 +258,13 @@ def build_driver(channel: str, spec: DriverSpec, *, clock: Clock = now_iso_ms) -
     ``UnsupportedDriverError`` immediately, never a silent fallback."""
     if spec.kind == "real":
         return _build_real_driver(channel, spec)
+    if spec.kind == "substitute":
+        return _build_substitute_driver(channel, spec)
     if spec.kind == "fake":
         return _build_fake_driver(channel, spec, clock=clock)
     raise UnsupportedDriverError(
-        f"unknown driver kind {spec.kind!r} for channel {channel!r} (expected 'real' or 'fake')"
+        f"unknown driver kind {spec.kind!r} for channel {channel!r} "
+        "(expected 'real', 'substitute' or 'fake')"
     )
 
 
@@ -234,7 +281,8 @@ def build_drivers(
 # Environment-variable override convention (both optional; unset = no
 # change, so existing behavior is preserved whenever no new configuration
 # is supplied).
-_DRIVER_KIND_ENV_PREFIX = "SHTAPM_DRIVER_"  # + upper-cased channel -> "real" | "fake"
+# + upper-cased channel -> "real" | "substitute" | "fake"
+_DRIVER_KIND_ENV_PREFIX = "SHTAPM_DRIVER_"
 _FAKE_SIGNAL_MODE_ENV = "SHTAPM_FAKE_SIGNAL_MODE"  # "constant" | "realistic"
 
 
@@ -246,10 +294,13 @@ def resolve_channel_specs_from_env(
     mechanism that makes driver selection a configuration change instead of
     a code edit:
 
-    - ``SHTAPM_DRIVER_<CHANNEL>`` = ``"real"`` or ``"fake"`` overrides that
-      channel's ``kind`` only. Switching to ``"real"`` uses that channel's
-      real driver class with its own hardware defaults (empty params) — this
-      does not expose per-parameter (bus/address/etc.) overrides. Switching
+    - ``SHTAPM_DRIVER_<CHANNEL>`` = ``"real"``, ``"substitute"`` or
+      ``"fake"`` overrides that channel's ``kind`` only. Switching to
+      ``"real"`` (or ``"substitute"``) uses that channel's real (or
+      substitute) driver class with its own hardware defaults (empty
+      params) — this does not expose per-parameter (bus/address/etc.)
+      overrides; ``"substitute"`` requires that channel to have one
+      registered, and fails clearly if it does not. Switching
       to ``"fake"`` falls back to ``fake_mode="constant"``, ``value=0.0`` —
       an explicit, visible placeholder, never a fabricated "plausible"
       reading — unless ``defaults`` already had that channel as fake, in
@@ -274,12 +325,13 @@ def resolve_channel_specs_from_env(
         override = env.get(f"{_DRIVER_KIND_ENV_PREFIX}{channel.upper()}")
         if override is None or override == resolved[channel].kind:
             continue
-        if override not in ("real", "fake"):
+        if override not in ("real", "substitute", "fake"):
             raise UnsupportedDriverError(
-                f"{_DRIVER_KIND_ENV_PREFIX}{channel.upper()}={override!r} must be 'real' or 'fake'"
+                f"{_DRIVER_KIND_ENV_PREFIX}{channel.upper()}={override!r} must be "
+                "'real', 'substitute' or 'fake'"
             )
-        if override == "real":
-            resolved[channel] = DriverSpec(kind="real")
+        if override in ("real", "substitute"):
+            resolved[channel] = DriverSpec(kind=override)
         else:
             resolved[channel] = DriverSpec(kind="fake", fake_mode="constant", params={"value": 0.0})
 
