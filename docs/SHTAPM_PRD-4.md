@@ -280,14 +280,14 @@ Full DFD notes in **Appendix F**.
 ### 12.1 Sensor channels (logical → physical, with honest proxy notes)
 | Ch | Logical signal | Bench part | Interface | Real-world analogue | Proxy note |
 |----|----------------|-----------|-----------|--------------------|-----------|
-| 1 | Temperature | DS18B20 | 1-Wire | Motor/bearing temp | Direct |
+| 1 | Temperature | DHT22 (GPIO17 — same part as Ch4) | Digital | Ambient air temperature around the pump | **Indicative** — ambient air, not a contact motor/bearing reading; DS18B20 optional alternate (see note) |
 | 2 | Vibration | ADXL335 | Analog→ADC | Bearing/cavitation/impeller | Direct |
 | 3 | Pressure | BMP180 | I2C | Discharge/line pressure | **Proxy** — reads atmosphere, not water-line |
 | 4 | Humidity | DHT22 | Digital | Seal-leak / wet-well moisture | Indicative |
 | 5 | Gas | MQ-135 | Analog→ADC | Wet-well air quality | **Proxy** — VOC/CO2, not H2S |
 | 6 | Current | INA219 | I2C | Motor load / dry-run | Direct (replaces ACS712 — see BOM) |
 
-> **Design integrity note.** Temperature (DS18B20) is kept independent of humidity (DHT22) so the cross-sensor correlation term in the trust engine is not silently defeated by two perfectly-correlated channels from one part. Current sensing uses INA219 (not ACS712) because a small pump's sub-1 A draw is unresolvable in ACS712 noise. These are stated openly in the paper and demo.
+> **Design integrity note.** Temperature (Ch1) and humidity (Ch4) are both read from the one DHT22 on GPIO17, through a single shared device so the pair costs one hardware measurement per acquisition cycle. Separate parts are **not** required. Because both channels come from one sensor reading one air mass they are physically coupled and share a failure mode: their agreement is **not** independent corroboration, and any cross-sensor correlation term covering this pair must treat them as coupled by construction rather than read agreement as mutual confirmation. This is a deliberate, approved project choice — see `project-state/DECISIONS.md` D028 for the full record. A **DS18B20 contact probe remains implemented, tested and supported as an optional alternate temperature source** (`edge/drivers/ds18b20.py`, selectable via `SHTAPM_DRIVER_TEMPERATURE=alternate`) for a build that wants the two channels on separate parts and a contact rather than ambient reading; it is not a requirement, and the system is not blocked on it. Current sensing uses INA219 (not ACS712) because a small pump's sub-1 A draw is unresolvable in ACS712 noise. These are stated openly in the paper and demo.
 
 ### 12.2 Sampling, retention, volume
 - Rate: 1 Hz default (6 channels) → ~518k samples/device/day.

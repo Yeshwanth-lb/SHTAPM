@@ -1429,15 +1429,26 @@
      correlation, cross-channel reconstruction — must account for that
      rather than read their agreement as mutual corroboration.
 
-- **Relationship to PRD §12.1.** The PRD's sensor table names DS18B20 for
-  `temperature` ("Motor/bearing temp", coverage "Direct"), and its Design
-  integrity note keeps temperature and humidity on separate parts. This
-  decision supersedes both for the built system, on the supervisor's
-  authority. **`docs/SHTAPM_PRD-4.md` has NOT been edited by this record** —
-  amending the source-of-truth document is a separate, explicit action that
-  has not been requested or performed, so §12.1 and this entry currently
-  disagree on the page. Anyone citing §12.1's temperature row or its Design
-  integrity note must read this record alongside it.
+- **Relationship to PRD §12.1 — AMENDED.** `docs/SHTAPM_PRD-4.md` §12.1 has
+  been updated to match this decision, on the supervisor's authority
+  (separate commit): the Ch1 row now reads DHT22 on GPIO17, same part as
+  Ch4, "Ambient air temperature around the pump", **Indicative**; and the
+  Design integrity note no longer requires temperature and humidity on
+  separate parts — it now states the coupling and its consequence for
+  cross-sensor correlation, and documents DS18B20 as an optional alternate
+  rather than the required part. Only those two lines of §12.1 were changed.
+
+- **PRD references still naming DS18B20, deliberately NOT changed** (outside
+  §12.1; each would need its own decision, and each is now inconsistent with
+  this record — read them alongside it):
+  - §"Risk register" R6 — *"Temp/humidity from one part break trust
+    correlation … Split to DS18B20 + DHT22"*. This is the risk this decision
+    knowingly accepts; its stated mitigation no longer describes the build.
+  - §"Assumptions/constraints" — *"DS18B20 on 1-Wire"* in the wiring summary.
+  - §"Acceptance scenarios" P1-ACQ-S1 — *"Unplug DS18B20 mid-run"*. The
+    scenario's intent (a channel dropping out is flagged, others continue)
+    still holds; the named part does not.
+  - §"BOM" — *"DS18B20 (temperature) … kept separate from humidity"*.
 
 - **Effect on modelling and evidence.** Because this is the permanent
   configuration rather than a temporary bench state, data captured here is
