@@ -1,0 +1,230 @@
+/* Aurora design tokens — Doc04 §04.2, transcribed verbatim.
+ *
+ * This file is the single source of truth for the design language in code.
+ * Values are copied from the spec, not re-derived: if a token here disagrees
+ * with Doc04 §04.2, the spec wins and this file is wrong.
+ *
+ * Dark-primary by design (§04.2). The optional "Daybreak" light theme is
+ * specified but deliberately NOT implemented in this foundation slice.
+ */
+
+:root {
+  /* Canvas & aurora (§04.2) */
+  --void: #07090e;
+  --void-2: #0a0e15;
+  --aurora-teal: #2dd4bf;
+  --aurora-violet: #7c6bf5;
+  --aurora-blue: #3b82f6;
+  --aurora-amber: #f5a524;
+  --aurora-rose: #f43f6e;
+
+  /* Glass surfaces (§04.2) */
+  --glass-1: rgba(255, 255, 255, 0.045);
+  --glass-2: rgba(255, 255, 255, 0.075);
+  --glass-inset: rgba(0, 0, 0, 0.25);
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --glass-border-strong: rgba(255, 255, 255, 0.18);
+  --glass-highlight: rgba(255, 255, 255, 0.14);
+  --blur-tile: blur(20px) saturate(140%);
+  --blur-modal: blur(32px) saturate(160%);
+
+  /* Text (§04.2) */
+  --text-hero: rgba(255, 255, 255, 0.96);
+  --text-primary: rgba(233, 240, 247, 0.88);
+  --text-secondary: rgba(233, 240, 247, 0.58);
+  --text-muted: rgba(233, 240, 247, 0.34);
+
+  /* Status (§04.2) — luminous, never flat fills */
+  --status-healthy: #34e4b0;
+  --status-healthy-glow: rgba(52, 228, 176, 0.35);
+  --status-warning: #f5b740;
+  --status-warning-glow: rgba(245, 183, 64, 0.38);
+  --status-critical: #ff5c7a;
+  --status-critical-glow: rgba(255, 92, 122, 0.4);
+  --status-virtual: #b98bff;
+  --status-virtual-glow: rgba(185, 139, 255, 0.4);
+  --status-info: #5ac8ff;
+  --status-info-glow: rgba(90, 200, 255, 0.35);
+
+  /* Provenance — NOT in Doc04 §04.2; added for this project's real-vs-
+   * placeholder labelling (DECISIONS.md D028 and the /channels endpoint).
+   *
+   * Deliberately NOT --status-virtual: §04.2 reserves that purple for a
+   * VIRTUAL, twin-RECONSTRUCTED channel. A placeholder constant is a
+   * different thing — nothing measured it and nothing reconstructed it —
+   * and spending the purple now would blunt the self-healing demo later.
+   * Placeholders read as muted/inert; "unknown" is dimmer still, because
+   * "we were not told" is a weaker claim than "nothing is connected". */
+  --provenance-live: var(--status-healthy);
+  --provenance-live-glow: var(--status-healthy-glow);
+  --provenance-placeholder: rgba(233, 240, 247, 0.42);
+  --provenance-unknown: rgba(233, 240, 247, 0.26);
+
+  /* Type scale (§04.3) */
+  --font-display: Geist, Satoshi, "Plus Jakarta Sans", system-ui, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, "JetBrains Mono", monospace;
+
+  --motion-fast: 140ms;
+  --motion-base: 220ms;
+  --motion-slow: 500ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--void);
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Live-updating figures must not jitter as digits tick (§04.3). */
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+.mono {
+  font-family: var(--font-mono);
+}
+
+/* §04.3 type roles used by this slice. */
+.t-hero {
+  font-size: 56px;
+  font-weight: 200;
+  color: var(--text-hero);
+  letter-spacing: -0.02em;
+}
+
+.t-metric {
+  font-size: 32px;
+  font-weight: 250;
+  color: var(--text-hero);
+}
+
+.t-h1 {
+  font-size: 22px;
+  font-weight: 500;
+  margin: 0;
+}
+
+.t-h2 {
+  font-size: 16px;
+  font-weight: 500;
+  margin: 0;
+  color: var(--text-secondary);
+}
+
+.t-label {
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.t-muted {
+  color: var(--text-muted);
+}
+
+/* Glass tile (§04.4) — frosted surface, hairline border, specular top edge. */
+.glass {
+  position: relative;
+  background: var(--glass-1);
+  border: 1px solid var(--glass-border);
+  border-radius: 18px;
+  backdrop-filter: var(--blur-tile);
+  -webkit-backdrop-filter: var(--blur-tile);
+  transition:
+    border-color var(--motion-base) var(--ease-out),
+    background var(--motion-base) var(--ease-out);
+}
+
+.glass::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  border-radius: 18px 18px 0 0;
+  background: linear-gradient(90deg, transparent, var(--glass-highlight), transparent);
+  pointer-events: none;
+}
+
+.glass:focus-within {
+  border-color: var(--glass-border-strong);
+}
+
+.glass-inset {
+  background: var(--glass-inset);
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+}
+
+/* Inputs / buttons (§04.4 tactile elements). */
+.field {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--glass-border);
+  background: var(--glass-inset);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 14px;
+  transition: border-color var(--motion-fast) var(--ease-out);
+}
+
+.field:focus {
+  outline: none;
+  border-color: var(--glass-border-strong);
+  box-shadow: 0 0 0 3px var(--status-info-glow);
+}
+
+.btn {
+  width: 100%;
+  padding: 12px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--glass-border-strong);
+  background: var(--glass-2);
+  color: var(--text-hero);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    transform var(--motion-fast) var(--ease-out),
+    background var(--motion-fast) var(--ease-out);
+}
+
+.btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.11);
+}
+
+.btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* All non-essential motion is gated (§04.5 / §04.6). */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}

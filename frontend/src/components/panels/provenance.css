@@ -1,0 +1,55 @@
+/* Provenance badge. Colour + SHAPE + text, never colour alone (Doc04 §04.6). */
+
+.prov {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  border: 1px solid var(--glass-border);
+  white-space: nowrap;
+}
+
+.prov__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+/* LIVE — filled, glowing dot. The only state that gets luminosity. */
+.prov--live {
+  color: var(--provenance-live);
+  border-color: rgba(52, 228, 176, 0.3);
+  background: rgba(52, 228, 176, 0.08);
+}
+
+.prov--live .prov__dot {
+  background: var(--provenance-live);
+  box-shadow: 0 0 8px var(--provenance-live-glow);
+}
+
+/* PLACEHOLDER — hollow dot, inert. Reads as "nothing behind this". */
+.prov--placeholder {
+  color: var(--provenance-placeholder);
+  background: transparent;
+}
+
+.prov--placeholder .prov__dot {
+  background: transparent;
+  border: 1px solid var(--provenance-placeholder);
+}
+
+/* UNVERIFIED — dimmest, dashed. Weaker than a placeholder claim. */
+.prov--unknown {
+  color: var(--provenance-unknown);
+  border-style: dashed;
+  background: transparent;
+}
+
+.prov--unknown .prov__dot {
+  background: transparent;
+  border: 1px dashed var(--provenance-unknown);
+}

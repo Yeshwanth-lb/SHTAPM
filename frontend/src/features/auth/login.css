@@ -1,0 +1,48 @@
+.login {
+  position: relative;
+  z-index: 1;
+  min-height: 100%;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.login__card {
+  width: 100%;
+  max-width: 380px;
+  padding: 32px;
+}
+
+.login__brand {
+  margin-bottom: 28px;
+}
+
+.login__brand .t-label {
+  margin: 6px 0 0;
+}
+
+.login__form {
+  display: grid;
+  gap: 16px;
+}
+
+.login__field {
+  display: grid;
+  gap: 6px;
+}
+
+.login__error {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 13px;
+  color: var(--status-critical);
+  background: rgba(255, 92, 122, 0.08);
+  border: 1px solid rgba(255, 92, 122, 0.28);
+}
+
+.login__foot {
+  margin: 20px 0 0;
+  font-size: 12px;
+  text-align: center;
+}

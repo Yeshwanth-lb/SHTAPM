@@ -1,15 +1,46 @@
-// P0 M3.5 live-telemetry proof shell. Minimal by design — the Aurora dashboard
-// (layout, glass, charts, routing) is P5 and will replace this.
-import { useTelemetryWebSocket } from "./hooks/useTelemetryWebSocket";
-import { TelemetryView } from "./features/telemetry/TelemetryView";
+// Aurora app root: ambient field + auth provider + routing.
+//
+// Replaces the P0 M3.5 live-telemetry proof shell. The telemetry hook,
+// contract types and their tests are unchanged and still in the tree — the
+// cockpit that consumes them is the next slice.
+import { AppShell } from "./app/AppShell";
+import { useRoute } from "./app/router";
+import { MeshBackground } from "./components/aurora/MeshBackground";
+import { AuthProvider } from "./features/auth/AuthContext";
+import { LoginScreen } from "./features/auth/LoginScreen";
+import { RequireAuth } from "./features/auth/RequireAuth";
+import { Overview } from "./pages/Overview";
 import "./styles/fonts.css";
+import "./styles/aurora.css";
+
+function Routes() {
+  const { path } = useRoute();
+
+  if (path === "/login") return <LoginScreen />;
+
+  return (
+    <RequireAuth>
+      <AppShell>
+        {path === "/" ? (
+          <Overview />
+        ) : (
+          // Unknown or not-yet-built path. Honest, not a fabricated screen.
+          <p className="t-muted" data-testid="not-built">
+            Not built yet.
+          </p>
+        )}
+      </AppShell>
+    </RequireAuth>
+  );
+}
 
 export function App() {
-  const { status, byDevice } = useTelemetryWebSocket();
   return (
-    <main style={{ fontFamily: "Geist, system-ui, sans-serif", padding: 16 }}>
-      <h1>SHTAPM — Live Telemetry (P0)</h1>
-      <TelemetryView byDevice={byDevice} status={status} />
-    </main>
+    <AuthProvider>
+      {/* health="healthy" is a rendering default: nothing computes real health
+          yet (no prognosis model; decisions.health_state is NULL). */}
+      <MeshBackground health="healthy" />
+      <Routes />
+    </AuthProvider>
   );
 }

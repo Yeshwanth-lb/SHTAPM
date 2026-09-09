@@ -1,0 +1,136 @@
+/* Ambient Health Field styles (Doc04 §04.5).
+ *
+ * Orbs are 60–90vmin, blur(120px), on long independent loops (30–40s) when
+ * healthy. Health changes crossfade over ~1.5s so the environment glides
+ * between moods rather than snapping.
+ */
+
+.mesh {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+  background: var(--void);
+}
+
+.mesh__orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(120px);
+  opacity: 0.55;
+  /* 1.5s crossfade between health states (§04.5). */
+  transition:
+    background var(--motion-crossfade, 1500ms) ease,
+    opacity var(--motion-crossfade, 1500ms) ease;
+  will-change: transform;
+}
+
+.mesh__orb--a {
+  width: 80vmin;
+  height: 80vmin;
+  top: -18vmin;
+  left: -10vmin;
+  background: var(--aurora-teal);
+  animation: mesh-drift-a 38s ease-in-out infinite;
+}
+
+.mesh__orb--b {
+  width: 70vmin;
+  height: 70vmin;
+  bottom: -20vmin;
+  right: -8vmin;
+  background: var(--aurora-violet);
+  animation: mesh-drift-b 34s ease-in-out infinite;
+}
+
+.mesh__orb--c {
+  width: 60vmin;
+  height: 60vmin;
+  top: 28vmin;
+  right: 22vmin;
+  background: var(--aurora-blue);
+  opacity: 0.4;
+  animation: mesh-drift-c 30s ease-in-out infinite;
+}
+
+/* Warning: one orb crossfades to amber and the field breathes faster (§04.5). */
+.mesh--warning .mesh__orb--c {
+  background: var(--aurora-amber);
+  opacity: 0.5;
+  animation: mesh-breathe 4s ease-in-out infinite;
+}
+
+/* Critical: a rose orb blooms low and slow, heartbeat-like. Never a flash. */
+.mesh--critical .mesh__orb--b {
+  background: var(--aurora-rose);
+  opacity: 0.6;
+  animation: mesh-pulse 1200ms ease-in-out infinite;
+}
+
+.mesh__vignette {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at center, transparent 35%, var(--void-2) 100%);
+}
+
+@keyframes mesh-drift-a {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(6vmin, 4vmin, 0) scale(1.08);
+  }
+}
+
+@keyframes mesh-drift-b {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1.05);
+  }
+  50% {
+    transform: translate3d(-5vmin, -6vmin, 0) scale(1);
+  }
+}
+
+@keyframes mesh-drift-c {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(-4vmin, 5vmin, 0);
+  }
+}
+
+@keyframes mesh-breathe {
+  0%,
+  100% {
+    opacity: 0.42;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.6;
+    transform: scale(1.06);
+  }
+}
+
+@keyframes mesh-pulse {
+  0%,
+  100% {
+    opacity: 0.5;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.72;
+    transform: scale(1.04);
+  }
+}
+
+/* §04.6: reduced motion freezes orb drift but KEEPS the colour mapping. */
+@media (prefers-reduced-motion: reduce) {
+  .mesh__orb {
+    animation: none !important;
+  }
+}
