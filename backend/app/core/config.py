@@ -11,6 +11,7 @@ import os
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import ClassVar
+from urllib.parse import quote
 
 from app.schemas.contracts import CHANNELS
 
@@ -28,16 +29,69 @@ class MqttSettings:
         )
 
 
+# Placeholder shipped in .env.example. Reaching the database layer means it was
+# never replaced, and the resulting failure ("password authentication failed")
+# points at the database rather than at the config, so name it explicitly.
+_PLACEHOLDER_PASSWORD = "CHANGE_ME"
+
+
 @dataclass(frozen=True)
 class DatabaseSettings:
+    """Connection URL, either given directly or composed from the POSTGRES_* parts.
+
+    WHY BOTH: ``.env.example`` used to carry the password twice — once as
+    ``POSTGRES_PASSWORD`` (which initialises the container) and once embedded in
+    a literal ``DATABASE_URL`` (which the backend authenticates with) — kept in
+    step by a comment asking the operator to do it manually. Setting one and not
+    the other produced ``FATAL: password authentication failed for user
+    "shtapm"``, which reads as a database problem rather than a config typo, and
+    cost real debugging time during P5 bring-up.
+
+    ``DATABASE_URL`` still wins when set, so nothing that already exports it
+    changes behaviour (including tests using ``sqlite://``). When it is absent
+    the URL is composed from the same variables Compose uses, so the two cannot
+    disagree.
+    """
+
     url: str
 
     @classmethod
-    def from_env(cls) -> DatabaseSettings:
-        url = os.environ.get("DATABASE_URL")
-        if not url:
-            raise RuntimeError("DATABASE_URL is required (see .env.example)")
-        return cls(url=url)
+    def from_env(cls, env: Mapping[str, str] | None = None) -> DatabaseSettings:
+        env = os.environ if env is None else env
+        url = env.get("DATABASE_URL")
+        if url:
+            if _PLACEHOLDER_PASSWORD in url:
+                raise RuntimeError(
+                    f"DATABASE_URL still contains the {_PLACEHOLDER_PASSWORD!r} placeholder "
+                    "from .env.example. Either set a real password in it, or unset "
+                    "DATABASE_URL entirely and let it be composed from POSTGRES_USER/"
+                    "POSTGRES_PASSWORD/POSTGRES_HOST/POSTGRES_PORT/POSTGRES_DB."
+                )
+            return cls(url=url)
+        return cls(url=cls._compose(env))
+
+    @staticmethod
+    def _compose(env: Mapping[str, str]) -> str:
+        password = env.get("POSTGRES_PASSWORD")
+        if not password:
+            raise RuntimeError(
+                "Set DATABASE_URL, or POSTGRES_PASSWORD so it can be composed "
+                "from the POSTGRES_* variables (see .env.example)"
+            )
+        if password == _PLACEHOLDER_PASSWORD:
+            raise RuntimeError(
+                f"POSTGRES_PASSWORD is still the {_PLACEHOLDER_PASSWORD!r} placeholder"
+            )
+        user = env.get("POSTGRES_USER", "shtapm")
+        host = env.get("POSTGRES_HOST", "localhost")
+        port = env.get("POSTGRES_PORT", "5432")
+        database = env.get("POSTGRES_DB", "shtapm")
+        # quote(): a password may legally contain @ : / # ? — unescaped, any of
+        # them silently corrupts the URL into a different host or database.
+        return (
+            f"postgresql+psycopg://{quote(user, safe='')}:{quote(password, safe='')}"
+            f"@{host}:{port}/{database}"
+        )
 
 
 @dataclass(frozen=True)
