@@ -15,19 +15,17 @@ each driver's own ``_open_*`` method), so constructing the exact bench
 table proves it can't raise ``UnsupportedDriverError`` at boot without
 needing a Pi, an SPI/I2C bus, or a 1-Wire probe.
 
-Current bench state asserted below (2026-09-09): ADXL335 (vibration),
-BMP280 (pressure) and DHT22 (humidity) real; temperature TEMPORARILY
-SUBSTITUTED by DHT22 ambient air temp because the DS18B20 could not be
-detected; gas and current fake constants. When the bench is reconfigured
-again, update this file WITH main.py — a failure here means the two
-disagree.
+Current bench state asserted below (2026-09-09): four real channels across
+three sensors — DHT22 serving BOTH temperature (ambient air) and humidity,
+ADXL335 (vibration), BMP280 (pressure) — with gas and current fake
+constants. When the bench is reconfigured, update this file WITH main.py —
+a failure here means the two disagree.
 
-The substitution is a deliberate, operator-approved deviation from PRD 12.1
-(ambient air, not motor/bearing temp; and temperature/humidity now share one
-part). See edge/drivers/dht22_adafruit.py's docstring and the
-DHT22-ambient-temperature record in project-state/DECISIONS.md. The tests
-below assert the WIRING, and deliberately also assert what must stay true
-for restoring DS18B20 to remain a one-line change.
+Sourcing temperature from the DHT22 is the APPROVED project configuration
+(supervisor decision, DECISIONS.md D028), not a stopgap. DS18B20 remains
+registered as temperature's optional alternate, so the tests below assert
+both the wiring AND that selecting that hardware later stays a one-line
+change.
 """
 
 from __future__ import annotations
@@ -35,6 +33,7 @@ from __future__ import annotations
 import pytest
 from app.schemas.contracts import CHANNELS
 
+import edge.drivers.dht22_adafruit as dht22_adafruit_module
 from edge.drivers.adxl335 import ADXL335Driver
 from edge.drivers.base import Sensor, SensorDriver
 from edge.drivers.bmp280 import BMP280Driver
@@ -52,12 +51,10 @@ from edge.main import _DEFAULT_CHANNEL_SPECS
 # resolve to. Mirrors this bench's actual wiring, not the set of drivers
 # that happen to be implemented (INA219 is implemented but unplugged).
 _EXPECTED_REAL: dict[str, type[SensorDriver]] = {
+    "temperature": DHT22AdafruitTemperatureDriver,  # ambient air, shared DHT22 (D028)
     "vibration": ADXL335Driver,
     "pressure": BMP280Driver,
-    "humidity": DHT22AdafruitDriver,
-}
-_EXPECTED_SUBSTITUTED: dict[str, type[SensorDriver]] = {
-    "temperature": DHT22AdafruitTemperatureDriver,
+    "humidity": DHT22AdafruitDriver,  # same physical sensor as temperature
 }
 _EXPECTED_FAKE_CONSTANTS = {"gas": 150.0, "current": 0.0}
 
@@ -71,11 +68,14 @@ def test_exactly_the_wired_channels_are_real():
     assert real == set(_EXPECTED_REAL)
 
 
-def test_temperature_is_substituted_not_real_and_not_fake():
-    """It must be kind="substitute": "real" would claim a DS18B20 that is not
-    connected, "fake" would throw away a genuine (if different) measurement."""
-    substituted = {ch for ch, spec in _DEFAULT_CHANNEL_SPECS.items() if spec.kind == "substitute"}
-    assert substituted == set(_EXPECTED_SUBSTITUTED)
+def test_temperature_and_humidity_are_served_by_the_one_shared_dht22():
+    """D028's defining property: both channels come from a single physical
+    sensor on GPIO17, through one shared reader — not two devices, and not a
+    fake constant standing in for either."""
+    drivers = build_drivers(_DEFAULT_CHANNEL_SPECS)
+    assert isinstance(drivers["temperature"], DHT22AdafruitTemperatureDriver)
+    assert isinstance(drivers["humidity"], DHT22AdafruitDriver)
+    assert dht22_adafruit_module.shared_reader() is dht22_adafruit_module.shared_reader()
 
 
 def test_unwired_channels_stay_fake_constants_at_their_documented_values():
@@ -90,7 +90,7 @@ def test_real_channels_declare_no_params_so_each_driver_uses_its_hardware_defaul
     """DS18B20 auto-discovers its 28-<serial> sysfs device; BMP280 defaults to
     bus 1 / 0x76 (confirmed on this board); ADXL335 to SPI0 CE0 CH0-2; DHT22 to
     GPIO17. No bench-specific value is duplicated into main.py's table."""
-    for channel in (*_EXPECTED_REAL, *_EXPECTED_SUBSTITUTED):
+    for channel in _EXPECTED_REAL:
         assert dict(_DEFAULT_CHANNEL_SPECS[channel].params) == {}
 
 
@@ -99,7 +99,7 @@ def test_bench_table_builds_the_expected_driver_objects_without_hardware():
     drivers = build_drivers(_DEFAULT_CHANNEL_SPECS)
 
     assert set(drivers) == set(CHANNELS)
-    for channel, expected_cls in {**_EXPECTED_REAL, **_EXPECTED_SUBSTITUTED}.items():
+    for channel, expected_cls in _EXPECTED_REAL.items():
         assert isinstance(drivers[channel], expected_cls)
         assert not isinstance(drivers[channel], Sensor)  # real driver, not a fake
     for channel in _EXPECTED_FAKE_CONSTANTS:
@@ -127,19 +127,29 @@ def test_a_disconnected_sensor_can_be_reverted_to_fake_by_env_without_a_code_edi
         assert resolved[channel].kind == "fake"
     for channel in ("vibration", "humidity"):
         assert resolved[channel].kind == "real"
-    assert _DEFAULT_CHANNEL_SPECS["temperature"].kind == "substitute"  # not mutated
+    assert _DEFAULT_CHANNEL_SPECS["temperature"].kind == "real"  # not mutated
 
 
-def test_restoring_ds18b20_is_a_one_line_change_not_a_redesign():
-    """Guards the promise made in main.py's docstring: flipping temperature
-    back to kind="real" is all that reconnecting DS18B20 requires — the
-    canonical real driver was never displaced by the substitution."""
-    restored = dict(_DEFAULT_CHANNEL_SPECS)
-    restored["temperature"] = DriverSpec(kind="real")
+def test_adopting_the_ds18b20_alternate_is_a_one_line_change_not_a_redesign():
+    """Guards main.py's docstring promise: DS18B20 is optional, not required,
+    and adding that hardware later is one spec change — every other channel,
+    and the frozen channel set, are untouched by it."""
+    with_alternate = dict(_DEFAULT_CHANNEL_SPECS)
+    with_alternate["temperature"] = DriverSpec(kind="alternate")
 
-    drivers = build_drivers(restored)
+    drivers = build_drivers(with_alternate)
 
     assert isinstance(drivers["temperature"], DS18B20Driver)
     assert set(drivers) == set(CHANNELS)
     for channel, expected_cls in _EXPECTED_REAL.items():
+        if channel == "temperature":
+            continue  # deliberately replaced by the alternate in this scenario
         assert isinstance(drivers[channel], expected_cls)  # nothing else moved
+
+
+def test_the_ds18b20_alternate_is_selectable_by_env_without_a_code_edit():
+    resolved = resolve_channel_specs_from_env(
+        _DEFAULT_CHANNEL_SPECS, env={"SHTAPM_DRIVER_TEMPERATURE": "alternate"}
+    )
+    assert resolved["temperature"] == DriverSpec(kind="alternate")
+    assert _DEFAULT_CHANNEL_SPECS["temperature"].kind == "real"  # not mutated

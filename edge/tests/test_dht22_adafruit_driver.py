@@ -211,11 +211,9 @@ def test_none_humidity_raises_oserror(patched_library, fake_device):
 def test_reading_humidity_does_not_touch_temperature(patched_library, fake_device):
     """The humidity path reads only .humidity. (This file's original
     `test_never_reads_temperature` asserted temperature was NEVER sourced
-    from this sensor -- that discipline was deliberately set aside when the
-    undetected DS18B20 was temporarily substituted by DHT22 ambient temp;
-    see edge/drivers/dht22_adafruit.py's docstring and DECISIONS.md. What
-    remains true, and is asserted here, is that reading one channel never
-    silently pulls the other.)"""
+    from this sensor; the project now sources both channels from the DHT22
+    by approved decision -- D028 -- so that guard is scoped to what remains
+    true: reading one channel never silently pulls the other.)"""
     fake_device._script = [50.0]
     reader = DHT22AdafruitReader()
     reader.read_humidity_percent()
@@ -291,11 +289,11 @@ def test_driver_matches_kernel_driver_unit_and_shape():
 
 
 # ---------------------------------------------------------------------------
-# TEMPORARY DHT22 ambient-temperature substitution (temperature + humidity from
-# one sensor). Deliberate deviation from PRD 12.1 -- see the module docstring
-# of edge/drivers/dht22_adafruit.py and the DECISIONS.md record it names.
-# These tests cover the mechanism only; nothing here validates the reading or
-# claims it is equivalent to a DS18B20 motor/bearing measurement.
+# DHT22 ambient temperature -- the project's approved `temperature` source
+# (D028), sharing one sensor with `humidity`. See edge/drivers/dht22_adafruit.py's
+# measurement-characteristics note for what this channel represents.
+# These tests cover the mechanism only; nothing here validates the reading's
+# accuracy or claims equivalence to a DS18B20 contact measurement.
 # ---------------------------------------------------------------------------
 
 

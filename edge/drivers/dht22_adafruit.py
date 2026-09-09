@@ -17,27 +17,33 @@ use_pulseio=False (the caller-specified, already-validated configuration)
 avoids the pulseio C-extension path entirely, using adafruit_dht's plain-
 Python bit-bang timing instead.
 
-TEMPORARY DUAL-CHANNEL USE (temperature + humidity) -- deliberate,
-operator-approved deviation from PRD 12.1, see the DHT22-ambient-
-temperature record in project-state/DECISIONS.md before relying on any
-data produced in this configuration:
+DUAL-CHANNEL USE (temperature + humidity) -- the APPROVED project
+configuration, per the supervisor decision recorded as D028 in
+project-state/DECISIONS.md.
 
-DHT22 exposes an on-chip temperature reading alongside humidity. The DS18B20
-(edge/drivers/ds18b20.py) is this project's canonical `temperature` source
-and remains registered as such (edge/drivers/registry.py's
-_REAL_DRIVER_CLASSES is unchanged); it is currently undetected on the bench,
-so DHT22AdafruitTemperatureDriver below is offered as an explicitly-named
-SUBSTITUTE -- never as `kind="real"`, never selected implicitly, and never
-as a fallback the registry picks on its own.
+DHT22 exposes an on-chip temperature reading alongside humidity, and this
+project sources BOTH frozen channels from it: DHT22AdafruitDriver serves
+`humidity`, DHT22AdafruitTemperatureDriver (below) serves `temperature`,
+and both are registered as those channels' real drivers in
+edge/drivers/registry.py. The DS18B20 (edge/drivers/ds18b20.py) remains
+fully implemented and registered as temperature's OPTIONAL ALTERNATE
+driver -- supported, not required, selectable whenever that hardware is
+added (see _ALTERNATE_DRIVER_CLASSES).
 
-What DHT22 measures here is AMBIENT AIR TEMPERATURE at the sensor. It is
-NOT the motor/bearing temperature PRD 12.1 specifies for this channel
-("Direct", DS18B20), and it is NOT interchangeable with a DS18B20 reading:
-different physical quantity, different placement, different failure mode.
-PRD 12.1's design-integrity note additionally keeps temperature and humidity
-on separate parts so the trust engine's cross-sensor correlation term is not
-defeated by two perfectly-correlated channels from one device -- sourcing
-both here knowingly sets that property aside for the duration.
+MEASUREMENT CHARACTERISTICS (specification, not caveat -- these describe
+what this configuration measures, and any model or analysis built on the
+`temperature` channel needs them):
+
+  - `temperature` is AMBIENT AIR TEMPERATURE at the sensor. It is an
+    indicative environmental measurement, not a contact reading of a
+    motor or bearing surface. Swapping in the DS18B20 alternate later
+    changes the measured quantity, so a model fitted on one is not
+    automatically valid for the other.
+  - `temperature` and `humidity` come from ONE part reading ONE air mass,
+    so they are physically coupled and share a failure mode. Anything
+    that treats channels as independent evidence -- cross-sensor
+    correlation, cross-channel reconstruction -- must account for that
+    rather than read their agreement as mutual corroboration.
 
 BOTH channels are served by ONE shared reader per (pin, use_pulseio) --
 see shared_reader() below. Two independent adafruit_dht.DHT22 objects on
@@ -105,8 +111,8 @@ class DHT22AdafruitReader:
     def read_temperature_c(self) -> float:
         """Read AMBIENT AIR temperature (°C) at the DHT22.
 
-        NOT motor/bearing temperature -- see this module's docstring and
-        the DECISIONS.md record it names. Same failure discipline as
+        See this module's measurement-characteristics note for what this
+        channel does and does not represent. Same failure discipline as
         read_humidity_percent(): raises OSError, and Sensor.read() turns
         that into healthy=False without new retry logic.
 
@@ -162,7 +168,7 @@ def dht22_adafruit_raw_read(*, pin: int = _DEFAULT_PIN, use_pulseio: bool = Fals
 def dht22_adafruit_temperature_raw_read(
     *, pin: int = _DEFAULT_PIN, use_pulseio: bool = False
 ) -> RawRead:
-    """Factory: AMBIENT temperature (°C) RawRead over the shared DHT22
+    """Factory: ambient temperature (°C) RawRead over the shared DHT22
     reader -- the same device object dht22_adafruit_raw_read() uses."""
     reader = shared_reader(pin=pin, use_pulseio=use_pulseio)
 
@@ -192,21 +198,20 @@ class DHT22AdafruitDriver(SensorDriver):
 
 
 class DHT22AdafruitTemperatureDriver(SensorDriver):
-    """TEMPORARY SUBSTITUTE `temperature` driver: DHT22 ambient air temp.
+    """This project's `temperature` driver: DHT22 ambient air temperature.
 
-    Registered as a SUBSTITUTE, never as this channel's real driver --
-    DS18B20Driver remains registry._REAL_DRIVER_CLASSES["temperature"], so
-    restoring it is removing this substitution, not a redesign. Selecting
-    this driver is always an explicit act (DriverSpec(kind="substitute") or
-    SHTAPM_DRIVER_TEMPERATURE=substitute); the registry never falls back to
-    it on its own.
+    The approved default (D028) -- registry._REAL_DRIVER_CLASSES
+    ["temperature"]. DS18B20Driver stays available as the channel's
+    registered optional alternate, so adding that hardware later is
+    selecting it (DriverSpec(kind="alternate") or
+    SHTAPM_DRIVER_TEMPERATURE=alternate), never a redesign.
 
     Emits unit="°C" exactly as DS18B20Driver does, so the frozen
     six-channel contract, the wire frame, and every downstream consumer are
-    untouched -- which is precisely why the physical-meaning caveat in this
-    module's docstring cannot be read off the wire and must travel with the
-    data. Never raises; unhealthy reads return healthy=False, value=None
-    (firmware discipline TRD §02.8)."""
+    identical either way. The wire cannot express WHICH source produced a
+    value, so this module's measurement-characteristics note travels with
+    the data instead. Never raises; unhealthy reads return healthy=False,
+    value=None (firmware discipline TRD §02.8)."""
 
     def __init__(self, *, pin: int = _DEFAULT_PIN, use_pulseio: bool = False) -> None:
         self._sensor = Sensor(
