@@ -242,3 +242,42 @@ def test_shared_sensor_note_is_stated_on_both_channels():
 def test_proxy_channels_explain_what_they_actually_measure():
     assert "not water-line" in _CHANNEL_NOTES["pressure"]
     assert "not H2S" in _CHANNEL_NOTES["gas"]
+
+
+# ---------------------------------------------------------------------------
+# Decision rows: what they carry, and what they must never imply
+# ---------------------------------------------------------------------------
+
+
+def test_decision_fields_nothing_computes_stay_null():
+    """The diagnostic producer writes anomaly + trust and nothing else. These
+    columns are UNIMPLEMENTED CAPABILITY, not missing data, and a UI must not
+    render them as an assessed 'healthy' or an absent fault."""
+    from app.services.decision_diagnostic_persistence import DecisionDiagnosticPersistence
+
+    source = inspect_source(DecisionDiagnosticPersistence.persist)
+    for never_written in (
+        "health_state",
+        "failure_eta",
+        "rl_action",
+        "isolated_channels",
+        "substituted_channels",
+    ):
+        assert never_written not in source, (
+            f"{never_written} is now written by the diagnostic path; the UI's "
+            "'not computed' labelling must be revisited before this passes"
+        )
+
+
+def test_no_confidence_field_exists_anywhere_in_the_decision_schema():
+    """Guards against a UI ever displaying a confidence number: there is no
+    such value to display, and inventing one would misrepresent the model."""
+    from app.api.devices import DecisionOut
+
+    assert not any("confidence" in name for name in DecisionOut.model_fields)
+
+
+def inspect_source(fn) -> str:
+    import inspect as _inspect
+
+    return _inspect.getsource(fn)

@@ -59,16 +59,41 @@ describe("route table", () => {
     );
   });
 
-  it("only enables nav items whose pages exist", async () => {
+  it("enables every nav item, because each now has a real page", async () => {
     signedIn();
     window.location.hash = "#/";
     render(<App />);
     await waitFor(() => expect(screen.getByTestId("nav-devices")).toBeInTheDocument());
-    // Backed by a working endpoint -> enabled.
-    expect(screen.getByTestId("nav-devices")).not.toBeDisabled();
-    expect(screen.getByTestId("nav-system")).not.toBeDisabled();
-    // Ledger has no producer yet, so it must stay disabled rather than lead to
-    // a page that would always be empty.
-    expect(screen.getByTestId("nav-ledger")).toBeDisabled();
+    for (const item of [
+      "overview",
+      "device",
+      "devices",
+      "decisions",
+      "history",
+      "alerts",
+      "ledger",
+      "users",
+      "system",
+      "settings",
+    ]) {
+      expect(screen.getByTestId(`nav-${item}`)).not.toBeDisabled();
+    }
+  });
+
+  it("every enabled nav item routes to a real page, never to not-found", async () => {
+    // The invariant that matters: a nav item must never lead somewhere empty.
+    // Ledger was disabled until its read-only view and chain verification
+    // existed; enabling it without a page would be exactly this bug.
+    signedIn();
+    for (const [hash, testId] of [
+      ["#/decisions", "uncomputed-table"],
+      ["#/ledger", "verify-chain"],
+    ] as const) {
+      window.location.hash = hash;
+      const { unmount } = render(<App />);
+      await waitFor(() => expect(screen.getByTestId(testId)).toBeInTheDocument());
+      expect(screen.queryByTestId("not-found")).toBeNull();
+      unmount();
+    }
   });
 });

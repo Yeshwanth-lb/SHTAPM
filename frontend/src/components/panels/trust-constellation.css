@@ -1,0 +1,89 @@
+.trust__ring {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 14px;
+}
+
+.trust__node {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  padding: 14px 8px;
+  border-radius: 12px;
+  background: var(--glass-inset);
+  border: 1px solid var(--glass-border);
+  text-align: center;
+}
+
+.trust__orb {
+  border-radius: 50%;
+  transition:
+    width var(--motion-slow) var(--ease-out),
+    height var(--motion-slow) var(--ease-out),
+    background var(--motion-slow) var(--ease-out);
+}
+
+.trust__orb--trusted {
+  background: var(--status-healthy);
+  box-shadow: 0 0 16px var(--status-healthy-glow);
+}
+
+.trust__orb--suspicious {
+  background: var(--status-warning);
+  box-shadow: 0 0 14px var(--status-warning-glow);
+}
+
+.trust__orb--malicious {
+  background: var(--status-critical);
+  box-shadow: 0 0 12px var(--status-critical-glow);
+}
+
+/* Not computed: a hollow outline. Must never look like a full-trust node. */
+.trust__orb--unknown {
+  background: transparent;
+  border: 1px dashed var(--text-muted);
+  box-shadow: none;
+}
+
+.trust__label {
+  margin-top: 4px;
+}
+
+.trust__score {
+  font-size: 20px;
+  font-weight: 250;
+  color: var(--text-hero);
+}
+
+.trust__band {
+  font-size: 9.5px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.trust__band--trusted {
+  color: var(--status-healthy);
+}
+.trust__band--suspicious {
+  color: var(--status-warning);
+}
+.trust__band--malicious {
+  color: var(--status-critical);
+}
+.trust__band--unknown {
+  color: var(--text-muted);
+}
+
+.trust__caveat {
+  font-size: 9.5px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.trust__empty {
+  margin: 14px 0 0;
+  font-size: 12px;
+}

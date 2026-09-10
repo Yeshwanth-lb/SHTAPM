@@ -433,16 +433,38 @@ def get_decisions(
     device_id: str,
     from_: datetime | None = Query(default=None, alias="from"),
     to: datetime | None = Query(default=None),
+    limit: int | None = Query(default=None, ge=1, le=_MAX_READINGS_LIMIT),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> list[DecisionOut]:
+    """Decision rows, oldest-first.
+
+    ``limit`` returns the MOST RECENT ``limit`` rows, still oldest-first so a
+    trust chart plots them without reversing — same bounding as ``readings``,
+    and needed for the same reason: the edge publishes a decision diagnostic
+    every second, so an unbounded query grows ~86k rows/device/day.
+
+    Omitting ``limit`` preserves the previous unbounded behaviour exactly.
+
+    WHAT THESE ROWS DO AND DO NOT CONTAIN: the only producer writing here is
+    the edge diagnostic path, which populates ``anomaly_flag``,
+    ``anomaly_severity`` and the six ``trust_*`` scores. ``health_state``,
+    ``failure_eta``, ``rl_action``, ``isolated_channels``,
+    ``substituted_channels``, ``attribution`` and ``reason`` stay NULL because
+    nothing computes them yet — they are not missing data, they are
+    unimplemented capability. See ``/decisions/provenance`` for the producer's
+    own self-labelling (``model_status=diagnostic_unvalidated``).
+    """
     device = require_device_access(db, current_user, device_id)
     query = db.query(Decision).filter(Decision.device_id == device.id)
     if from_ is not None:
         query = query.filter(Decision.ts >= from_)
     if to is not None:
         query = query.filter(Decision.ts <= to)
-    rows = query.order_by(Decision.ts).all()
+    if limit is None:
+        rows = query.order_by(Decision.ts).all()
+    else:
+        rows = list(reversed(query.order_by(Decision.ts.desc()).limit(limit).all()))
     return [DecisionOut.model_validate(r, from_attributes=True) for r in rows]
 
 

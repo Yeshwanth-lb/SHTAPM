@@ -10,6 +10,7 @@ import { StateBlock, StatusPill } from "../components/aurora/StateBlock";
 import { navigate } from "../app/router";
 import { useAuth } from "../features/auth/AuthContext";
 import { useChannels } from "../features/channels/useChannels";
+import { trustBand, useDecisions } from "../features/decisions/useDecisions";
 import { apiGet, getHealthz, type AlertOut, type DeviceOut, type HealthzOut } from "../lib/api";
 import { useApiResource } from "../lib/useApiResource";
 import { CHANNELS } from "../types/contracts";
@@ -44,8 +45,21 @@ export function Overview() {
     { enabled: accessToken !== null },
   );
   const { channels } = useChannels(DEVICE_ID, accessToken);
+  // Only the newest row is needed for an at-a-glance state.
+  const decisions = useDecisions(DEVICE_ID, accessToken, 1);
 
   const h = health.data;
+  const latestDecision = decisions.data?.[decisions.data.length - 1] ?? null;
+  const worstTrust = latestDecision
+    ? Math.min(
+        ...CHANNELS.map((c) => {
+          const v = latestDecision[`trust_${c}` as keyof typeof latestDecision];
+          return typeof v === "number" ? v : Number.POSITIVE_INFINITY;
+        }),
+      )
+    : null;
+  const worstBand =
+    worstTrust !== null && Number.isFinite(worstTrust) ? trustBand(worstTrust) : "unknown";
   const liveChannels = channels.filter((c) => c.source === "live").length;
   const declared = channels.filter((c) => c.source !== "unknown").length;
 
@@ -120,6 +134,79 @@ export function Overview() {
         <button className="link-btn" onClick={() => navigate("/device")} data-testid="goto-device">
           Open device monitoring →
         </button>
+      </GlassTile>
+
+      <GlassTile
+        title="Decision state"
+        aside={
+          <span className="t-label mono" data-testid="decision-ts">
+            {latestDecision ? latestDecision.ts : "—"}
+          </span>
+        }
+      >
+        {decisions.status === "loading" && <StateBlock kind="loading" />}
+        {decisions.status === "error" && (
+          <StateBlock kind="error" onRetry={decisions.refresh}>
+            {decisions.error}
+          </StateBlock>
+        )}
+        {decisions.status === "ready" && !latestDecision && (
+          <StateBlock kind="empty" title="No decisions recorded">
+            The edge publishes a decision diagnostic every second; if this stays empty while
+            telemetry flows, the decision-diagnostic consumer is not receiving its topic.
+          </StateBlock>
+        )}
+        {latestDecision && (
+          <>
+            <div className="kv">
+              <div className="kv__item">
+                <span className="kv__label">Anomaly</span>
+                <span className="kv__value" data-testid="overview-anomaly">
+                  <StatusPill tone={latestDecision.anomaly_flag ? "critical" : "muted"}>
+                    {latestDecision.anomaly_flag ? "flagged" : "not flagged"}
+                  </StatusPill>
+                </span>
+              </div>
+              <div className="kv__item">
+                <span className="kv__label">Lowest channel trust</span>
+                <span className="kv__value tabular" data-testid="overview-trust">
+                  {worstTrust !== null && Number.isFinite(worstTrust) ? worstTrust.toFixed(2) : "—"}{" "}
+                  <StatusPill
+                    tone={
+                      worstBand === "trusted"
+                        ? "healthy"
+                        : worstBand === "suspicious"
+                          ? "warning"
+                          : worstBand === "malicious"
+                            ? "critical"
+                            : "muted"
+                    }
+                  >
+                    {worstBand}
+                  </StatusPill>
+                </span>
+              </div>
+              <div className="kv__item">
+                <span className="kv__label">Safety state</span>
+                <span className="kv__value t-muted" data-testid="overview-safety">
+                  not published
+                </span>
+              </div>
+            </div>
+            <p className="page__footnote t-muted">
+              &ldquo;Not flagged&rdquo; means the pipeline ran, not that the pump is healthy — the
+              wired detector never flags by design. Safety state (relay position, safe-stop) is held
+              on the edge and is not published to the backend, so it cannot be shown.
+            </p>
+            <button
+              className="link-btn"
+              onClick={() => navigate("/decisions")}
+              data-testid="goto-decisions"
+            >
+              Open decisions &amp; diagnostics →
+            </button>
+          </>
+        )}
       </GlassTile>
 
       <GlassTile title="Open alerts">

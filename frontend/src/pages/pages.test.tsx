@@ -4,8 +4,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AuthProvider } from "../features/auth/AuthContext";
 import * as api from "../lib/api";
 import { AlertsPage } from "./AlertsPage";
+import { DecisionsPage } from "./DecisionsPage";
 import { DevicesPage } from "./DevicesPage";
 import { HistoryPage } from "./HistoryPage";
+import { LedgerPage, shortHash } from "./LedgerPage";
 import { redactUrl, SettingsPage } from "./SettingsPage";
 import { UsersPage } from "./UsersPage";
 
@@ -156,5 +158,126 @@ describe("redactUrl", () => {
 
   it("returns a non-URL string unchanged rather than throwing", () => {
     expect(redactUrl("not a url")).toBe("not a url");
+  });
+});
+
+describe("DecisionsPage", () => {
+  it("leads with the producer's own model_status, not a validated claim", async () => {
+    vi.spyOn(api, "apiGet").mockImplementation((path: string) => {
+      if (path.includes("/decisions/provenance")) {
+        return Promise.resolve({
+          execution_mode: "live",
+          data_source: "edge_live_pipeline",
+          model_status: "diagnostic_unvalidated",
+          note: "anomaly_flag comes from NullDetector, which never flags by design",
+        } as never);
+      }
+      return Promise.resolve([] as never);
+    });
+    withAuth(<DecisionsPage />);
+    await waitFor(() => expect(screen.getByTestId("model-status")).toBeInTheDocument());
+    expect(screen.getByTestId("model-status")).toHaveTextContent("diagnostic_unvalidated");
+    expect(screen.getByTestId("model-status-note")).toHaveTextContent("NullDetector");
+  });
+
+  it("explains that 'not flagged' is not an all-clear", async () => {
+    vi.spyOn(api, "apiGet").mockImplementation((path: string) => {
+      if (path.includes("/decisions/provenance")) {
+        return Promise.resolve({
+          execution_mode: "live",
+          data_source: "edge_live_pipeline",
+          model_status: "diagnostic_unvalidated",
+          note: "n/a",
+        } as never);
+      }
+      if (path.includes("/decisions")) {
+        return Promise.resolve([
+          {
+            ts: "2026-09-10T12:00:00Z",
+            anomaly_flag: false,
+            anomaly_severity: 0,
+            attribution: null,
+            reason: null,
+            trust_temperature: 0.9,
+            trust_vibration: 0.9,
+            trust_pressure: 0.9,
+            trust_humidity: 0.9,
+            trust_gas: 0.9,
+            trust_current: 0.9,
+            health_state: null,
+            failure_eta: null,
+            rl_action: null,
+            isolated_channels: null,
+            substituted_channels: null,
+          },
+        ] as never);
+      }
+      return Promise.resolve([] as never);
+    });
+    withAuth(<DecisionsPage />);
+    await waitFor(() => expect(screen.getByTestId("null-detector-note")).toBeInTheDocument());
+    expect(screen.getByTestId("null-detector-note")).toHaveTextContent("not an all-clear");
+    expect(screen.getByTestId("anomaly-flag")).toHaveTextContent("not flagged");
+  });
+
+  it("lists uncomputed fields so a blank is not read as 'nothing to report'", async () => {
+    vi.spyOn(api, "apiGet").mockResolvedValue([] as never);
+    withAuth(<DecisionsPage />);
+    await waitFor(() => expect(screen.getByTestId("uncomputed-table")).toBeInTheDocument());
+    const table = screen.getByTestId("uncomputed-table");
+    expect(table).toHaveTextContent("rl_action");
+    expect(table).toHaveTextContent("health_state");
+  });
+
+  it("shows an empty state when no decisions exist", async () => {
+    vi.spyOn(api, "apiGet").mockResolvedValue([] as never);
+    withAuth(<DecisionsPage />);
+    await waitFor(() => expect(screen.getByTestId("state-empty")).toBeInTheDocument());
+  });
+});
+
+describe("LedgerPage", () => {
+  it("explains an empty chain rather than looking broken", async () => {
+    vi.spyOn(api, "apiGet").mockResolvedValue([] as never);
+    withAuth(<LedgerPage />);
+    await waitFor(() => expect(screen.getByTestId("state-empty")).toBeInTheDocument());
+    expect(screen.getByTestId("state-empty")).toHaveTextContent("threshold change");
+  });
+
+  it("treats 403 as RBAC working, not as an error", async () => {
+    vi.spyOn(api, "apiGet").mockRejectedValue(new api.ApiError(403, "forbidden"));
+    withAuth(<LedgerPage />);
+    await waitFor(() => expect(screen.getByTestId("state-notice")).toBeInTheDocument());
+    expect(screen.queryByTestId("state-error")).toBeNull();
+  });
+
+  it("renders real blocks with truncated hashes", async () => {
+    vi.spyOn(api, "apiGet").mockResolvedValue([
+      {
+        block_index: 1,
+        ts: "2026-09-10T12:00:00Z",
+        event_type: "config_update",
+        payload: {},
+        payload_hash: "a1b2c3d4e5f6a7b8c9d0",
+        prev_hash: "0000000000000000",
+        this_hash: "9f8e7d6c5b4a3928",
+      },
+    ] as never);
+    withAuth(<LedgerPage />);
+    await waitFor(() => expect(screen.getByTestId("ledger-row-1")).toBeInTheDocument());
+    expect(screen.getByTestId("ledger-table")).toHaveTextContent("config_update");
+  });
+
+  it("disables verification when there is no chain to verify", async () => {
+    vi.spyOn(api, "apiGet").mockResolvedValue([] as never);
+    withAuth(<LedgerPage />);
+    await waitFor(() => expect(screen.getByTestId("verify-chain")).toBeDisabled());
+  });
+});
+
+describe("shortHash", () => {
+  it("middle-truncates a long hash and leaves a short one alone", () => {
+    expect(shortHash("a1b2c3d4e5f6a7b8c9d0")).toBe("a1b2c3…c9d0");
+    expect(shortHash("abc123")).toBe("abc123");
   });
 });

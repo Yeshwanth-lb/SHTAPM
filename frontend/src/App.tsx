@@ -10,9 +10,11 @@ import { AuthProvider } from "./features/auth/AuthContext";
 import { LoginScreen } from "./features/auth/LoginScreen";
 import { RequireAuth } from "./features/auth/RequireAuth";
 import { AlertsPage } from "./pages/AlertsPage";
+import { DecisionsPage } from "./pages/DecisionsPage";
 import { DevicePage } from "./pages/DevicePage";
 import { DevicesPage } from "./pages/DevicesPage";
 import { HistoryPage } from "./pages/HistoryPage";
+import { LedgerPage } from "./pages/LedgerPage";
 import { Overview } from "./pages/Overview";
 import { SettingsPage } from "./pages/SettingsPage";
 import { SystemPage } from "./pages/SystemPage";
@@ -27,6 +29,8 @@ const PAGES: Record<string, () => JSX.Element> = {
   "/device": DevicePage,
   "/devices": DevicesPage,
   "/history": HistoryPage,
+  "/decisions": DecisionsPage,
+  "/ledger": LedgerPage,
   "/alerts": AlertsPage,
   "/settings": SettingsPage,
   "/users": UsersPage,

@@ -24,14 +24,13 @@ const NAV: NavItem[] = [
   { label: "Overview", path: "/" },
   { label: "Device", path: "/device" },
   { label: "Devices", path: "/devices" },
+  { label: "Decisions", path: "/decisions" },
   { label: "History", path: "/history" },
   { label: "Alerts", path: "/alerts" },
+  { label: "Ledger", path: "/ledger" },
   { label: "Users", path: "/users" },
   { label: "System", path: "/system" },
   { label: "Settings", path: "/settings" },
-  // Ledger blocks are only written by threshold edits, which the UI does not
-  // yet expose, so this page would always be empty. Left disabled on purpose.
-  { label: "Ledger", path: "/ledger", phase: "next" },
 ];
 
 export function AppShell({ children }: { children: ReactNode }) {
