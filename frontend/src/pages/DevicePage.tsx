@@ -23,10 +23,14 @@ import "./device.css";
 
 const DEVICE_ID = import.meta.env.VITE_DEVICE_ID ?? "pump-01";
 
+// NOTE: this describes the BROWSER'S WEBSOCKET to the backend — not whether
+// the pump is online. Device status is a separate, persisted fact from the
+// edge's MQTT LWT topic; the label says "stream" so the two cannot be confused.
 const CONNECTION_LABEL: Record<string, string> = {
-  connecting: "Connecting",
-  open: "Live",
-  closed: "Disconnected",
+  connecting: "Stream connecting",
+  open: "Stream live",
+  closed: "Stream disconnected",
+  unauthorized: "Session expired",
 };
 
 // Retained points per channel. At 1 Hz these are roughly minutes of history.
@@ -50,8 +54,15 @@ export function DevicePage() {
     error: channelsError,
   } = useChannels(DEVICE_ID, accessToken);
   const [rangePoints, setRangePoints] = useState<number>(RANGES[0].points);
-  const { latest, history, connection, historyStatus, historyError, liveFrameCount } =
-    useDeviceTelemetry(DEVICE_ID, accessToken, { window: rangePoints });
+  const {
+    latest,
+    history,
+    connection,
+    historyStatus,
+    historyError,
+    liveFrameCount,
+    sessionExpired,
+  } = useDeviceTelemetry(DEVICE_ID, accessToken, { window: rangePoints });
 
   const lastFrameAgeMs = latest ? Date.now() - Date.parse(latest.ts) : null;
   const stale = lastFrameAgeMs !== null && lastFrameAgeMs > STALE_AFTER_MS;
@@ -91,6 +102,14 @@ export function DevicePage() {
           </span>
         </div>
       </header>
+
+      {sessionExpired && (
+        <StateBlock kind="error" title="Session expired">
+          The live stream was rejected because the access token is no longer valid, so reconnection
+          has stopped rather than retrying with a token that cannot succeed. Sign out and back in to
+          resume. Values below are the last received.
+        </StateBlock>
+      )}
 
       {stale && connection === "open" && (
         <StateBlock kind="notice" title="Data is stale">

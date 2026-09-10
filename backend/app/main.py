@@ -56,7 +56,9 @@ from app.core.db import make_engine, make_session_factory
 from app.models import Base
 from app.mqtt.consumer import TelemetryConsumer
 from app.mqtt.decision_diagnostic_consumer import DecisionDiagnosticConsumer
+from app.mqtt.status_consumer import StatusConsumer
 from app.services.decision_diagnostic_persistence import DecisionDiagnosticPersistence
+from app.services.status_persistence import StatusPersistence
 from app.services.telemetry_persistence import TelemetryPersistence
 from app.services.telemetry_store import TelemetryStore
 from app.ws.broadcaster import TelemetryBroadcaster
@@ -93,11 +95,20 @@ async def lifespan(app: FastAPI):
     decision_diagnostic_consumer.add_sink(decision_diagnostic_persistence.persist)
     decision_diagnostic_consumer.start(settings.host, settings.port)
     app.state.decision_diagnostic_consumer = decision_diagnostic_consumer
+
+    # Third independent consumer: the edge's retained LWT online/offline topic.
+    # Until this existed nothing wrote devices.status, so the fleet view showed
+    # every device as permanently "offline" while telemetry was arriving.
+    status_consumer = StatusConsumer()
+    status_consumer.add_sink(StatusPersistence(session_factory).persist)
+    status_consumer.start(settings.host, settings.port)
+    app.state.status_consumer = status_consumer
     try:
         yield
     finally:
         consumer.stop()
         decision_diagnostic_consumer.stop()
+        status_consumer.stop()
         engine.dispose()
 
 

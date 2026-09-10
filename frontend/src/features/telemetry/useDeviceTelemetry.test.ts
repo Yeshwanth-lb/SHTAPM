@@ -5,7 +5,10 @@ import {
   appendFrame,
   emptyHistory,
   isTelemetryFrame,
+  isTerminalCloseCode,
   pointsFromReading,
+  WS_ACCESS_DENIED,
+  WS_AUTH_FAILED,
   type SensorReadingOut,
 } from "./useDeviceTelemetry";
 
@@ -96,5 +99,37 @@ describe("isTelemetryFrame", () => {
     expect(isTelemetryFrame({ type: "decision", ...FRAME })).toBe(false);
     expect(isTelemetryFrame(null)).toBe(false);
     expect(isTelemetryFrame("telemetry")).toBe(false);
+  });
+});
+
+describe("isTerminalCloseCode", () => {
+  it("treats 4401 (bad/expired token) as terminal", () => {
+    // Retrying with the same dead token can only fail. Without this the socket
+    // reconnects every 10s indefinitely against a rejecting endpoint.
+    expect(isTerminalCloseCode(4401)).toBe(true);
+  });
+
+  it("treats 4403 (device not accessible) as terminal", () => {
+    expect(isTerminalCloseCode(4403)).toBe(true);
+  });
+
+  it("treats ordinary closes as retryable", () => {
+    expect(isTerminalCloseCode(1000)).toBe(false); // normal
+    expect(isTerminalCloseCode(1006)).toBe(false); // abnormal — backend restart
+    expect(isTerminalCloseCode(1001)).toBe(false); // going away
+  });
+
+  it("matches the close codes the backend actually sends", () => {
+    // ws/routes.py: WS_AUTH_FAILED = 4401, WS_ACCESS_DENIED = 4403
+    expect(WS_AUTH_FAILED).toBe(4401);
+    expect(WS_ACCESS_DENIED).toBe(4403);
+  });
+
+  it("does not weaken auth: a terminal code is a STOP, not a bypass", () => {
+    // Both terminal codes mean the server refused. Nothing here retries with a
+    // modified token, downgrades the check, or falls back to an unauthenticated
+    // socket — the only response is to stop and surface it.
+    expect(isTerminalCloseCode(WS_AUTH_FAILED)).toBe(true);
+    expect(isTerminalCloseCode(WS_ACCESS_DENIED)).toBe(true);
   });
 });

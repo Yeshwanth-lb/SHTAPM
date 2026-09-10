@@ -10,7 +10,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, EmailStr
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -23,6 +23,11 @@ from app.models import User
 from app.models.enums import UserRole
 
 router = APIRouter(prefix="/api/users", tags=["users"])
+
+# Bounded like every other list endpoint. Small today, but an admin surface
+# should not become an unbounded scan just because the table happens to be tiny.
+_MAX_USERS_LIMIT = 500
+_DEFAULT_USERS_LIMIT = 200
 
 
 class _Body(BaseModel):
@@ -66,10 +71,13 @@ def _to_user_out(user: User) -> UserOut:
 
 @router.get("", response_model=list[UserOut])
 def list_users(
+    limit: int = Query(default=_DEFAULT_USERS_LIMIT, ge=1, le=_MAX_USERS_LIMIT),
     db: Session = Depends(get_db),
     _admin: object = Depends(require_role(UserRole.admin)),
 ) -> list[UserOut]:
-    return [_to_user_out(u) for u in db.query(User).all()]
+    """Accounts, ordered by email, bounded."""
+    rows = db.query(User).order_by(User.email).limit(limit).all()
+    return [_to_user_out(u) for u in rows]
 
 
 @router.post("", response_model=UserOut, status_code=status.HTTP_201_CREATED)

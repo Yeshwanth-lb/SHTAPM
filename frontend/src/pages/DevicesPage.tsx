@@ -63,7 +63,7 @@ export function DevicesPage() {
                 <tr>
                   <th>Device</th>
                   <th>Name</th>
-                  <th>Connection</th>
+                  <th>Device status</th>
                   <th>Health</th>
                   <th>Last seen</th>
                   <th>Rate</th>
@@ -98,7 +98,12 @@ export function DevicesPage() {
         )}
 
         <p className="page__footnote t-muted">
-          <strong>health</strong> is the stored <span className="mono">devices.health_state</span>{" "}
+          <strong>Device status</strong> is the edge publisher&rsquo;s own retained MQTT
+          online/offline state (its Last Will), persisted to{" "}
+          <span className="mono">devices.status</span>. It is a fact about the device, and is
+          unrelated to whether this browser holds a WebSocket.
+          <br />
+          <strong>Health</strong> is the stored <span className="mono">devices.health_state</span>{" "}
           rollup. No component computes it yet, so it shows its schema default rather than an
           assessed condition.
         </p>

@@ -246,6 +246,10 @@ export function Overview() {
         {devices.status === "ready" && (devices.data?.length ?? 0) === 0 && (
           <StateBlock kind="empty" title="No devices registered" />
         )}
+        <p className="page__lede t-muted">
+          Device status is the edge publisher&rsquo;s retained MQTT online/offline state — a fact
+          about the device, not about this browser&rsquo;s WebSocket.
+        </p>
         {(devices.data?.length ?? 0) > 0 && (
           <ul className="page__list">
             {devices.data!.map((d) => (
@@ -253,9 +257,19 @@ export function Overview() {
                 <button className="link-btn" onClick={() => navigate("/device")}>
                   <span className="mono">{d.device_id}</span>
                 </button>{" "}
-                <span className="t-muted">
-                  {d.status} · last seen {d.last_seen_at ?? "never"}
-                </span>
+                <StatusPill
+                  tone={
+                    d.status === "online"
+                      ? "healthy"
+                      : d.status === "degraded"
+                        ? "warning"
+                        : "critical"
+                  }
+                  testId={`device-status-${d.device_id}`}
+                >
+                  {d.status}
+                </StatusPill>{" "}
+                <span className="t-muted">last seen {d.last_seen_at ?? "never"}</span>
               </li>
             ))}
           </ul>

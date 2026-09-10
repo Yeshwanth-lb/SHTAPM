@@ -22,6 +22,11 @@ from app.models.enums import AlertSeverity, AlertType, UserRole
 
 router = APIRouter(prefix="/api/alerts", tags=["alerts"])
 
+# Bounded like the telemetry/decision endpoints: an alert table with a real
+# producer grows without limit, and a browser must never pull all of it.
+_MAX_ALERTS_LIMIT = 1000
+_DEFAULT_ALERTS_LIMIT = 200
+
 
 class _Body(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -58,6 +63,7 @@ def _to_alert_out(alert: Alert, device_wire_id: str) -> AlertOut:
 @router.get("", response_model=list[AlertOut])
 def list_alerts(
     device: str | None = Query(default=None),
+    limit: int = Query(default=_DEFAULT_ALERTS_LIMIT, ge=1, le=_MAX_ALERTS_LIMIT),
     status_filter: str | None = Query(default=None, alias="status"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -85,7 +91,9 @@ def list_alerts(
     elif status_filter == "acknowledged":
         query = query.filter(Alert.acknowledged_at.isnot(None))
 
-    rows = query.order_by(Alert.ts.desc()).all()
+    # Newest-first + limit: the most recent alerts are the operationally
+    # relevant ones, so truncation drops the oldest rather than the newest.
+    rows = query.order_by(Alert.ts.desc()).limit(limit).all()
     return [_to_alert_out(alert, device.device_id) for alert, device in rows]
 
 

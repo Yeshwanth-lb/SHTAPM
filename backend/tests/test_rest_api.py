@@ -791,3 +791,98 @@ def test_a_registry_row_overrides_the_canonical_unit(client, seed, session_facto
     rows = {row["channel"]: row for row in r.json()}
     assert rows["pressure"]["unit"] == "kPa"  # stored value wins
     assert rows["temperature"]["unit"] == "°C"  # others still fall back
+
+
+# ---------------------------------------------------------------------------
+# P0: every list endpoint is bounded
+# ---------------------------------------------------------------------------
+
+
+def test_alerts_limit_is_enforced_and_capped(client, seed):
+    token = _auth(_operator_token(client))
+    assert client.get("/api/alerts?limit=1", headers=token).status_code == 200
+    assert client.get("/api/alerts?limit=0", headers=token).status_code == 422
+    assert client.get("/api/alerts?limit=100000", headers=token).status_code == 422
+
+
+def test_alerts_default_limit_is_applied(client, seed):
+    """No explicit limit must still be a bounded query, not a full scan."""
+    r = client.get("/api/alerts", headers=_auth(_operator_token(client)))
+    assert r.status_code == 200
+    assert len(r.json()) <= 200
+
+
+def test_alerts_limit_keeps_the_newest(client, seed, session_factory):
+    with session_factory() as db:
+        device = db.query(Device).filter(Device.device_id == "pump-01").one()
+        for i in range(4):
+            db.add(
+                Alert(
+                    device_id=device.id,
+                    ts=datetime(2026, 9, 10, 12, 0, i, tzinfo=UTC),
+                    severity=AlertSeverity.info,
+                    type=AlertType.system,
+                    message=f"alert-{i}",
+                )
+            )
+        db.commit()
+
+    r = client.get("/api/alerts?limit=2", headers=_auth(_operator_token(client)))
+    messages = [row["message"] for row in r.json()]
+    assert len(messages) == 2
+    # Newest-first ordering means truncation drops the OLDEST, not the newest.
+    assert "alert-3" in messages
+
+
+def test_devices_limit_is_enforced_and_capped(client, seed):
+    token = _auth(_operator_token(client))
+    assert client.get("/api/devices?limit=1", headers=token).status_code == 200
+    assert len(client.get("/api/devices?limit=1", headers=token).json()) == 1
+    assert client.get("/api/devices?limit=0", headers=token).status_code == 422
+    assert client.get("/api/devices?limit=100000", headers=token).status_code == 422
+
+
+def test_users_limit_is_enforced_and_capped(client, seed):
+    token = _auth(_admin_token(client))
+    assert len(client.get("/api/users?limit=1", headers=token).json()) == 1
+    assert client.get("/api/users?limit=0", headers=token).status_code == 422
+    assert client.get("/api/users?limit=100000", headers=token).status_code == 422
+
+
+def test_users_limit_still_requires_admin(client, seed):
+    """A new query parameter must not become an authorization bypass."""
+    r = client.get("/api/users?limit=1", headers=_auth(_operator_token(client)))
+    assert r.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# P0: thresholds are honest about being non-operative
+# ---------------------------------------------------------------------------
+
+
+def test_thresholds_report_themselves_as_non_operative(client, seed):
+    """The endpoint is admin-writable and every PATCH appends a ledger block,
+    which makes an edit look consequential. Nothing reads these values at
+    runtime, so the response must say so."""
+    r = client.get("/api/devices/pump-01/thresholds", headers=_auth(_admin_token(client)))
+    assert r.status_code == 200
+    body = r.json()
+    assert body["operative"] is False
+    assert "does not alter" in body["operative_note"]
+
+
+def test_patching_a_threshold_still_reports_non_operative(client, seed):
+    r = client.patch(
+        "/api/devices/pump-01/thresholds",
+        json={"trust_trusted_min": 0.75},
+        headers=_auth(_admin_token(client)),
+    )
+    assert r.status_code == 200
+    assert r.json()["trust_trusted_min"] == 0.75  # stored
+    assert r.json()["operative"] is False  # but inert
+
+
+def test_divergence_threshold_remains_null_by_design(client, seed):
+    """U05: no validated value exists; defaulting one would be worse."""
+    r = client.get("/api/devices/pump-01/thresholds", headers=_auth(_admin_token(client)))
+    assert r.json()["divergence_threshold"] is None

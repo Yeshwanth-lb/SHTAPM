@@ -32,7 +32,20 @@ export interface ChannelPoint {
   value: number;
 }
 
-export type ConnStatus = "connecting" | "open" | "closed";
+export type ConnStatus = "connecting" | "open" | "closed" | "unauthorized";
+
+// Close codes the backend uses to reject BEFORE accept() (ws/routes.py).
+// Both are terminal for this token: retrying with the same one cannot succeed,
+// so the reconnect loop must stop rather than hammer a rejecting server every
+// 10s forever. An access token expires after 15 minutes, so without this an
+// idle tab becomes an indefinite authenticated-reconnect storm.
+export const WS_AUTH_FAILED = 4401; // missing/invalid/expired token
+export const WS_ACCESS_DENIED = 4403; // valid token, device not accessible
+
+/** True when the close code means "this token will never work". */
+export function isTerminalCloseCode(code: number): boolean {
+  return code === WS_AUTH_FAILED || code === WS_ACCESS_DENIED;
+}
 export type HistoryStatus = "loading" | "ready" | "error";
 
 export interface DeviceTelemetryState {
@@ -43,6 +56,8 @@ export interface DeviceTelemetryState {
   historyError: string | null;
   /** Frames received over the socket this session (not rows from history). */
   liveFrameCount: number;
+  /** True when the socket was rejected for auth and will NOT be retried. */
+  sessionExpired: boolean;
 }
 
 /** A fresh, empty series per frozen channel. Exported for tests. */
@@ -90,6 +105,7 @@ export function useDeviceTelemetry(
   const [historyStatus, setHistoryStatus] = useState<HistoryStatus>("loading");
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [liveFrameCount, setLiveFrameCount] = useState(0);
+  const [sessionExpired, setSessionExpired] = useState(false);
 
   // ---- historical window (REST, once per device/token) --------------------
   useEffect(() => {
@@ -141,6 +157,7 @@ export function useDeviceTelemetry(
   useEffect(() => {
     if (!accessToken) return;
     disposedRef.current = false;
+    setSessionExpired(false); // a new token deserves a fresh attempt
     let socket: WebSocket | null = null;
     let retry = 0;
     let timer: ReturnType<typeof setTimeout> | null = null;
@@ -178,9 +195,17 @@ export function useDeviceTelemetry(
         setLiveFrameCount((n) => n + 1);
         setHistory((prev) => appendFrame(prev, message, windowSize));
       };
-      socket.onclose = () => {
-        setConnection("closed");
+      socket.onclose = (event: CloseEvent) => {
         if (disposedRef.current) return;
+        // Terminal auth rejection: STOP. Reconnecting with the same dead token
+        // can only ever fail, and doing so every 10s indefinitely is both a
+        // resource leak and a self-inflicted load on a rejecting endpoint.
+        if (isTerminalCloseCode(event.code)) {
+          setConnection("unauthorized");
+          setSessionExpired(true);
+          return;
+        }
+        setConnection("closed");
         const delay = Math.min(1000 * 2 ** retry, 10000); // 1s→2s→…→10s cap
         retry += 1;
         timer = setTimeout(connect, delay);
@@ -196,8 +221,16 @@ export function useDeviceTelemetry(
   }, [deviceId, accessToken, windowSize]);
 
   return useMemo(
-    () => ({ latest, history, connection, historyStatus, historyError, liveFrameCount }),
-    [latest, history, connection, historyStatus, historyError, liveFrameCount],
+    () => ({
+      latest,
+      history,
+      connection,
+      historyStatus,
+      historyError,
+      liveFrameCount,
+      sessionExpired,
+    }),
+    [latest, history, connection, historyStatus, historyError, liveFrameCount, sessionExpired],
   );
 }
 

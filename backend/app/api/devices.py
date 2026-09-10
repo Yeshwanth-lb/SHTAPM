@@ -64,6 +64,10 @@ _CANONICAL_CHANNEL_UNITS: dict[str, str] = {
 # (~86k rows/device/day), which a browser chart must never pull.
 _MAX_READINGS_LIMIT = 5000
 
+# Fleet listing. Small by nature today, but unbounded is unbounded.
+_MAX_DEVICES_LIMIT = 500
+_DEFAULT_DEVICES_LIMIT = 200
+
 # Interface wiring, keyed by (channel, registered part) so it can only ever
 # describe a part the registry actually names. Every string is transcribed from
 # this repository; a pairing that is not documented is simply absent, and the
@@ -280,6 +284,28 @@ class ChannelOut(_Body):
 
 
 class ThresholdOut(_Body):
+    """Stored threshold configuration.
+
+    ``operative`` says whether these values currently affect runtime
+    behaviour. It is FALSE, and that is not a bug being reported — it is the
+    honest state of the system: a repository-wide search finds no runtime
+    consumer of this table. The edge takes its own parameters from its own
+    configuration and never reads the backend; nothing in the backend reads
+    these values either.
+
+    Surfacing this matters because the endpoint is admin-writable and every
+    PATCH appends a tamper-evident ledger block, which makes an edit look
+    consequential. Without this flag an operator could reasonably believe they
+    had changed safety behaviour when they had changed a stored number.
+
+    ``divergence_threshold`` is additionally NULL by design (U05): no validated
+    value exists, and defaulting one would be worse than leaving it unset.
+    """
+
+    #: False while nothing consumes these values at runtime. See class docstring.
+    operative: bool
+    #: Why, in one line, so a client need not hardcode the explanation.
+    operative_note: str
     trust_trusted_min: float
     trust_malicious_max: float
     trust_w_consistency: float
@@ -303,8 +329,19 @@ class ThresholdUpdate(_Body):
     divergence_threshold: float | None = None
 
 
+# Stated once, returned with every threshold response.
+_THRESHOLDS_NON_OPERATIVE_NOTE = (
+    "Stored configuration only. No component reads these values at runtime: the "
+    "edge uses its own configuration and does not consult the backend. Changing "
+    "them records an audited change but does not alter detection, trust, "
+    "isolation or safety behaviour."
+)
+
+
 def _to_threshold_out(threshold: Threshold) -> ThresholdOut:
     return ThresholdOut(
+        operative=False,
+        operative_note=_THRESHOLDS_NON_OPERATIVE_NOTE,
         trust_trusted_min=threshold.trust_trusted_min,
         trust_malicious_max=threshold.trust_malicious_max,
         trust_w_consistency=threshold.trust_w_consistency,
@@ -335,11 +372,14 @@ def _to_device_out(device: Device) -> DeviceOut:
 
 @router.get("", response_model=list[DeviceOut])
 def list_devices(
+    limit: int = Query(default=_DEFAULT_DEVICES_LIMIT, ge=1, le=_MAX_DEVICES_LIMIT),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> list[DeviceOut]:
+    """Devices this user may see, ordered by wire id, bounded."""
     query = scope_devices_query(db.query(Device), current_user)
-    return [_to_device_out(d) for d in query.all()]
+    rows = query.order_by(Device.device_id).limit(limit).all()
+    return [_to_device_out(d) for d in rows]
 
 
 @router.post("", response_model=DeviceOut, status_code=status.HTTP_201_CREATED)
