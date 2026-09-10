@@ -19,6 +19,12 @@ export interface ChannelOut {
   is_proxy: boolean | null;
   display_hue: string | null;
   source: ChannelSource;
+  /** Documented wiring for (channel, part); null when not documented. */
+  interface: string | null;
+  /** Documented measurement caveat (proxy nature, shared part); null if none. */
+  note: string | null;
+  /** Why a `live` declaration was not honoured; null when there is no conflict. */
+  conflict: string | null;
 }
 
 export interface ChannelsState {

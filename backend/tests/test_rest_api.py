@@ -577,7 +577,17 @@ def test_channels_source_is_unknown_when_not_declared(client, seed, monkeypatch)
     assert {row["source"] for row in r.json()} == {"unknown"}
 
 
-def test_channels_reports_declared_live_and_placeholder_sources(client, seed, monkeypatch):
+def test_channels_reports_declared_live_and_placeholder_sources(
+    client, seed, session_factory, monkeypatch
+):
+    """A declaration alone is not enough: `live` also needs a registered part.
+    Without the registry rows every "live" here would degrade to "unknown" —
+    see test_declared_live_without_a_registry_row_is_not_live below."""
+    from app.core.seed import seed_sensor_registry
+
+    with session_factory() as db:
+        seed_sensor_registry(db)
+
     monkeypatch.setenv(
         "SHTAPM_CHANNEL_SOURCES",
         "temperature=live,humidity=live,vibration=live,"
@@ -596,12 +606,65 @@ def test_channels_reports_declared_live_and_placeholder_sources(client, seed, mo
     }
 
 
-def test_channels_partially_declared_leaves_the_rest_unknown(client, seed, monkeypatch):
+def test_channels_partially_declared_leaves_the_rest_unknown(
+    client, seed, session_factory, monkeypatch
+):
+    from app.core.seed import seed_sensor_registry
+
+    with session_factory() as db:
+        seed_sensor_registry(db)
+
     monkeypatch.setenv("SHTAPM_CHANNEL_SOURCES", "vibration=live")
     r = client.get("/api/devices/pump-01/channels", headers=_auth(_operator_token(client)))
     by_channel = {row["channel"]: row["source"] for row in r.json()}
     assert by_channel["vibration"] == "live"
     assert by_channel["pressure"] == "unknown"
+
+
+def test_declared_live_without_a_registry_row_is_not_live(client, seed, monkeypatch):
+    """The registry is empty here. Declaring a channel live must NOT paint a
+    green badge over what may well be a placeholder constant."""
+    monkeypatch.setenv("SHTAPM_CHANNEL_SOURCES", "vibration=live")
+    r = client.get("/api/devices/pump-01/channels", headers=_auth(_operator_token(client)))
+    row = next(row for row in r.json() if row["channel"] == "vibration")
+    assert row["source"] == "unknown"
+    assert row["conflict"] is not None
+
+
+def test_channels_expose_documented_interface_and_notes(client, seed, session_factory, monkeypatch):
+    from app.core.seed import seed_sensor_registry
+
+    with session_factory() as db:
+        seed_sensor_registry(db)
+    monkeypatch.setenv("SHTAPM_CHANNEL_SOURCES", "vibration=live,temperature=live,humidity=live")
+
+    r = client.get("/api/devices/pump-01/channels", headers=_auth(_operator_token(client)))
+    rows = {row["channel"]: row for row in r.json()}
+
+    assert rows["vibration"]["interface"] == "MCP3008 CH0-2 / SPI0 CE0"
+    assert rows["temperature"]["interface"] == "GPIO17"
+    assert rows["humidity"]["interface"] == "GPIO17"
+    # No MQ-135 driver and no documented wiring: nothing may be shown.
+    assert rows["gas"]["interface"] is None
+    assert rows["gas"]["part"] is None
+    # The shared-part caveat travels with the data.
+    assert "same physical DHT22" in rows["temperature"]["note"]
+
+
+def test_gas_never_gains_an_interface_even_when_declared_live(
+    client, seed, session_factory, monkeypatch
+):
+    from app.core.seed import seed_sensor_registry
+
+    with session_factory() as db:
+        seed_sensor_registry(db)
+    monkeypatch.setenv("SHTAPM_CHANNEL_SOURCES", "gas=live")
+
+    r = client.get("/api/devices/pump-01/channels", headers=_auth(_operator_token(client)))
+    row = next(row for row in r.json() if row["channel"] == "gas")
+    # Declared live, but nothing is registered for gas -> degraded, no wiring.
+    assert row["source"] == "unknown"
+    assert row["interface"] is None
 
 
 def test_channels_merges_stored_registry_rows_when_they_exist(

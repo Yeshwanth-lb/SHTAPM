@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
+from enum import Enum
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict
@@ -62,6 +63,90 @@ _CANONICAL_CHANNEL_UNITS: dict[str, str] = {
 # Cap on a single readings page. At 1 Hz an uncapped query grows without bound
 # (~86k rows/device/day), which a browser chart must never pull.
 _MAX_READINGS_LIMIT = 5000
+
+# Interface wiring, keyed by (channel, registered part) so it can only ever
+# describe a part the registry actually names. Every string is transcribed from
+# this repository; a pairing that is not documented is simply absent, and the
+# API then reports `interface: null` rather than a plausible guess.
+#
+#   DHT22    edge/drivers/dht22_adafruit.py + DECISIONS.md D028 (one part,
+#            GPIO17, serving BOTH temperature and humidity)
+#   ADXL335  edge/drivers/adxl335.py (X/Y/Z on MCP3008 CH0-2 over SPI0 CE0 —
+#            three ADC channels, so it is never described as a single one)
+#   BMP280   edge/drivers/bmp280.py (I2C bus 1, address 0x76)
+#   INA219   edge/drivers/ina219.py (I2C bus 1, address 0x40)
+#
+# MQ-135 is absent on purpose: no driver exists and no wiring is documented, so
+# no ADC channel may be shown for `gas`.
+_DOCUMENTED_INTERFACES: dict[tuple[str, str], str] = {
+    ("temperature", "DHT22"): "GPIO17",
+    ("humidity", "DHT22"): "GPIO17",
+    ("vibration", "ADXL335"): "MCP3008 CH0-2 / SPI0 CE0",
+    ("pressure", "BMP280"): "I2C bus 1 @ 0x76",
+    ("current", "INA219"): "I2C bus 1 @ 0x40",
+}
+
+# Measurement caveats a dashboard must carry with the value. These are
+# documented properties, not warnings invented here.
+_CHANNEL_NOTES: dict[str, str] = {
+    "temperature": (
+        "Ambient air temperature, from the same physical DHT22 as humidity "
+        "(PRD 12.1, D028). Not a contact motor/bearing reading, and not an "
+        "independent corroboration of humidity."
+    ),
+    "humidity": (
+        "From the same physical DHT22 as temperature (PRD 12.1, D028). The two "
+        "channels share one part and one air mass, so their agreement is not "
+        "independent corroboration."
+    ),
+    "pressure": "Barometric/atmospheric pressure — a proxy, not water-line pressure (PRD 12.1).",
+    "gas": "VOC/CO2 proxy, not H2S (PRD 12.1).",
+}
+
+
+class ChannelSource(str, Enum):
+    """What the API is willing to say about a channel's physical backing."""
+
+    live = "live"
+    placeholder = "placeholder"
+    unknown = "unknown"
+
+
+def resolve_channel_source(declared: str, registered_part: str | None) -> tuple[str, str | None]:
+    """Reconcile the declaration with the registry. Returns (source, conflict).
+
+    THE INVARIANT: a channel is reported ``live`` only when BOTH
+      (a) ``SHTAPM_CHANNEL_SOURCES`` declares it live — an explicit, trusted
+          statement that something is physically attached, and
+      (b) the ``sensors`` registry names the part that is attached.
+
+    A telemetry value NEVER contributes. Placeholder constants are
+    byte-identical to measurements on the wire, so no amount of arriving data
+    can promote a channel.
+
+    The failure this guards is a confident lie: declaring ``pressure=live``
+    while nothing is registered would otherwise render a green LIVE badge over
+    a constant. Rather than trust the declaration, the channel degrades to
+    ``unknown`` and the reason is returned so the UI can show it.
+
+    Note what is deliberately NOT a conflict: ``is_proxy`` is orthogonal to
+    connectedness. A wired BMP280 is a live proxy — it genuinely measures, just
+    not the quantity the channel name suggests. Conflating the two would make
+    it impossible to ever report a connected proxy honestly.
+
+    Downgrades only. A declaration is never upgraded by registry contents:
+    an undeclared channel with a fully populated registry row stays ``unknown``,
+    because nobody has said anything is plugged in.
+    """
+    if declared == ChannelSource.live.value:
+        if registered_part is None:
+            return ChannelSource.unknown.value, (
+                "declared live but no part is registered for this channel, so there is "
+                "nothing to be live; reporting unverified instead"
+            )
+        return ChannelSource.live.value, None
+    # placeholder and unknown pass through untouched — neither can become live.
+    return declared, None
 
 
 class _Body(BaseModel):
@@ -164,11 +249,16 @@ class ChannelOut(_Body):
         registry has no row. A unit is a property of the channel, not of the
         part behind it, so supplying it asserts nothing about provenance: a
         placeholder `pressure` is still hPa. A registry row overrides it.
-      * ``source`` — DECLARED configuration (``SHTAPM_CHANNEL_SOURCES``),
-        because the wire frame cannot express it. ``"unknown"`` when this
-        backend was not told; a UI must render that differently from
-        ``"placeholder"``, which is a positive claim that nothing is
-        connected.
+      * ``source`` — the RECONCILIATION of the declared configuration
+        (``SHTAPM_CHANNEL_SOURCES``) with the registry, via
+        ``resolve_channel_source``. ``"live"`` requires both a declaration AND
+        a registered part; ``"unknown"`` means this backend was not told, and a
+        UI must render that differently from ``"placeholder"``, which is a
+        positive claim that nothing is connected. Never derived from values.
+      * ``conflict`` — why a declaration was not honoured, when it was not.
+      * ``interface``/``note`` — documented wiring and measurement caveats,
+        looked up by (channel, part) so they can never describe a part the
+        registry does not name.
       * ``channel`` — the frozen contract's own channel name.
     """
 
@@ -178,6 +268,15 @@ class ChannelOut(_Body):
     is_proxy: bool | None
     display_hue: str | None
     source: str
+    #: Documented wiring for (channel, part). ``null`` when the pairing is not
+    #: documented — notably ``gas``, which has no driver and no known wiring.
+    interface: str | None
+    #: Documented measurement caveat (proxy nature, shared part). ``null`` when
+    #: the channel carries none.
+    note: str | None
+    #: Set when the declaration and the registry disagree and the channel was
+    #: therefore NOT reported as live. ``null`` when they agree.
+    conflict: str | None
 
 
 class ThresholdOut(_Body):
@@ -377,17 +476,26 @@ def get_channels(
         for row in db.query(Sensor).filter(Sensor.device_id == device.id).all()
     }
     settings = ChannelSourceSettings.from_env()
-    return [
-        ChannelOut(
-            channel=channel,
-            part=getattr(rows.get(channel), "part", None),
-            unit=getattr(rows.get(channel), "unit", None) or _CANONICAL_CHANNEL_UNITS.get(channel),
-            is_proxy=getattr(rows.get(channel), "is_proxy", None),
-            display_hue=getattr(rows.get(channel), "display_hue", None),
-            source=settings.source_for(channel),
+
+    out: list[ChannelOut] = []
+    for channel in CHANNELS:
+        row = rows.get(channel)
+        part = getattr(row, "part", None)
+        source, conflict = resolve_channel_source(settings.source_for(channel), part)
+        out.append(
+            ChannelOut(
+                channel=channel,
+                part=part,
+                unit=getattr(row, "unit", None) or _CANONICAL_CHANNEL_UNITS.get(channel),
+                is_proxy=getattr(row, "is_proxy", None),
+                display_hue=getattr(row, "display_hue", None),
+                source=source,
+                interface=_DOCUMENTED_INTERFACES.get((channel, part)) if part else None,
+                note=_CHANNEL_NOTES.get(channel),
+                conflict=conflict,
+            )
         )
-        for channel in CHANNELS
-    ]
+    return out
 
 
 @router.get("/{device_id}/thresholds", response_model=ThresholdOut)

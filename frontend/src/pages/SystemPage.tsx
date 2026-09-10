@@ -10,11 +10,14 @@
 import { GlassTile } from "../components/aurora/GlassTile";
 import { StateBlock, StatusPill } from "../components/aurora/StateBlock";
 import { useAuth } from "../features/auth/AuthContext";
+import { useChannels } from "../features/channels/useChannels";
+import { ChannelProvenanceBadge } from "../components/panels/ChannelProvenanceBadge";
 import { apiGet, getHealthz, type HealthzOut, type SystemHealthOut } from "../lib/api";
 import { useApiResource } from "../lib/useApiResource";
 import "./pages.css";
 
 const POLL_MS = 5000;
+const DEVICE_ID = import.meta.env.VITE_DEVICE_ID ?? "pump-01";
 
 export function SystemPage() {
   const { tokens } = useAuth();
@@ -26,6 +29,8 @@ export function SystemPage() {
     [accessToken],
     { enabled: accessToken !== null, pollMs: POLL_MS },
   );
+
+  const { channels, loading: channelsLoading } = useChannels(DEVICE_ID, accessToken);
 
   const h = health.data;
   const adminOnly = system.error?.startsWith("HTTP 403") ?? false;
@@ -129,6 +134,60 @@ export function SystemPage() {
           <strong>End-to-end latency is null, not zero.</strong> Nothing in the running backend
           measures sensor-to-client latency; the only measurement ever taken was a one-off probe
           script. Reporting a number here would be fabricating it.
+        </p>
+      </GlassTile>
+
+      <GlassTile title="Channel provenance">
+        <p className="page__lede t-muted">
+          This is a <strong>declaration</strong>, not a measurement. The telemetry contract carries
+          six plain numbers with no provenance marker, so a placeholder constant is
+          indistinguishable on the wire from a real reading. A channel is reported live only when
+          <span className="mono"> SHTAPM_CHANNEL_SOURCES</span> declares it AND the sensor registry
+          names the part behind it. No arriving value can promote a channel.
+        </p>
+
+        {channelsLoading ? (
+          <StateBlock kind="loading" />
+        ) : (
+          <div className="table-scroll">
+            <table className="data-table" data-testid="provenance-table">
+              <thead>
+                <tr>
+                  <th>Channel</th>
+                  <th>Classification</th>
+                  <th>Registered part</th>
+                  <th>Interface</th>
+                  <th>Proxy</th>
+                </tr>
+              </thead>
+              <tbody>
+                {channels.map((c) => (
+                  <tr key={c.channel} data-testid={`provenance-row-${c.channel}`}>
+                    <td>{c.channel}</td>
+                    <td>
+                      <ChannelProvenanceBadge source={c.source} />
+                    </td>
+                    <td className="mono">{c.part ?? "none registered"}</td>
+                    <td className="mono">{c.interface ?? "not documented"}</td>
+                    <td>{c.is_proxy ? "yes" : c.is_proxy === false ? "no" : "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {channels.some((c) => c.conflict) && (
+          <p className="page__footnote" data-testid="provenance-conflicts">
+            <strong>Configuration conflict.</strong> One or more channels are declared live but have
+            no registered part, so they are reported as unverified rather than trusted. Seed the
+            registry, or correct the declaration.
+          </p>
+        )}
+
+        <p className="page__footnote t-muted">
+          Secrets are never shown here — this reflects only the channel classification, which is
+          non-secret configuration.
         </p>
       </GlassTile>
 

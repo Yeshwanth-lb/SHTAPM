@@ -6,16 +6,16 @@
 // (which `current` legitimately is right now).
 import { Sparkline, type SparklinePoint } from "../charts/Sparkline";
 import { ChannelProvenanceBadge } from "./ChannelProvenanceBadge";
-import type { ChannelSource } from "../../features/channels/useChannels";
+import { ProvenanceDetails } from "./ProvenanceDetails";
+import type { ChannelOut } from "../../features/channels/useChannels";
 import "./sensor-card.css";
 
 export interface SensorCardProps {
   channel: string;
   /** null when no reading has been received yet. */
   value: number | null;
-  unit: string | null;
-  source: ChannelSource;
-  part: string | null;
+  /** Full provenance row from the backend; undefined while it loads. */
+  meta: ChannelOut | undefined;
   /** ISO timestamp of the newest reading, or null. */
   updatedAt: string | null;
   history: SparklinePoint[];
@@ -42,17 +42,12 @@ export function formatAge(iso: string | null, now: number = Date.now()): string 
   return `${Math.floor(minutes / 60)}h ago`;
 }
 
-export function SensorCard({
-  channel,
-  value,
-  unit,
-  source,
-  part,
-  updatedAt,
-  history,
-}: SensorCardProps) {
+export function SensorCard({ channel, value, meta, updatedAt, history }: SensorCardProps) {
   const unavailable = value === null;
   const age = formatAge(updatedAt);
+  // `source` comes from the backend's reconciliation of the declaration with
+  // the registry. It is NEVER derived here from whether a value arrived.
+  const source = meta?.source ?? "unknown";
 
   return (
     <article
@@ -68,7 +63,7 @@ export function SensorCard({
         <span className="t-metric" data-testid={`sensor-value-${channel}`}>
           {formatValue(value)}
         </span>
-        {unit && !unavailable && <span className="sensor-card__unit"> {unit}</span>}
+        {meta?.unit && !unavailable && <span className="sensor-card__unit"> {meta.unit}</span>}
       </p>
 
       {unavailable ? (
@@ -76,11 +71,14 @@ export function SensorCard({
           No reading received yet
         </p>
       ) : (
-        <p className="sensor-card__meta t-muted mono">
-          {part ?? "part not registered"}
-          {age ? ` · ${age}` : ""}
-        </p>
+        age && (
+          <p className="sensor-card__meta t-muted" data-testid={`sensor-age-${channel}`}>
+            Last update: {age}
+          </p>
+        )
       )}
+
+      <ProvenanceDetails meta={meta} channel={channel} />
 
       <Sparkline points={history} label={`${channel} recent history`} />
     </article>

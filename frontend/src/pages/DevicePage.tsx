@@ -156,9 +156,7 @@ export function DevicePage() {
                   key={channel}
                   channel={channel}
                   value={value}
-                  unit={meta?.unit ?? null}
-                  source={meta?.source ?? "unknown"}
-                  part={meta?.part ?? null}
+                  meta={meta}
                   updatedAt={updatedAt}
                   history={series}
                 />
