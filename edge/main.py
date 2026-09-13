@@ -85,11 +85,16 @@ optional ``on_healthy_frame`` hook. This runs the real, unmodified
 publish a decision/ledger message, and cannot affect telemetry: the hook is
 wrapped in try/except inside the runtime, so a monitoring bug can never stop
 or crash publishing. See edge/pipeline/monitor.py's docstring for exactly
-which P2 components are used and why (NullDetector — no calibrated threshold
-exists yet; ConsistencyProvider bootstrapped on ``P2_FIT_WINDOW_COUNT`` clean
-live windows — required, no default; a single-window bootstrap was found to
-collapse the consistency signal to a binary 0.0/1.0 output even on clean
-data, see the module docstring for the fix).
+which P2 components are used and why. The detector is now a real
+``IsolationForestDetector`` (2026-09-13 — previously ``NullDetector``, which
+never flagged anything); it, ``SeverityThresholdFlagPolicy``, and
+``TrendSignPhysicsRule`` are all fit together (``LiveP2Monitor``'s
+``additional_fit_targets``) alongside ``ConsistencyProvider`` on
+``P2_FIT_WINDOW_COUNT`` clean live windows — required, no default; a
+single-window bootstrap was found to collapse the consistency signal to a
+binary 0.0/1.0 output even on clean data, see the module docstring for the
+fix. See ``_P2_DETECTOR_FLAG_THRESHOLD`` below for the detector threshold's
+provenance (a real, full-dataset SWaT.A1 evaluation, not an invented value).
 
 FR-RL4 ISOLATION DECISION (decision-only slice, also observe-only): each
 logged ``WindowOutcome`` is additionally passed through
@@ -151,7 +156,7 @@ from edge.acquisition.mqtt_publisher import ResilientTelemetryPublisher
 from edge.acquisition.runtime import AcquisitionRuntime
 from edge.acquisition.sampler import Sampler
 from edge.anomaly.attribution import AttributionEngine
-from edge.anomaly.detector import NullDetector
+from edge.anomaly.iforest import IsolationForestDetector
 from edge.anomaly.physics_rule import TrendSignPhysicsRule
 from edge.anomaly.pipeline import P2Pipeline, WindowOutcome
 from edge.anomaly.policy import SeverityThresholdFlagPolicy
@@ -170,6 +175,24 @@ from edge.trust.h_reliability import HReliabilityProvider
 from edge.trust.k_correlation import CorrelationProvider
 
 log = logging.getLogger("shtapm.edge.main")
+
+# Isolation Forest flag threshold: chosen from a real, full-dataset SWaT.A1
+# evaluation (2026-09-13, all 944,919 rows, 35 real labelled attacks) — the
+# best-by-F1 point of a full 0.80-0.99 threshold sweep (detection_rate=0.494,
+# fp_rate=0.123 at the window level; separately, 34/35 real attacks were
+# eventually flagged at least once, 16/35 within the PRD's <=3-window
+# target). Full report: project-state/P2_IF_SWAT_TUNING.md.
+#
+# This is a SWaT-domain-derived STARTING POINT, not a bench calibration:
+# severity is a percentile within whatever IsolationForestDetector is fit on
+# (see edge/anomaly/iforest.py's own D-B design note), so this value travels
+# as a "flag the most unusual ~10%" POLICY choice — but the underlying fit
+# happens fresh, live, on THIS Pi's own clean windows every process start
+# (see LiveP2Monitor's additional_fit_targets below), never reused from the
+# SWaT-fitted model. Must be revisited once real bench clean/faulty/spoofed
+# data exists to validate this value directly (U07).
+_P2_DETECTOR_FLAG_THRESHOLD = 0.90
+_P2_DETECTOR_RANDOM_STATE = 0  # determinism only, matches edge/eval/*.py convention
 
 # This bench's current wiring, as a declarative spec table — see module
 # docstring. Constant values match the fake fixtures this file has used
@@ -207,23 +230,33 @@ def _build_p2_monitor(
     decision_publisher: DecisionDiagnosticPublisher,
 ) -> LiveP2Monitor:
     """Compose the real (non-stub) P2 pipeline for observe-only live
-    monitoring. See edge/pipeline/monitor.py's docstring for exactly why
-    each component needs no invented threshold/calibration to run this way,
-    and for the ``fit_window_count`` buffer-size derivation."""
+    monitoring. The detector, flag policy, and physics rule are real, fitted
+    components (fit alongside ConsistencyProvider — see
+    edge/pipeline/monitor.py's ``additional_fit_targets``); previously all
+    three relied on ``NullDetector`` never flagging to stay silently unfit
+    but structurally unreachable (see that module's docstring history). See
+    edge/pipeline/monitor.py's docstring for the ``fit_window_count``
+    buffer-size derivation, and ``_P2_DETECTOR_FLAG_THRESHOLD`` above for the
+    detector threshold's provenance."""
     preprocessor = Preprocessor(median_kernel=1, low_pass_alpha=1.0)  # identity filters;
     # median_kernel/low_pass_alpha have no documented spec value (see
     # edge/anomaly/preprocess.py) — 1/1.0 are the module's own documented
     # identity settings, not an invented smoothing amount.
     c_provider = ConsistencyProvider()
+    detector = IsolationForestDetector(
+        flag_threshold=_P2_DETECTOR_FLAG_THRESHOLD, random_state=_P2_DETECTOR_RANDOM_STATE
+    )
+    flag_policy = SeverityThresholdFlagPolicy()
+    physics_rule = TrendSignPhysicsRule()
     pipeline = P2Pipeline(
         preprocessor=preprocessor,
-        detector=NullDetector(),
+        detector=detector,
         trust_engine=TrustEngine(),
-        attribution_engine=AttributionEngine(TrendSignPhysicsRule()),
+        attribution_engine=AttributionEngine(physics_rule),
         c_provider=c_provider,
         k_provider=CorrelationProvider(),
         h_provider=HReliabilityProvider(),
-        flag_policy=SeverityThresholdFlagPolicy(),
+        flag_policy=flag_policy,
     )
     # One tracker per LiveP2Monitor instance (edge/pipeline/isolation_tracker.py)
     # -- persistent, cross-cycle isolation-candidate memory for THIS pipeline
@@ -257,6 +290,7 @@ def _build_p2_monitor(
         preprocessor=preprocessor,
         pipeline=pipeline,
         c_provider=c_provider,
+        additional_fit_targets=[detector, flag_policy, physics_rule],
         fit_window_count=fit_window_count,
         on_outcome=_on_outcome,
         on_raw_values=_on_raw_values,

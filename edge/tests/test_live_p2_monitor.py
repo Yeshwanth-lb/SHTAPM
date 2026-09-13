@@ -244,6 +244,69 @@ def test_fitted_consistency_output_is_not_binary_with_multiple_fit_windows():
     assert len(c_values) > 2, f"expected more than 2 distinct g values, got {c_values}"
 
 
+# ---- additional_fit_targets (real-detector wiring regression) --------------
+
+
+class _FittableSpy:
+    """Minimal stand-in for a real detector/flag_policy/physics_rule --
+    records exactly what fit() was called with, nothing else."""
+
+    def __init__(self) -> None:
+        self.fit_calls: list[list] = []
+
+    def fit(self, windows) -> None:
+        self.fit_calls.append(list(windows))
+
+
+def test_additional_fit_targets_default_to_empty_and_change_nothing():
+    """Omitting additional_fit_targets must reproduce prior behavior exactly
+    -- this is the regression guard for every existing test above."""
+    outcomes: list[WindowOutcome] = []
+    monitor, c_provider = _build_monitor(on_outcome=outcomes.append)
+
+    for i in range(FIT_BUFFER_SIZE):
+        monitor.on_frame(_frame(i))
+
+    assert c_provider.fitted is True
+    assert len(outcomes) == 1
+
+
+def test_additional_fit_targets_are_fit_once_on_the_same_windows_as_c_provider():
+    """The exact bug this mechanism fixes: a real (non-Null) detector, a
+    ChannelFlagPolicy, or a PhysicsRule need fit() too, on the SAME
+    clean warm-up windows ConsistencyProvider gets -- not a separate corpus,
+    not skipped."""
+    preprocessor = Preprocessor(median_kernel=1, low_pass_alpha=1.0)
+    c_provider = _CountingConsistencyProvider()
+    spy_a, spy_b = _FittableSpy(), _FittableSpy()
+    pipeline = P2Pipeline(
+        preprocessor=preprocessor,
+        detector=NullDetector(),
+        trust_engine=TrustEngine(),
+        attribution_engine=AttributionEngine(TrendSignPhysicsRule()),
+        c_provider=c_provider,
+        k_provider=CorrelationProvider(),
+        h_provider=HReliabilityProvider(),
+        flag_policy=SeverityThresholdFlagPolicy(),
+    )
+    monitor = LiveP2Monitor(
+        preprocessor=preprocessor,
+        pipeline=pipeline,
+        c_provider=c_provider,
+        additional_fit_targets=[spy_a, spy_b],
+        fit_window_count=FIT_WINDOW_COUNT,
+    )
+
+    for i in range(FIT_BUFFER_SIZE + 3):  # warm-up + a few steady-state ticks
+        monitor.on_frame(_frame(i))
+
+    assert c_provider.fit_calls == 1
+    assert len(spy_a.fit_calls) == 1  # fit exactly once, at warm-up completion
+    assert len(spy_b.fit_calls) == 1
+    assert len(spy_a.fit_calls[0]) == FIT_WINDOW_COUNT
+    assert spy_a.fit_calls[0] == spy_b.fit_calls[0]  # same windows, both targets
+
+
 def test_monitor_never_isolates_or_actuates():
     """Monitoring-only: the monitor has no actuation/isolation capability at
     all -- there is no such method to call. This test documents that

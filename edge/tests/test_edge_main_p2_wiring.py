@@ -103,7 +103,13 @@ def test_live_wiring_publishes_telemetry_and_invokes_p2_processing(caplog):
     assert len(isolation_records) == 3
     assert len(tracking_records) == 3
     assert len(raw_value_records) == 3
-    assert all("anomaly=False" in r.getMessage() for r in p2_records)  # NullDetector
+    # IsolationForestDetector, fit on windows built from the fake driver's
+    # constant VALUES (zero variance): the fit distribution is a single
+    # repeated point, so this window's identical score ranks as the most
+    # extreme (empirical-CDF tie -> severity 1.0) -- a real, correct property
+    # of the rank-based severity formula on a degenerate constant input, not
+    # a defect. Real (even slightly noisy) sensor data would not tie like this.
+    assert all("anomaly=True(sev=1.000)" in r.getMessage() for r in p2_records)
     # FR-RL4 logging must never claim a real isolation/actuation/recovery --
     # it only reports candidates/tracked channels for the caller to log (see
     # edge/pipeline/{isolation_fallback,isolation_tracker}.py).

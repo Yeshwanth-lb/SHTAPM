@@ -52,6 +52,19 @@ reading it), not a workaround invented for this module.
 data ``LiveP2Monitor`` collects before calling its existing, unmodified
 ``fit()`` method.
 
+ADDITIONAL_FIT_TARGETS (added when a real, non-Null detector was first wired
+in): the structural dependency documented above cuts both ways. The moment a
+caller passes a real ``AnomalyDetector`` (one that can actually return
+``flag=True``), ``ChannelFlagPolicy.flags()`` and ``PhysicsRule.check()``
+stop being structurally unreachable and start requiring their own ``fit()``
+call — exactly like ``ConsistencyProvider`` already does. ``LiveP2Monitor``
+accepts an optional ``additional_fit_targets`` sequence (anything exposing
+``fit(windows)``) that gets fit on the SAME clean warm-up windows,
+immediately after ``c_provider.fit()``, so a caller wiring in a real
+detector fits every component that detector's realness now exercises in one
+place, rather than rediscovering each one by a live ``RuntimeError``.
+Defaults to ``()`` — omitting it reproduces the exact prior behavior.
+
 RAW-VALUE PLUMBING (integration-readiness prep, still observe-only): each
 emitted ``WindowOutcome`` is optionally paired with the exact raw (pre-
 normalization) per-channel values from the SAME buffered frames that
@@ -74,16 +87,27 @@ from __future__ import annotations
 
 import logging
 from collections import deque
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from typing import Protocol, runtime_checkable
 
 from app.schemas.contracts import CHANNELS, TelemetryMessage
 
 from edge.anomaly.pipeline import P2Pipeline, WindowOutcome
-from edge.anomaly.preprocess import Preprocessor
+from edge.anomaly.preprocess import Preprocessor, Window
 from edge.trust.c_consistency import ConsistencyProvider
 
 log = logging.getLogger("shtapm.edge.p2monitor")
+
+
+@runtime_checkable
+class _Fittable(Protocol):
+    """Anything needing a clean-baseline fit before use, on the same windows
+    ConsistencyProvider bootstraps on — e.g. a real (non-Null) AnomalyDetector,
+    a ChannelFlagPolicy, or a PhysicsRule. See ``additional_fit_targets``
+    below and the ADDITIONAL_FIT_TARGETS section of this module's docstring."""
+
+    def fit(self, windows: Sequence[Window]) -> None: ...
 
 
 @dataclass(frozen=True)
@@ -123,6 +147,7 @@ class LiveP2Monitor:
         pipeline: P2Pipeline,
         c_provider: ConsistencyProvider,
         fit_window_count: int,
+        additional_fit_targets: Sequence[_Fittable] = (),
         on_outcome: Callable[[WindowOutcome], None] = lambda outcome: None,
         on_raw_values: Callable[[WindowOutcome, RawChannelValues], None] | None = None,
     ) -> None:
@@ -131,6 +156,7 @@ class LiveP2Monitor:
         self._preprocessor = preprocessor
         self._pipeline = pipeline
         self._c_provider = c_provider
+        self._additional_fit_targets = additional_fit_targets
         self._on_outcome = on_outcome
         self._on_raw_values = on_raw_values
         self._fit_buffer_size = (
@@ -157,7 +183,14 @@ class LiveP2Monitor:
 
         fit_windows = self._preprocessor.process(self._warmup_buffer)  # exactly fit_window_count
         self._c_provider.fit(fit_windows)
-        log.info("P2 monitor: ConsistencyProvider fit on %d clean live windows", len(fit_windows))
+        for target in self._additional_fit_targets:
+            target.fit(fit_windows)
+        log.info(
+            "P2 monitor: fit ConsistencyProvider + %d additional component(s) on "
+            "%d clean live windows",
+            len(self._additional_fit_targets),
+            len(fit_windows),
+        )
 
         # Transition to the steady-state rolling buffer, seeded with the
         # most recent window_size frames (the same frames the last fit
