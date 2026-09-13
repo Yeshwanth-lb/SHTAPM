@@ -15,12 +15,13 @@ each driver's own ``_open_*`` method), so constructing the exact bench
 table proves it can't raise ``UnsupportedDriverError`` at boot without
 needing a Pi, an SPI/I2C bus, or a 1-Wire probe.
 
-Current bench state asserted below (2026-09-09): three real channels across
-two sensors — DHT22 serving BOTH temperature (ambient air) and humidity, and
-ADXL335 (vibration) — with pressure, gas and current fake constants. BMP280
-is implemented and remains pressure's registered real driver, but is not
-physically connected. When the bench is reconfigured, update this file WITH
-main.py — a failure here means the two disagree.
+Current bench state asserted below (2026-09-13): four real channels across
+three sensors — DHT22 serving BOTH temperature (ambient air) and humidity,
+ADXL335 (vibration), and BMP280 (pressure, I²C bus 1, address 0x76,
+hardware-validated: chip ID 0x58) — with gas and current fake constants.
+INA219 is implemented and remains current's registered real driver, but is
+not physically connected. When the bench is reconfigured, update this file
+WITH main.py — a failure here means the two disagree.
 
 Sourcing temperature from the DHT22 is the APPROVED project configuration
 (supervisor decision, DECISIONS.md D028), not a stopgap. DS18B20 remains
@@ -40,6 +41,7 @@ from edge.drivers.base import Sensor, SensorDriver
 from edge.drivers.bmp280 import BMP280Driver
 from edge.drivers.dht22_adafruit import DHT22AdafruitDriver, DHT22AdafruitTemperatureDriver
 from edge.drivers.ds18b20 import DS18B20Driver
+from edge.drivers.ina219 import INA219Driver
 from edge.drivers.registry import (
     DriverSpec,
     UnsupportedDriverError,
@@ -48,15 +50,16 @@ from edge.drivers.registry import (
 )
 from edge.main import _DEFAULT_CHANNEL_SPECS
 
-# The four physically-connected channels and the driver class each must
-# resolve to. Mirrors this bench's actual wiring, not the set of drivers
-# that happen to be implemented (INA219 is implemented but unplugged).
+# The physically-connected channels and the driver class each must resolve
+# to. Mirrors this bench's actual wiring, not the set of drivers that happen
+# to be implemented (INA219 is implemented but unplugged).
 _EXPECTED_REAL: dict[str, type[SensorDriver]] = {
     "temperature": DHT22AdafruitTemperatureDriver,  # ambient air, shared DHT22 (D028)
     "vibration": ADXL335Driver,
     "humidity": DHT22AdafruitDriver,  # same physical sensor as temperature
+    "pressure": BMP280Driver,  # I²C bus 1, address 0x76, hardware-validated
 }
-_EXPECTED_FAKE_CONSTANTS = {"pressure": 1013.0, "gas": 150.0, "current": 0.0}
+_EXPECTED_FAKE_CONSTANTS = {"gas": 150.0, "current": 0.0}
 
 
 def test_default_specs_cover_exactly_the_frozen_channels():
@@ -116,17 +119,22 @@ def test_gas_has_no_real_driver_so_it_can_never_be_flipped_real_by_mistake():
 
 
 def test_a_disconnected_sensor_can_be_reverted_to_fake_by_env_without_a_code_edit():
-    """If DS18B20 or BMP280 is unplugged again, SHTAPM_DRIVER_<CHANNEL>=fake
+    """If DS18B20, ADXL335 or BMP280 is unplugged again, SHTAPM_DRIVER_<CHANNEL>=fake
     restores a publishable bench without editing this table — the documented
     escape hatch (see edge/main.py's module docstring)."""
     resolved = resolve_channel_specs_from_env(
         _DEFAULT_CHANNEL_SPECS,
-        env={"SHTAPM_DRIVER_TEMPERATURE": "fake", "SHTAPM_DRIVER_VIBRATION": "fake"},
+        env={
+            "SHTAPM_DRIVER_TEMPERATURE": "fake",
+            "SHTAPM_DRIVER_VIBRATION": "fake",
+            "SHTAPM_DRIVER_PRESSURE": "fake",
+        },
     )
-    for channel in ("temperature", "vibration"):
+    for channel in ("temperature", "vibration", "pressure"):
         assert resolved[channel].kind == "fake"
     assert resolved["humidity"].kind == "real"
     assert _DEFAULT_CHANNEL_SPECS["temperature"].kind == "real"  # not mutated
+    assert _DEFAULT_CHANNEL_SPECS["pressure"].kind == "real"  # not mutated
 
 
 def test_adopting_the_ds18b20_alternate_is_a_one_line_change_not_a_redesign():
@@ -154,16 +162,26 @@ def test_the_ds18b20_alternate_is_selectable_by_env_without_a_code_edit():
     assert _DEFAULT_CHANNEL_SPECS["temperature"].kind == "real"  # not mutated
 
 
-def test_connecting_bmp280_later_is_a_one_line_change():
-    """BMP280 is implemented and stays pressure's registered real driver while
+def test_pressure_is_already_wired_to_the_real_bmp280():
+    """BMP280 was hardware-validated on this Pi (I²C bus 1, address 0x76, chip
+    ID 0x58) and is now this bench's default pressure driver, not merely an
+    available one-line change — see edge/main.py's module docstring."""
+    drivers = build_drivers(_DEFAULT_CHANNEL_SPECS)
+
+    assert isinstance(drivers["pressure"], BMP280Driver)
+    assert not isinstance(drivers["pressure"], Sensor)
+
+
+def test_connecting_ina219_later_is_a_one_line_change():
+    """INA219 is implemented and stays current's registered real driver while
     the sensor is unplugged, so wiring it up is flipping this one spec — the
     same promise made for every other channel on this bench."""
     connected = dict(_DEFAULT_CHANNEL_SPECS)
-    connected["pressure"] = DriverSpec(kind="real")
+    connected["current"] = DriverSpec(kind="real")
 
     drivers = build_drivers(connected)
 
-    assert isinstance(drivers["pressure"], BMP280Driver)
+    assert isinstance(drivers["current"], INA219Driver)
     assert set(drivers) == set(CHANNELS)
     for channel, expected_cls in _EXPECTED_REAL.items():
         assert isinstance(drivers[channel], expected_cls)  # nothing else moved
