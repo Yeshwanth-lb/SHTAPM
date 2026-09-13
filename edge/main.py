@@ -8,8 +8,8 @@ hand-written ``drivers[channel] = XDriver()`` lines:
     registry.build_drivers(...) → Sampler → TelemetryMessage → Publisher → Mosquitto
                                                               ↘ LiveP2Monitor (observe-only)
 
-``_DEFAULT_CHANNEL_SPECS`` matches this bench's actual wiring — FOUR real
-channels across three physical sensors, two fake constants:
+``_DEFAULT_CHANNEL_SPECS`` matches this bench's actual wiring — FIVE real
+channels across four physical sensors, one fake constant:
 
   channel      sensor / interface                       driver
   ----------   --------------------------------------   ----------------------
@@ -18,7 +18,7 @@ channels across three physical sensors, two fake constants:
   vibration    ADXL335, MCP3008 CH0-2 over SPI0 CE0     ADXL335
   pressure     BMP280, I²C bus 1, address 0x76          BMP280
   gas          — (no MQ-135 driver implemented)         fake constant 150.0
-  current      — (INA219 implemented, not connected)    fake constant 0.0
+  current      INA219, I²C bus 1, address 0x40          INA219
 
 TEMPERATURE + HUMIDITY BOTH COME FROM THE ONE DHT22 (GPIO17, Adafruit
 CircuitPython backend, ``use_pulseio=False`` — edge/drivers/dht22_adafruit.py,
@@ -46,17 +46,17 @@ air is not automatically valid for a contact probe.
 ``pressure`` is now BMP280 (edge/drivers/bmp280.py) — hardware-validated on
 this Pi (I²C bus 1, address 0x76, chip ID 0x58 confirmed) and wired here as
 this channel's real driver with the driver's own hardware defaults (no
-params needed; see edge/drivers/registry.py). ``gas`` and ``current`` remain
-fake constants. INA219 (edge/drivers/ina219.py) is implemented and was
-individually hardware-validated earlier, but is not physically connected
-right now; gas (MQ-135) has no driver at all. INA219 stays registered as
-current's real driver, so connecting it is a one-line change here
-(``DriverSpec(kind="real")``) or ``SHTAPM_DRIVER_CURRENT=real`` for a single
-run — nothing else moves. A disconnected sensor declared ``kind="real"``
-would be permanently unhealthy and would block every frame
-(Sampler.sample_once() requires all six channels healthy) — which is why
-this table tracks the bench's real wiring rather than what is merely
-implemented.
+params needed; see edge/drivers/registry.py). ``current`` is INA219
+(edge/drivers/ina219.py) — hardware-validated on this Pi (I²C bus 1, address
+0x40, same bus as BMP280) and likewise wired with the driver's own defaults:
+the board's shunt is R100 (0.1 Ω), matching the driver's ``shunt_ohms``
+default, so no params are needed. U09 (pump model / rated current) is still
+open, so the driver's 5.0 A ``max_expected_amps`` is a default, not a sizing
+decision. ``gas`` remains the only fake constant — MQ-135 has no driver at
+all. A disconnected sensor declared ``kind="real"`` would be permanently
+unhealthy and would block every frame (Sampler.sample_once() requires all
+six channels healthy) — which is why this table tracks the bench's real
+wiring rather than what is merely implemented.
 
 RECONNECTING A SENSOR IS NOW A CONFIGURATION CHANGE, not a code edit: set
 ``SHTAPM_DRIVER_<CHANNEL>=real`` (e.g. ``SHTAPM_DRIVER_VIBRATION=real``) to
@@ -185,7 +185,7 @@ _DEFAULT_CHANNEL_SPECS: dict[str, DriverSpec] = {
     "pressure": DriverSpec(kind="real"),  # BMP280Driver(), I²C bus 1, address 0x76
     "humidity": DriverSpec(kind="real"),  # DHT22AdafruitDriver(), GPIO17
     "gas": DriverSpec(kind="fake", fake_mode="constant", params={"value": 150.0}),
-    "current": DriverSpec(kind="fake", fake_mode="constant", params={"value": 0.0}),
+    "current": DriverSpec(kind="real"),  # INA219Driver(), I²C bus 1, address 0x40
 }
 
 

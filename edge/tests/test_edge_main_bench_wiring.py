@@ -15,13 +15,13 @@ each driver's own ``_open_*`` method), so constructing the exact bench
 table proves it can't raise ``UnsupportedDriverError`` at boot without
 needing a Pi, an SPI/I2C bus, or a 1-Wire probe.
 
-Current bench state asserted below (2026-09-13): four real channels across
-three sensors — DHT22 serving BOTH temperature (ambient air) and humidity,
-ADXL335 (vibration), and BMP280 (pressure, I²C bus 1, address 0x76,
-hardware-validated: chip ID 0x58) — with gas and current fake constants.
-INA219 is implemented and remains current's registered real driver, but is
-not physically connected. When the bench is reconfigured, update this file
-WITH main.py — a failure here means the two disagree.
+Current bench state asserted below (2026-09-13): five real channels across
+four sensors — DHT22 serving BOTH temperature (ambient air) and humidity,
+ADXL335 (vibration), BMP280 (pressure, I²C bus 1, address 0x76,
+hardware-validated: chip ID 0x58), and INA219 (current, I²C bus 1, address
+0x40, hardware-validated, R100 / 0.1 Ω shunt) — with gas the only fake
+constant (no MQ-135 driver exists). When the bench is reconfigured, update
+this file WITH main.py — a failure here means the two disagree.
 
 Sourcing temperature from the DHT22 is the APPROVED project configuration
 (supervisor decision, DECISIONS.md D028), not a stopgap. DS18B20 remains
@@ -52,14 +52,15 @@ from edge.main import _DEFAULT_CHANNEL_SPECS
 
 # The physically-connected channels and the driver class each must resolve
 # to. Mirrors this bench's actual wiring, not the set of drivers that happen
-# to be implemented (INA219 is implemented but unplugged).
+# to be implemented.
 _EXPECTED_REAL: dict[str, type[SensorDriver]] = {
     "temperature": DHT22AdafruitTemperatureDriver,  # ambient air, shared DHT22 (D028)
     "vibration": ADXL335Driver,
     "humidity": DHT22AdafruitDriver,  # same physical sensor as temperature
     "pressure": BMP280Driver,  # I²C bus 1, address 0x76, hardware-validated
+    "current": INA219Driver,  # I²C bus 1, address 0x40, hardware-validated, R100 shunt
 }
-_EXPECTED_FAKE_CONSTANTS = {"gas": 150.0, "current": 0.0}
+_EXPECTED_FAKE_CONSTANTS = {"gas": 150.0}
 
 
 def test_default_specs_cover_exactly_the_frozen_channels():
@@ -91,8 +92,10 @@ def test_unwired_channels_stay_fake_constants_at_their_documented_values():
 
 def test_real_channels_declare_no_params_so_each_driver_uses_its_hardware_defaults():
     """DS18B20 auto-discovers its 28-<serial> sysfs device; BMP280 defaults to
-    bus 1 / 0x76 (confirmed on this board); ADXL335 to SPI0 CE0 CH0-2; DHT22 to
-    GPIO17. No bench-specific value is duplicated into main.py's table."""
+    bus 1 / 0x76 (confirmed on this board); INA219 to bus 1 / 0x40 with a
+    0.1 Ω shunt (R100 confirmed on this board); ADXL335 to SPI0 CE0 CH0-2;
+    DHT22 to GPIO17. No bench-specific value is duplicated into main.py's
+    table."""
     for channel in _EXPECTED_REAL:
         assert dict(_DEFAULT_CHANNEL_SPECS[channel].params) == {}
 
@@ -119,22 +122,25 @@ def test_gas_has_no_real_driver_so_it_can_never_be_flipped_real_by_mistake():
 
 
 def test_a_disconnected_sensor_can_be_reverted_to_fake_by_env_without_a_code_edit():
-    """If DS18B20, ADXL335 or BMP280 is unplugged again, SHTAPM_DRIVER_<CHANNEL>=fake
-    restores a publishable bench without editing this table — the documented
-    escape hatch (see edge/main.py's module docstring)."""
+    """If DHT22, ADXL335, BMP280 or INA219 is unplugged again,
+    SHTAPM_DRIVER_<CHANNEL>=fake restores a publishable bench without editing
+    this table — the documented escape hatch (see edge/main.py's module
+    docstring)."""
     resolved = resolve_channel_specs_from_env(
         _DEFAULT_CHANNEL_SPECS,
         env={
             "SHTAPM_DRIVER_TEMPERATURE": "fake",
             "SHTAPM_DRIVER_VIBRATION": "fake",
             "SHTAPM_DRIVER_PRESSURE": "fake",
+            "SHTAPM_DRIVER_CURRENT": "fake",
         },
     )
-    for channel in ("temperature", "vibration", "pressure"):
+    for channel in ("temperature", "vibration", "pressure", "current"):
         assert resolved[channel].kind == "fake"
     assert resolved["humidity"].kind == "real"
     assert _DEFAULT_CHANNEL_SPECS["temperature"].kind == "real"  # not mutated
     assert _DEFAULT_CHANNEL_SPECS["pressure"].kind == "real"  # not mutated
+    assert _DEFAULT_CHANNEL_SPECS["current"].kind == "real"  # not mutated
 
 
 def test_adopting_the_ds18b20_alternate_is_a_one_line_change_not_a_redesign():
@@ -172,16 +178,12 @@ def test_pressure_is_already_wired_to_the_real_bmp280():
     assert not isinstance(drivers["pressure"], Sensor)
 
 
-def test_connecting_ina219_later_is_a_one_line_change():
-    """INA219 is implemented and stays current's registered real driver while
-    the sensor is unplugged, so wiring it up is flipping this one spec — the
-    same promise made for every other channel on this bench."""
-    connected = dict(_DEFAULT_CHANNEL_SPECS)
-    connected["current"] = DriverSpec(kind="real")
-
-    drivers = build_drivers(connected)
+def test_current_is_wired_to_the_real_ina219():
+    """INA219 was hardware-validated on this Pi (I²C bus 1, address 0x40, R100
+    shunt matching the driver's 0.1 Ω default) and is now this bench's default
+    current driver, not merely an available one-line change — see
+    edge/main.py's module docstring."""
+    drivers = build_drivers(_DEFAULT_CHANNEL_SPECS)
 
     assert isinstance(drivers["current"], INA219Driver)
-    assert set(drivers) == set(CHANNELS)
-    for channel, expected_cls in _EXPECTED_REAL.items():
-        assert isinstance(drivers[channel], expected_cls)  # nothing else moved
+    assert not isinstance(drivers["current"], Sensor)
