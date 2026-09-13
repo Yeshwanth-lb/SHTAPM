@@ -80,6 +80,18 @@ class _FakeAdafruitDHT:
         return self._device
 
 
+class _FakeMonotonic:
+    """Controllable stand-in for time.monotonic() -- lets tests simulate the
+    passage of time between sampling cycles (e.g. past the DHT22's own
+    minimum measurement interval) without a real sleep."""
+
+    def __init__(self, start: float = 0.0) -> None:
+        self.now = start
+
+    def __call__(self) -> float:
+        return self.now
+
+
 @pytest.fixture(autouse=True)
 def _clear_shared_readers():
     """dht22_adafruit caches one reader per (pin, use_pulseio) at module level;
@@ -191,12 +203,17 @@ def test_transient_failure_raises_oserror(patched_library, fake_device):
 
 def test_recovers_after_transient_failure(patched_library, fake_device):
     """A transient DHT22 checksum/timing failure is a normal, expected
-    characteristic -- the next read must succeed without recreating the
-    device object."""
+    characteristic -- the next sampling cycle, at or beyond the sensor's own
+    minimum measurement interval later, must succeed without recreating the
+    device object. (An immediate retry inside that interval is covered by
+    the shared-failure-window tests below -- the DHT22 genuinely cannot
+    produce a new measurement that fast.)"""
     fake_device._script = [RuntimeError("Checksum did not validate"), 55.5]
-    reader = DHT22AdafruitReader()
+    clock = _FakeMonotonic()
+    reader = DHT22AdafruitReader(monotonic=clock)
     with pytest.raises(OSError):
         reader.read_humidity_percent()
+    clock.now += 2.1  # past the DHT22's own minimum measurement interval
     assert reader.read_humidity_percent() == pytest.approx(55.5)
     assert patched_library.call_count == 1  # still the same device object
 
@@ -213,7 +230,9 @@ def test_reading_humidity_does_not_touch_temperature(patched_library, fake_devic
     `test_never_reads_temperature` asserted temperature was NEVER sourced
     from this sensor; the project now sources both channels from the DHT22
     by approved decision -- D028 -- so that guard is scoped to what remains
-    true: reading one channel never silently pulls the other.)"""
+    true: reading one channel never silently pulls the other, as long as no
+    shared-measurement failure is being propagated -- see the shared-window
+    tests below for that case.)"""
     fake_device._script = [50.0]
     reader = DHT22AdafruitReader()
     reader.read_humidity_percent()
@@ -315,10 +334,14 @@ def test_none_temperature_raises_oserror(patched_library, fake_device):
 
 
 def test_temperature_recovers_after_transient_failure(patched_library, fake_device):
+    """Same next-cycle-recovery semantics as
+    test_recovers_after_transient_failure(), for the temperature path."""
     fake_device._temp_script = [RuntimeError("timing"), 23.0]
-    reader = DHT22AdafruitReader()
+    clock = _FakeMonotonic()
+    reader = DHT22AdafruitReader(monotonic=clock)
     with pytest.raises(OSError):
         reader.read_temperature_c()
+    clock.now += 2.1  # past the DHT22's own minimum measurement interval
     assert reader.read_temperature_c() == pytest.approx(23.0)
 
 
@@ -386,3 +409,66 @@ def test_temperature_driver_unhealthy_when_library_missing():
     reading = DHT22AdafruitTemperatureDriver().read()
     assert reading.healthy is False
     assert reading.value is None
+
+
+# ---------------------------------------------------------------------------
+# Shared-failure window (regression coverage for the bench bug, 2026-09-13):
+# a failed shared measurement must be visible to BOTH channels, not just
+# whichever one happened to trigger it -- see module docstring's
+# SHARED-FAILURE WINDOW note.
+# ---------------------------------------------------------------------------
+
+
+def test_temperature_failure_also_fails_humidity_within_the_shared_window(
+    patched_library, fake_device
+):
+    """Reproduces production's read order (temperature before humidity, per
+    the frozen CHANNELS order) within one Sampler cycle: a checksum failure
+    on temperature's triggering read must also surface on humidity's read
+    moments later, instead of humidity silently returning a stale cached
+    value as 'healthy'."""
+    fake_device._temp_script = [RuntimeError("Checksum did not validate")]
+    fake_device._script = [61.0]  # would be a valid reading if actually read
+    clock = _FakeMonotonic()
+    reader = DHT22AdafruitReader(monotonic=clock)
+
+    with pytest.raises(OSError):
+        reader.read_temperature_c()
+
+    clock.now += 0.05  # moments later, same Sampler cycle
+    with pytest.raises(OSError):
+        reader.read_humidity_percent()
+
+
+def test_humidity_failure_also_fails_temperature_within_the_shared_window(
+    patched_library, fake_device
+):
+    """Symmetric case: whichever channel is read second in the window must
+    not silently paper over a failure the first channel already surfaced."""
+    fake_device._script = [RuntimeError("Checksum did not validate")]
+    fake_device._temp_script = [24.0]
+    clock = _FakeMonotonic()
+    reader = DHT22AdafruitReader(monotonic=clock)
+
+    with pytest.raises(OSError):
+        reader.read_humidity_percent()
+
+    clock.now += 0.05
+    with pytest.raises(OSError):
+        reader.read_temperature_c()
+
+
+def test_sibling_channel_gets_a_fresh_attempt_once_the_window_elapses(patched_library, fake_device):
+    """The shared-failure window is temporary, not permanent: once the
+    sensor's own minimum measurement interval has passed, the sibling
+    channel attempts its own fresh, independent measurement again."""
+    fake_device._temp_script = [RuntimeError("Checksum did not validate")]
+    fake_device._script = [61.0]
+    clock = _FakeMonotonic()
+    reader = DHT22AdafruitReader(monotonic=clock)
+
+    with pytest.raises(OSError):
+        reader.read_temperature_c()
+
+    clock.now += 2.1  # past the DHT22's own minimum measurement interval
+    assert reader.read_humidity_percent() == pytest.approx(61.0)

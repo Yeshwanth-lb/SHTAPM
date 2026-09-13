@@ -51,9 +51,33 @@ one GPIO would bit-bang the same pin on two schedules; one shared device
 means one measurement serves both channels (adafruit_dht re-measures only
 after its own 2s sampling period, so back-to-back .temperature/.humidity
 access reuses a single measurement).
+
+SHARED-FAILURE WINDOW (fixes an asymmetric-masking bug found on the
+physical bench, 2026-09-13): adafruit_dht enforces the DHT22's ~2s
+minimum-interval-between-measurements INSIDE the device object, across
+BOTH properties -- whichever property (.temperature or .humidity) is
+accessed first in a window triggers the real measurement; the other,
+accessed moments later in the same Sampler cycle, is throttled by the
+library and returns whatever it last held WITHOUT retrying and WITHOUT
+raising, even if the just-triggered measurement failed. Because the
+frozen ``CHANNELS`` order always reads `temperature` before `humidity`
+(see edge/acquisition/sampler.py), `temperature` was always the channel
+that could observe a transient checksum/timing failure (a normal,
+expected DHT22 characteristic), while `humidity` silently kept serving
+its last known-good cached value forever afterward -- never observing
+the same, physically shared, failure. ``DHT22AdafruitReader`` now
+remembers the outcome of the most recent measurement attempt (whichever
+channel triggered it) for the sensor's own minimum interval, and any
+read -- by either channel -- that falls inside that window while the
+attempt failed re-raises the SAME failure, instead of asking the
+(silently stale-serving) device property directly. A read outside the
+window always attempts a genuinely fresh measurement, same as before.
 """
 
 from __future__ import annotations
+
+import time
+from collections.abc import Callable
 
 try:
     import adafruit_dht
@@ -66,18 +90,46 @@ from edge.drivers.base import RawRead, Sensor, SensorDriver
 
 _DEFAULT_PIN = 17
 
+# DHT22 datasheet / adafruit_dht's own internal throttle: minimum seconds
+# between physical measurements -- already relied on by this module's own
+# "one shared measurement" design (see module docstring above). Used here
+# only to decide how long a FAILED attempt's outcome stays authoritative
+# for the sibling channel; it does not rate-limit successful reads (those
+# already behave correctly today -- see SHARED-FAILURE WINDOW above).
+_MIN_SECONDS_BETWEEN_MEASUREMENTS = 2.0
+
+# Returns a monotonic timestamp (seconds); injectable so tests can simulate
+# the passage of time between sampling cycles without a real sleep --
+# mirrors edge/drivers/base.py's Clock injection convention.
+MonotonicClock = Callable[[], float]
+
 
 class DHT22AdafruitReader:
     """Reads %RH and/or degC via one adafruit_dht.DHT22. The underlying
     device object is created once (lazily, on first read) and reused across
     reads -- matching Adafruit's own recommended usage and avoiding
     repeatedly re-acquiring the GPIO pin. One instance can serve both the
-    humidity and temperature channels; see shared_reader()."""
+    humidity and temperature channels; see shared_reader().
 
-    def __init__(self, *, pin: int = _DEFAULT_PIN, use_pulseio: bool = False) -> None:
+    Also remembers whether the most recent measurement attempt (by either
+    channel) failed, and for how long ago -- see module docstring's
+    SHARED-FAILURE WINDOW note. This does not change behavior when reads
+    succeed or are spaced more than ~2s apart.
+    """
+
+    def __init__(
+        self,
+        *,
+        pin: int = _DEFAULT_PIN,
+        use_pulseio: bool = False,
+        monotonic: MonotonicClock = time.monotonic,
+    ) -> None:
         self._pin = pin
         self._use_pulseio = use_pulseio
         self._device: object | None = None
+        self._monotonic = monotonic
+        self._last_attempt_at: float | None = None
+        self._last_error: OSError | None = None
 
     def _ensure_device(self) -> object:
         if adafruit_dht is None or board is None:
@@ -92,20 +144,49 @@ class DHT22AdafruitReader:
             self._device = adafruit_dht.DHT22(pin_obj, use_pulseio=self._use_pulseio)
         return self._device
 
+    def _raise_if_shared_measurement_recently_failed(self) -> None:
+        """If ANY channel's read (this one or the sibling's) already
+        attempted a physical measurement within the DHT22's own minimum
+        sampling interval and it failed, re-raise that SAME failure here
+        instead of asking the device's own throttled property -- which
+        would otherwise silently return its last known-good cached value
+        (see module docstring's SHARED-FAILURE WINDOW note)."""
+        if self._last_error is None or self._last_attempt_at is None:
+            return
+        if self._monotonic() - self._last_attempt_at < _MIN_SECONDS_BETWEEN_MEASUREMENTS:
+            raise self._last_error
+
+    def _record_success(self) -> None:
+        self._last_attempt_at = self._monotonic()
+        self._last_error = None
+
+    def _record_failure(self, error: OSError) -> None:
+        self._last_attempt_at = self._monotonic()
+        self._last_error = error
+
     def read_humidity_percent(self) -> float:
         """Read relative humidity (%RH).
 
         Raises OSError on any failure -- transient checksum/timing
         failures are a normal, expected DHT22 characteristic;
         Sensor.read()'s existing raise -> unhealthy handling already
-        covers this, so no new retry logic is added here."""
+        covers this, so no new retry logic is added here. Also raises
+        OSError if the temperature channel's read just failed within the
+        shared measurement window -- see _raise_if_shared_measurement_
+        recently_failed()."""
+        self._raise_if_shared_measurement_recently_failed()
         device = self._ensure_device()
         try:
             value = device.humidity
         except Exception as e:
-            raise OSError(f"failed to read DHT22 (Adafruit, GPIO{self._pin}): {e}") from e
+            error = OSError(f"failed to read DHT22 (Adafruit, GPIO{self._pin}): {e}")
+            self._record_failure(error)
+            raise error from e
         if value is None:
-            raise OSError(f"DHT22 (Adafruit, GPIO{self._pin}) returned no humidity value")
+            error = OSError(f"DHT22 (Adafruit, GPIO{self._pin}) returned no humidity value")
+            self._record_failure(error)
+            raise error
+        self._record_success()
         return float(value)
 
     def read_temperature_c(self) -> float:
@@ -114,19 +195,28 @@ class DHT22AdafruitReader:
         See this module's measurement-characteristics note for what this
         channel does and does not represent. Same failure discipline as
         read_humidity_percent(): raises OSError, and Sensor.read() turns
-        that into healthy=False without new retry logic.
+        that into healthy=False without new retry logic. Also raises
+        OSError if the humidity channel's read just failed within the
+        shared measurement window -- see _raise_if_shared_measurement_
+        recently_failed().
 
         Reads the same device object as read_humidity_percent(); adafruit_dht
         re-measures only after its own 2s sampling period, so calling both
         within one 1Hz acquisition cycle costs one hardware measurement,
         not two."""
+        self._raise_if_shared_measurement_recently_failed()
         device = self._ensure_device()
         try:
             value = device.temperature
         except Exception as e:
-            raise OSError(f"failed to read DHT22 (Adafruit, GPIO{self._pin}): {e}") from e
+            error = OSError(f"failed to read DHT22 (Adafruit, GPIO{self._pin}): {e}")
+            self._record_failure(error)
+            raise error from e
         if value is None:
-            raise OSError(f"DHT22 (Adafruit, GPIO{self._pin}) returned no temperature value")
+            error = OSError(f"DHT22 (Adafruit, GPIO{self._pin}) returned no temperature value")
+            self._record_failure(error)
+            raise error
+        self._record_success()
         return float(value)
 
 
