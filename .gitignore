@@ -42,3 +42,9 @@ frontend/certs/*
 
 # Logs
 *.log
+
+# Local SQLite dev/demo databases (production schema is Postgres via Alembic)
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
