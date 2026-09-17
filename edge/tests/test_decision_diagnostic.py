@@ -226,6 +226,8 @@ def test_stop_swallows_client_disconnect_exceptions():
 def test_start_failure_leaves_publisher_inert_not_raising(monkeypatch):
     """start() is best-effort too -- e.g. a bad host/port must never raise
     into edge/main.py's startup."""
+    import sys
+
     import edge.pipeline.decision_diagnostic as module
 
     class _ExplodingClient:
@@ -237,7 +239,16 @@ def test_start_failure_leaves_publisher_inert_not_raising(monkeypatch):
         def Client():
             return _ExplodingClient()
 
-    monkeypatch.setitem(__import__("sys").modules, "paho.mqtt.client", _FakeMqttModule())
+    fake = _FakeMqttModule()
+    # `start()` does `import paho.mqtt.client as mqtt`, which CPython resolves by
+    # attribute traversal on an already-imported `paho.mqtt` package, falling back
+    # to sys.modules only when that attribute is absent. Patching sys.modules alone
+    # is therefore silently bypassed once any earlier test in the session has
+    # imported the real paho -- making this test pass alone but fail in a full run.
+    monkeypatch.setitem(sys.modules, "paho.mqtt.client", fake)
+    paho_mqtt = sys.modules.get("paho.mqtt")
+    if paho_mqtt is not None:
+        monkeypatch.setattr(paho_mqtt, "client", fake, raising=False)
     publisher = module.DecisionDiagnosticPublisher(device_id="pump-01")
     publisher.start("bad-host", 1)  # must not raise
     assert publisher._client is None
