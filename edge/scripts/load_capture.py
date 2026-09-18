@@ -24,11 +24,22 @@ counts are absolute and baseline-independent, so the analysis can choose its own
 reference afterwards. The driver's g-value is logged alongside for reference
 only -- never as the primary signal.
 
-Run on the Pi (does NOT require stopping shtapm.service -- both read the same
-sensors independently; SPI/I2C tolerate this, at the cost of occasional
-contention retries):
+STOP shtapm.service FIRST -- this is required, not advisory:
 
+    sudo systemctl stop shtapm.service
     PYTHONPATH=backend:. python edge/scripts/load_capture.py out.jsonl
+    sudo systemctl start shtapm.service   # with the motor OFF; see baseline note
+
+The DHT22 is bit-banged over a single GPIO line with microsecond timing and no
+bus arbitration, so two processes reading it concurrently corrupt each other's
+transfers and BOTH fail -- observed on this bench as temperature/humidity
+reading FAIL on every sample while the service was running, with the motor off.
+I2C (BMP280/INA219) and SPI (MCP3008) arbitrate properly and are unaffected,
+which is exactly how the cause was identified.
+
+Restart the service with the motor OFF: ADXL335Driver takes its at-rest baseline
+on the first read after startup, so restarting while the motor runs zeroes out
+the very signal being measured.
 
 Ctrl+C to stop. Every line is one JSON sample.
 """
