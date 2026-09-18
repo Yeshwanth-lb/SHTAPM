@@ -48,3 +48,9 @@ frontend/certs/*
 *.db-journal
 *.db-wal
 *.db-shm
+
+# Raw bench captures (MQTT recordings pulled off the Pi). Deliberately not in
+# git: large, machine-specific, and an evidence INPUT to offline analysis
+# rather than source. Findings derived from a capture belong in project-state/;
+# the capture itself does not.
+*capture*.jsonl
