@@ -69,13 +69,13 @@ def list_alerts(
     current_user: User = Depends(get_current_user),
 ) -> list[AlertOut]:
     if status_filter is not None and status_filter not in ("open", "acknowledged"):
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST, "status must be 'open' or 'acknowledged'"
-        )
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "status must be 'open' or 'acknowledged'")
 
     owned_devices = scope_devices_query(db.query(Device), current_user)
-    query = db.query(Alert, Device).join(Device, Alert.device_id == Device.id).filter(
-        Device.id.in_(owned_devices.with_entities(Device.id))
+    query = (
+        db.query(Alert, Device)
+        .join(Device, Alert.device_id == Device.id)
+        .filter(Device.id.in_(owned_devices.with_entities(Device.id)))
     )
 
     if device is not None:

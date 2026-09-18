@@ -92,9 +92,18 @@ class BMP280Calibration:
 
     def __init__(self, raw: bytes) -> None:
         (
-            self.dig_T1, self.dig_T2, self.dig_T3,
-            self.dig_P1, self.dig_P2, self.dig_P3, self.dig_P4,
-            self.dig_P5, self.dig_P6, self.dig_P7, self.dig_P8, self.dig_P9,
+            self.dig_T1,
+            self.dig_T2,
+            self.dig_T3,
+            self.dig_P1,
+            self.dig_P2,
+            self.dig_P3,
+            self.dig_P4,
+            self.dig_P5,
+            self.dig_P6,
+            self.dig_P7,
+            self.dig_P8,
+            self.dig_P9,
         ) = struct.unpack("<HhhHhhhhhhhh", raw)
 
 

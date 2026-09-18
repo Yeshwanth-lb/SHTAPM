@@ -159,9 +159,9 @@ def test_live_wiring_never_isolates_or_actuates():
             elif isinstance(node, ast.ImportFrom) and node.module:
                 imported_modules.add(node.module)
         for forbidden in forbidden_import_substrings:
-            assert not any(forbidden in name for name in imported_modules), (
-                f"{module.__name__} imports something matching {forbidden!r}: {imported_modules}"
-            )
+            assert not any(
+                forbidden in name for name in imported_modules
+            ), f"{module.__name__} imports something matching {forbidden!r}: {imported_modules}"
 
 
 def test_decision_diagnostic_publish_failure_never_interrupts_telemetry_or_p2_logging(caplog):

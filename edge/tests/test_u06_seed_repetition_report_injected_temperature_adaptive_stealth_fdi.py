@@ -42,9 +42,7 @@ def test_original_plus_four_variants_produce_five_total_seeds():
 
 
 def test_all_five_seeds_are_distinct_from_one_another():
-    seeds = [
-        s.seed for s in INJECTED_TEMPERATURE_ADAPTIVE_STEALTH_FDI_SEED_REPETITION_SCENARIOS
-    ]
+    seeds = [s.seed for s in INJECTED_TEMPERATURE_ADAPTIVE_STEALTH_FDI_SEED_REPETITION_SCENARIOS]
     assert len(seeds) == len(set(seeds)) == 5
 
 
@@ -93,24 +91,15 @@ def test_seed_variants_reuse_the_exact_injected_temperature_adaptive_stealth_fdi
     for variant in INJECTED_TEMPERATURE_ADAPTIVE_STEALTH_FDI_SEED_REPETITION_SCENARIOS:
         assert variant.length == SCENARIO_INJECTED_TEMPERATURE_ADAPTIVE_STEALTH_FDI.length
         assert (
-            variant.start_health
-            == SCENARIO_INJECTED_TEMPERATURE_ADAPTIVE_STEALTH_FDI.start_health
+            variant.start_health == SCENARIO_INJECTED_TEMPERATURE_ADAPTIVE_STEALTH_FDI.start_health
         )
-        assert (
-            variant.end_health
-            == SCENARIO_INJECTED_TEMPERATURE_ADAPTIVE_STEALTH_FDI.end_health
-        )
+        assert variant.end_health == SCENARIO_INJECTED_TEMPERATURE_ADAPTIVE_STEALTH_FDI.end_health
         assert (
             variant.degradation_rate
             == SCENARIO_INJECTED_TEMPERATURE_ADAPTIVE_STEALTH_FDI.degradation_rate
         )
-        assert (
-            variant.channels == SCENARIO_INJECTED_TEMPERATURE_ADAPTIVE_STEALTH_FDI.channels
-        )
-        assert (
-            variant.injections
-            == SCENARIO_INJECTED_TEMPERATURE_ADAPTIVE_STEALTH_FDI.injections
-        )
+        assert variant.channels == SCENARIO_INJECTED_TEMPERATURE_ADAPTIVE_STEALTH_FDI.channels
+        assert variant.injections == SCENARIO_INJECTED_TEMPERATURE_ADAPTIVE_STEALTH_FDI.injections
 
 
 def test_adaptive_stealth_fdi_injection_parameters_are_preserved_exactly():
@@ -152,9 +141,7 @@ def test_report_contains_exactly_ten_results():
 def test_both_baselines_run_for_every_seed():
     report = build_seed_repetition_report()
     for scenario in INJECTED_TEMPERATURE_ADAPTIVE_STEALTH_FDI_SEED_REPETITION_SCENARIOS:
-        baselines_for_seed = {
-            r.baseline_name for r in report.results if r.seed == scenario.seed
-        }
+        baselines_for_seed = {r.baseline_name for r in report.results if r.seed == scenario.seed}
         assert baselines_for_seed == _EXPECTED_BASELINES
 
 
@@ -239,7 +226,6 @@ def test_existing_axis_summaries_are_unchanged_by_channel_agreement_wiring():
         assert result.ground_truth_rate_summary == summarize_ground_truth_rates(record)
 
 
-
 def test_zero_channel_match_opportunities_across_all_seeds_and_baselines():
     """Verified directly: this scenario shape never produces a
     channel-match opportunity for any of its 5 seeds under either
@@ -287,7 +273,6 @@ def test_channel_agreement_interval_uses_original_counts():
             summary = result.channel_agreement_summary
             assert interval.numerator == summary.channel_match_count
             assert interval.denominator == summary.channel_match_observation_count
-
 
 
 def test_channel_agreement_interval_is_none_across_all_seeds_and_baselines():
@@ -444,8 +429,8 @@ def test_module_makes_no_threshold_verdict_or_real_world_claim():
         "proven accurate",
         "production-ready",
         "production ready",
-        "pass\"",
-        "fail\"",
+        'pass"',
+        'fail"',
         "passed the",
         "failed the",
     )
@@ -501,24 +486,17 @@ def test_module_does_not_modify_the_other_seed_repetition_modules():
     assert "from edge.eval.u06_seed_repetition_report import" not in source
     assert "from edge.eval.u06_seed_repetition_report_injected_current_spike import" not in source
     assert (
-        "from edge.eval.u06_seed_repetition_report_injected_temperature_drift import"
-        not in source
+        "from edge.eval.u06_seed_repetition_report_injected_temperature_drift import" not in source
     )
     assert (
-        "from edge.eval.u06_seed_repetition_report_injected_pressure_stuck_at import"
-        not in source
+        "from edge.eval.u06_seed_repetition_report_injected_pressure_stuck_at import" not in source
     )
     assert (
-        "from edge.eval.u06_seed_repetition_report_injected_humidity_bias_fdi import"
-        not in source
+        "from edge.eval.u06_seed_repetition_report_injected_humidity_bias_fdi import" not in source
     )
+    assert "from edge.eval.u06_seed_repetition_report_injected_gas_ramp_fdi import" not in source
     assert (
-        "from edge.eval.u06_seed_repetition_report_injected_gas_ramp_fdi import"
-        not in source
-    )
-    assert (
-        "from edge.eval.u06_seed_repetition_report_injected_vibration_replay import"
-        not in source
+        "from edge.eval.u06_seed_repetition_report_injected_vibration_replay import" not in source
     )
     assert (
         "from edge.eval.u06_seed_repetition_report_injected_current_constant_spoof import"
@@ -623,9 +601,7 @@ def test_ambient_temperature_is_flat_and_injection_produces_the_ramp_then_platea
     assert clean_temps[35:] == injected_temps[35:]
 
     # Exact ramp-then-plateau offsets during the active window.
-    offsets = [
-        round(injected_temps[i] - clean_temps[i], 4) for i in range(25, 35)
-    ]
+    offsets = [round(injected_temps[i] - clean_temps[i], 4) for i in range(25, 35)]
     assert offsets == [0.5, 1.0, 1.5, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0]
 
     # Injected values themselves, against the flat 26.0 ambient baseline.

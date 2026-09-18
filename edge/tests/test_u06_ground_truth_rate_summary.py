@@ -88,9 +88,7 @@ def _episode(transitions, **overrides) -> EpisodeRecord:
 
 def test_injected_step_with_continue_is_ground_truth_missed_fault():
     transitions = [
-        _transition(
-            requested_action=RLAction.continue_.value, active_injection_labels=("spike",)
-        )
+        _transition(requested_action=RLAction.continue_.value, active_injection_labels=("spike",))
     ]
     summary = summarize_ground_truth_rates(_episode(transitions))
 
@@ -101,9 +99,7 @@ def test_injected_step_with_continue_is_ground_truth_missed_fault():
 
 def test_injected_step_with_isolate_or_reduce_weight_is_not_missed():
     transitions = [
-        _transition(
-            requested_action=RLAction.isolate.value, active_injection_labels=("drift",)
-        ),
+        _transition(requested_action=RLAction.isolate.value, active_injection_labels=("drift",)),
         _transition(
             requested_action=RLAction.reduce_weight.value, active_injection_labels=("drift",)
         ),
@@ -239,15 +235,9 @@ def test_transition_consumed_false_steps_are_still_counted():
 
 def test_per_injection_type_breakdown_is_scoped_and_not_pooled():
     transitions = [
-        _transition(
-            requested_action=RLAction.continue_.value, active_injection_labels=("spike",)
-        ),
-        _transition(
-            requested_action=RLAction.isolate.value, active_injection_labels=("spike",)
-        ),
-        _transition(
-            requested_action=RLAction.continue_.value, active_injection_labels=("drift",)
-        ),
+        _transition(requested_action=RLAction.continue_.value, active_injection_labels=("spike",)),
+        _transition(requested_action=RLAction.isolate.value, active_injection_labels=("spike",)),
+        _transition(requested_action=RLAction.continue_.value, active_injection_labels=("drift",)),
     ]
     summary = summarize_ground_truth_rates(_episode(transitions))
 
@@ -288,9 +278,7 @@ def test_adaptive_stealth_fdi_gets_its_own_unpooled_breakdown():
             requested_action=RLAction.continue_.value,
             active_injection_labels=("adaptive_stealth_fdi",),
         ),
-        _transition(
-            requested_action=RLAction.continue_.value, active_injection_labels=("spike",)
-        ),
+        _transition(requested_action=RLAction.continue_.value, active_injection_labels=("spike",)),
     ]
     summary = summarize_ground_truth_rates(_episode(transitions))
 
@@ -325,9 +313,7 @@ def test_no_injection_breakdown_mirrors_top_level_false_isolation_fields():
 def test_zero_denominators_return_none_not_zero():
     # No transitions with a non-None requested action while uninjected, and
     # no injected transitions at all.
-    transitions = [
-        _transition(requested_action=None, active_injection_labels=())
-    ]
+    transitions = [_transition(requested_action=None, active_injection_labels=())]
     summary = summarize_ground_truth_rates(_episode(transitions))
 
     assert summary.false_isolation_denominator == 0

@@ -127,9 +127,7 @@ def wilson_score_interval(
     if numerator < 0:
         raise ValueError(f"numerator must be >= 0, got {numerator}")
     if numerator > denominator:
-        raise ValueError(
-            f"numerator ({numerator}) must not exceed denominator ({denominator})"
-        )
+        raise ValueError(f"numerator ({numerator}) must not exceed denominator ({denominator})")
     if not 0.0 < confidence_level < 1.0:
         raise ValueError(f"confidence_level must be in (0, 1), got {confidence_level}")
 
@@ -146,9 +144,7 @@ def wilson_score_interval(
 
     denominator_term = 1.0 + z_squared / n
     center = (phat + z_squared / (2.0 * n)) / denominator_term
-    margin = (z / denominator_term) * (
-        (phat * (1.0 - phat) / n + z_squared / (4.0 * n * n)) ** 0.5
-    )
+    margin = (z / denominator_term) * ((phat * (1.0 - phat) / n + z_squared / (4.0 * n * n)) ** 0.5)
 
     lower_bound = max(0.0, center - margin)
     upper_bound = min(1.0, center + margin)
@@ -181,9 +177,7 @@ def axis_i_false_isolation_interval(summary) -> WilsonScoreInterval | None:
 
 def axis_i_missed_fault_interval(summary) -> WilsonScoreInterval | None:
     """Axis (i) proxy-based missed-fault rate."""
-    return wilson_score_interval(
-        summary.missed_fault_numerator, summary.missed_fault_denominator
-    )
+    return wilson_score_interval(summary.missed_fault_numerator, summary.missed_fault_denominator)
 
 
 def axis_iii_false_isolation_interval(summary) -> WilsonScoreInterval | None:
@@ -196,9 +190,7 @@ def axis_iii_false_isolation_interval(summary) -> WilsonScoreInterval | None:
 
 def axis_iii_missed_fault_interval(summary) -> WilsonScoreInterval | None:
     """Axis (iii) ground-truth-anchored missed-fault rate."""
-    return wilson_score_interval(
-        summary.missed_fault_numerator, summary.missed_fault_denominator
-    )
+    return wilson_score_interval(summary.missed_fault_numerator, summary.missed_fault_denominator)
 
 
 def axis_ii_tracker_agreement_interval(summary) -> WilsonScoreInterval | None:

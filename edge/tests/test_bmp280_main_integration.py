@@ -32,8 +32,18 @@ _ADC_P = 415148
 def _pack_calibration() -> list[int]:
     packed = struct.pack(
         "<HhhHhhhhhhhh",
-        _DIG_T1, _DIG_T2, _DIG_T3,
-        _DIG_P1, _DIG_P2, _DIG_P3, _DIG_P4, _DIG_P5, _DIG_P6, _DIG_P7, _DIG_P8, _DIG_P9,
+        _DIG_T1,
+        _DIG_T2,
+        _DIG_T3,
+        _DIG_P1,
+        _DIG_P2,
+        _DIG_P3,
+        _DIG_P4,
+        _DIG_P5,
+        _DIG_P6,
+        _DIG_P7,
+        _DIG_P8,
+        _DIG_P9,
     )
     return list(packed)
 
@@ -109,7 +119,12 @@ def test_main_uses_bmp280_for_pressure_channel():
 
         drivers = fake_drivers(_dev_values())
         assert set(drivers.keys()) == {
-            "temperature", "vibration", "pressure", "humidity", "gas", "current",
+            "temperature",
+            "vibration",
+            "pressure",
+            "humidity",
+            "gas",
+            "current",
         }
 
         drivers["vibration"] = ADXL335Driver(bus=0, device=0)

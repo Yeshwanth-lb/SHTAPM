@@ -134,9 +134,7 @@ def test_telemetry_and_decision_diagnostic_consumers_are_fully_independent(sessi
     # Break the decision_diagnostic topic entirely (malformed payload) --
     # telemetry ingestion must be completely unaffected.
     decision_consumer.handle(FakeMsg("shtapm/pump-01/decision_diagnostic", b"garbage"))
-    telemetry_consumer.handle(
-        FakeMsg("shtapm/pump-01/telemetry", _telemetry_payload().encode())
-    )
+    telemetry_consumer.handle(FakeMsg("shtapm/pump-01/telemetry", _telemetry_payload().encode()))
 
     assert decision_consumer.error_count == 1
     assert telemetry_consumer.error_count == 0

@@ -179,9 +179,7 @@ def summarize_episode_rates(record: EpisodeRecord) -> EpisodeRateSummary:
         else None
     )
     missed_fault_rate = (
-        missed_fault_numerator / missed_fault_denominator
-        if missed_fault_denominator > 0
-        else None
+        missed_fault_numerator / missed_fault_denominator if missed_fault_denominator > 0 else None
     )
 
     return EpisodeRateSummary(

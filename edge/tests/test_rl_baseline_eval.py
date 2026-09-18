@@ -422,9 +422,7 @@ def test_multi_channel_injection_preserves_all_channels_deterministically():
         ),
     )
     record = run_baseline_policy_episode(multi_injection_scenario)
-    overlapping_steps = [
-        t for t in record.transitions if len(t.active_injection_channels) > 1
-    ]
+    overlapping_steps = [t for t in record.transitions if len(t.active_injection_channels) > 1]
     assert len(overlapping_steps) > 0
     for t in overlapping_steps:
         assert set(t.active_injection_channels) == {"current", "temperature"}
@@ -481,16 +479,14 @@ def _assert_sample_seq_unique_and_increasing_among_consumed(transitions):
     module docstring's own precedent for this exact None-handling
     convention)."""
     consumed_seqs = [
-        t.sample_seq
-        for t in transitions
-        if t.transition_consumed and t.sample_seq is not None
+        t.sample_seq for t in transitions if t.transition_consumed and t.sample_seq is not None
     ]
-    assert len(consumed_seqs) == len(set(consumed_seqs)), (
-        "duplicate sample_seq among transition_consumed=True transitions"
-    )
-    assert all(a < b for a, b in zip(consumed_seqs, consumed_seqs[1:], strict=False)), (
-        "sample_seq not strictly increasing among transition_consumed=True transitions"
-    )
+    assert len(consumed_seqs) == len(
+        set(consumed_seqs)
+    ), "duplicate sample_seq among transition_consumed=True transitions"
+    assert all(
+        a < b for a, b in zip(consumed_seqs, consumed_seqs[1:], strict=False)
+    ), "sample_seq not strictly increasing among transition_consumed=True transitions"
 
 
 def test_transition_record_sample_seq_field_exists_and_defaults_addable():

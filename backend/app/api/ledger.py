@@ -130,8 +130,15 @@ def export_ledger(
         )
         for b in blocks:
             writer.writerow(
-                [b.block_index, b.ts.isoformat(), b.event_type, b.payload, b.payload_hash,
-                 b.prev_hash, b.this_hash]
+                [
+                    b.block_index,
+                    b.ts.isoformat(),
+                    b.event_type,
+                    b.payload,
+                    b.payload_hash,
+                    b.prev_hash,
+                    b.this_hash,
+                ]
             )
         return Response(content=buf.getvalue(), media_type="text/csv")
 

@@ -69,14 +69,33 @@ def _reference_compensate_pressure(
 
 
 def _pack_calibration(
-    dig_T1=_DIG_T1, dig_T2=_DIG_T2, dig_T3=_DIG_T3,
-    dig_P1=_DIG_P1, dig_P2=_DIG_P2, dig_P3=_DIG_P3, dig_P4=_DIG_P4,
-    dig_P5=_DIG_P5, dig_P6=_DIG_P6, dig_P7=_DIG_P7, dig_P8=_DIG_P8, dig_P9=_DIG_P9,
+    dig_T1=_DIG_T1,
+    dig_T2=_DIG_T2,
+    dig_T3=_DIG_T3,
+    dig_P1=_DIG_P1,
+    dig_P2=_DIG_P2,
+    dig_P3=_DIG_P3,
+    dig_P4=_DIG_P4,
+    dig_P5=_DIG_P5,
+    dig_P6=_DIG_P6,
+    dig_P7=_DIG_P7,
+    dig_P8=_DIG_P8,
+    dig_P9=_DIG_P9,
 ) -> list[int]:
     packed = struct.pack(
         "<HhhHhhhhhhhh",
-        dig_T1, dig_T2, dig_T3,
-        dig_P1, dig_P2, dig_P3, dig_P4, dig_P5, dig_P6, dig_P7, dig_P8, dig_P9,
+        dig_T1,
+        dig_T2,
+        dig_T3,
+        dig_P1,
+        dig_P2,
+        dig_P3,
+        dig_P4,
+        dig_P5,
+        dig_P6,
+        dig_P7,
+        dig_P8,
+        dig_P9,
     )
     return list(packed)
 

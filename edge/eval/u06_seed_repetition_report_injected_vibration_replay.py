@@ -257,9 +257,7 @@ def build_seed_repetition_report() -> SeedRepetitionReport:
                     axis_i_false_isolation_interval=axis_i_false_isolation_interval(
                         episode_rate_summary
                     ),
-                    axis_i_missed_fault_interval=axis_i_missed_fault_interval(
-                        episode_rate_summary
-                    ),
+                    axis_i_missed_fault_interval=axis_i_missed_fault_interval(episode_rate_summary),
                     axis_ii_tracker_agreement_interval=axis_ii_tracker_agreement_interval(
                         tracker_agreement_summary
                     ),

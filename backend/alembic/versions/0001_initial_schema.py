@@ -39,13 +39,24 @@ health_state = postgresql.ENUM(
     "healthy", "warning", "critical", name="health_state", create_type=False
 )
 channel = postgresql.ENUM(
-    "temperature", "vibration", "pressure", "humidity", "gas", "current",
-    name="channel", create_type=False,
+    "temperature",
+    "vibration",
+    "pressure",
+    "humidity",
+    "gas",
+    "current",
+    name="channel",
+    create_type=False,
 )
 attribution = postgresql.ENUM("none", "fault", "attack", name="attribution", create_type=False)
 rl_action = postgresql.ENUM(
-    "continue", "reduce_weight", "isolate", "alert", "safe_stop",
-    name="rl_action", create_type=False,
+    "continue",
+    "reduce_weight",
+    "isolate",
+    "alert",
+    "safe_stop",
+    name="rl_action",
+    create_type=False,
 )
 alert_severity = postgresql.ENUM(
     "info", "warning", "critical", name="alert_severity", create_type=False
@@ -53,8 +64,14 @@ alert_severity = postgresql.ENUM(
 alert_type = postgresql.ENUM("fault", "attack", "system", name="alert_type", create_type=False)
 
 _ALL_ENUMS = (
-    user_role, device_status, health_state, channel, attribution,
-    rl_action, alert_severity, alert_type,
+    user_role,
+    device_status,
+    health_state,
+    channel,
+    attribution,
+    rl_action,
+    alert_severity,
+    alert_type,
 )
 
 

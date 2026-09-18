@@ -86,9 +86,7 @@ def rotate_refresh_token(
     if row.revoked:
         # Reuse of a rotated-away token: treat as compromise, kill the whole session set.
         db.execute(
-            update(RefreshToken)
-            .where(RefreshToken.user_id == row.user_id)
-            .values(revoked=True)
+            update(RefreshToken).where(RefreshToken.user_id == row.user_id).values(revoked=True)
         )
         db.commit()
         raise RefreshTokenInvalid("refresh token reuse detected; all sessions revoked")

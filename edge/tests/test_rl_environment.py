@@ -54,6 +54,7 @@ class _FixedIsolationTracker:
             candidates_this_cycle=self._tracked, tracked_channels=self._tracked, reasons={}
         )
 
+
 WINDOW_SIZE_FIXTURE = 30
 STEP_FIXTURE = 1
 FIT_WINDOW_COUNT_FIXTURE = 2
@@ -489,9 +490,7 @@ def test_injection_window_follows_onset_and_duration_exactly():
     spike = Spike(channel="current", onset=onset, duration=duration, amplitude=100.0)
     env = _environment(injections=[spike])
     active_indices = {
-        i
-        for i in range(len(env._frames))
-        if env._frames[i].sample_seq in env._labels_by_sample_seq
+        i for i in range(len(env._frames)) if env._frames[i].sample_seq in env._labels_by_sample_seq
     }
     expected_indices = set(range(onset, onset + duration))
     assert active_indices == expected_indices
@@ -643,9 +642,7 @@ def test_non_isolate_approved_action_never_substitutes_even_when_tracked():
     env.reset()
     env._isolation_tracker = _FixedIsolationTracker(frozenset({"vibration"}))
 
-    result = env.step(
-        RLAction.alert, policy_available=True, policy_validated=True, confidence=0.99
-    )
+    result = env.step(RLAction.alert, policy_available=True, policy_validated=True, confidence=0.99)
 
     assert result.gate_decision.approved_action == RLAction.alert
     assert result.info["substituted_channels"] == []

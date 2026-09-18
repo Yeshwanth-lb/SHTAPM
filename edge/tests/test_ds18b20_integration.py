@@ -83,8 +83,7 @@ def test_ds18b20_driver_failed_crc_propagates_through_sampler(tmp_path):
     device_dir = tmp_path / "28-00000055547c"
     device_dir.mkdir(parents=True)
     (device_dir / "w1_slave").write_text(
-        "4e 01 4b 46 7f ff 0c 10 5d : crc=5d NO\n"
-        "4e 01 4b 46 7f ff 0c 10 5d t=27750\n"
+        "4e 01 4b 46 7f ff 0c 10 5d : crc=5d NO\n" "4e 01 4b 46 7f ff 0c 10 5d t=27750\n"
     )
 
     fake_values = {

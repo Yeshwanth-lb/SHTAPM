@@ -186,9 +186,7 @@ class GroundTruthRateSummary:
     world_inert_approved_action_count_in_false_isolation_denominator: int
     world_inert_approved_action_count_in_missed_fault_denominator: int
 
-    per_injection_type: dict[str, InjectionTypeMissedFaultBreakdown] = field(
-        default_factory=dict
-    )
+    per_injection_type: dict[str, InjectionTypeMissedFaultBreakdown] = field(default_factory=dict)
     no_injection: NoInjectionFalseIsolationBreakdown | None = None
 
     execution_mode: str = EXECUTION_MODE
@@ -253,9 +251,7 @@ def summarize_ground_truth_rates(record: EpisodeRecord) -> GroundTruthRateSummar
         else None
     )
     missed_fault_rate = (
-        missed_fault_numerator / missed_fault_denominator
-        if missed_fault_denominator > 0
-        else None
+        missed_fault_numerator / missed_fault_denominator if missed_fault_denominator > 0 else None
     )
 
     per_injection_type: dict[str, InjectionTypeMissedFaultBreakdown] = {}

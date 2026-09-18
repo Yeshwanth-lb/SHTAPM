@@ -97,9 +97,7 @@ def test_topic_payload_device_mismatch_rejected():
     received = []
     c.add_sink(received.append)
     c.handle(
-        FakeMsg(
-            "shtapm/pump-99/decision_diagnostic", _valid_payload(device_id="pump-01").encode()
-        )
+        FakeMsg("shtapm/pump-99/decision_diagnostic", _valid_payload(device_id="pump-01").encode())
     )
     assert received == []
     assert c.error_count == 1

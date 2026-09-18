@@ -118,9 +118,7 @@ def test_no_injection_with_nominal_status_is_agreement_nominal():
 
 
 def test_no_injection_with_isolation_active_is_tracker_flagged_without_injection():
-    transitions = [
-        _transition(safety_status="isolation_active", active_injection_labels=())
-    ]
+    transitions = [_transition(safety_status="isolation_active", active_injection_labels=())]
     summary = summarize_tracker_agreement(_episode(transitions))
 
     assert summary.tracker_flagged_without_injection_count == 1
@@ -231,9 +229,7 @@ def test_multi_injection_observation_is_attributed_to_each_active_type():
     PER-INJECTION-TYPE ATTRIBUTION section. Per-type counts can therefore
     sum to more than total_observations."""
     transitions = [
-        _transition(
-            safety_status="isolation_active", active_injection_labels=("spike", "drift")
-        )
+        _transition(safety_status="isolation_active", active_injection_labels=("spike", "drift"))
     ]
     summary = summarize_tracker_agreement(_episode(transitions))
 

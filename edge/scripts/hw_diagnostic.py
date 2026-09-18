@@ -99,9 +99,7 @@ def read_bmp280_temperature_and_pressure(bus_num: int, address: int) -> tuple[fl
         cal = reader._setup_once(bus)
         reader._trigger_forced_measurement(bus)
         reader._wait_for_measurement(bus)
-        data = bus.read_i2c_block_data(
-            address, bmp280_mod._REG_DATA_START, bmp280_mod._DATA_LENGTH
-        )
+        data = bus.read_i2c_block_data(address, bmp280_mod._REG_DATA_START, bmp280_mod._DATA_LENGTH)
         press_msb, press_lsb, press_xlsb, temp_msb, temp_lsb, temp_xlsb = data
         raw_pressure = (press_msb << 12) | (press_lsb << 4) | (press_xlsb >> 4)
         raw_temperature = (temp_msb << 12) | (temp_lsb << 4) | (temp_xlsb >> 4)
@@ -215,9 +213,7 @@ def main() -> int:
 
         # BMP280 temperature (diagnostic-only, see module docstring)
         try:
-            temp_c, _pressure_hpa = read_bmp280_temperature_and_pressure(
-                BMP280_BUS, BMP280_ADDR
-            )
+            temp_c, _pressure_hpa = read_bmp280_temperature_and_pressure(BMP280_BUS, BMP280_ADDR)
             print(
                 f"BMP280 temperature (diagnostic-only, NOT the pipeline "
                 f"`temperature` channel): value={temp_c:.2f} unit=degC -> PASS"
@@ -269,9 +265,7 @@ def main() -> int:
     print(_summary_line("DHT22 humidity", "dht22_humidity"))
     print(_summary_line("ADXL335", "adxl335"))
     print(_summary_line("BMP280 pressure", "bmp280_pressure"))
-    print(
-        _summary_line("BMP280 temperature (diagnostic-only)", "bmp280_temperature_diag")
-    )
+    print(_summary_line("BMP280 temperature (diagnostic-only)", "bmp280_temperature_diag"))
     print(_summary_line("INA219", "ina219"))
     mq_flags = results["mq135_raw_adc"]
     mq_overall = "PASS" if mq_flags and all(mq_flags) else "FAIL"

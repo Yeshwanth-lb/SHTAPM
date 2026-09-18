@@ -86,10 +86,7 @@ def test_seed_variants_reuse_the_exact_injected_vibration_replay_profile():
         assert variant.length == SCENARIO_INJECTED_VIBRATION_REPLAY.length
         assert variant.start_health == SCENARIO_INJECTED_VIBRATION_REPLAY.start_health
         assert variant.end_health == SCENARIO_INJECTED_VIBRATION_REPLAY.end_health
-        assert (
-            variant.degradation_rate
-            == SCENARIO_INJECTED_VIBRATION_REPLAY.degradation_rate
-        )
+        assert variant.degradation_rate == SCENARIO_INJECTED_VIBRATION_REPLAY.degradation_rate
         assert variant.channels == SCENARIO_INJECTED_VIBRATION_REPLAY.channels
         assert variant.injections == SCENARIO_INJECTED_VIBRATION_REPLAY.injections
 
@@ -121,10 +118,7 @@ def test_original_injected_vibration_replay_scenario_is_unchanged():
     SCENARIO_INJECTED_VIBRATION_REPLAY itself."""
     assert SCENARIO_INJECTED_VIBRATION_REPLAY.seed == 1343
     assert SCENARIO_INJECTED_VIBRATION_REPLAY.name == "injected_vibration_replay"
-    assert (
-        SCENARIO_INJECTED_VIBRATION_REPLAY
-        in INJECTED_VIBRATION_REPLAY_SEED_REPETITION_SCENARIOS
-    )
+    assert SCENARIO_INJECTED_VIBRATION_REPLAY in INJECTED_VIBRATION_REPLAY_SEED_REPETITION_SCENARIOS
 
 
 # ---------------------------------------------------------------------------
@@ -141,9 +135,7 @@ def test_report_contains_exactly_ten_results():
 def test_both_baselines_run_for_every_seed():
     report = build_seed_repetition_report()
     for scenario in INJECTED_VIBRATION_REPLAY_SEED_REPETITION_SCENARIOS:
-        baselines_for_seed = {
-            r.baseline_name for r in report.results if r.seed == scenario.seed
-        }
+        baselines_for_seed = {r.baseline_name for r in report.results if r.seed == scenario.seed}
         assert baselines_for_seed == _EXPECTED_BASELINES
 
 
@@ -226,7 +218,6 @@ def test_existing_axis_summaries_are_unchanged_by_channel_agreement_wiring():
         assert result.ground_truth_rate_summary == summarize_ground_truth_rates(record)
 
 
-
 def test_zero_channel_match_opportunities_across_all_seeds_and_baselines():
     """Verified directly: this scenario shape never produces a
     channel-match opportunity for any of its 5 seeds under either
@@ -274,7 +265,6 @@ def test_channel_agreement_interval_uses_original_counts():
             summary = result.channel_agreement_summary
             assert interval.numerator == summary.channel_match_count
             assert interval.denominator == summary.channel_match_observation_count
-
 
 
 def test_channel_agreement_interval_is_none_across_all_seeds_and_baselines():
@@ -376,21 +366,13 @@ def test_build_seed_repetition_report_returns_new_episode_records_not_shared_sta
 
 
 def test_scenario_definitions_are_not_mutated_by_building_the_report():
-    seeds_before = tuple(
-        s.seed for s in INJECTED_VIBRATION_REPLAY_SEED_REPETITION_SCENARIOS
-    )
-    names_before = tuple(
-        s.name for s in INJECTED_VIBRATION_REPLAY_SEED_REPETITION_SCENARIOS
-    )
+    seeds_before = tuple(s.seed for s in INJECTED_VIBRATION_REPLAY_SEED_REPETITION_SCENARIOS)
+    names_before = tuple(s.name for s in INJECTED_VIBRATION_REPLAY_SEED_REPETITION_SCENARIOS)
 
     build_seed_repetition_report()
 
-    seeds_after = tuple(
-        s.seed for s in INJECTED_VIBRATION_REPLAY_SEED_REPETITION_SCENARIOS
-    )
-    names_after = tuple(
-        s.name for s in INJECTED_VIBRATION_REPLAY_SEED_REPETITION_SCENARIOS
-    )
+    seeds_after = tuple(s.seed for s in INJECTED_VIBRATION_REPLAY_SEED_REPETITION_SCENARIOS)
+    names_after = tuple(s.name for s in INJECTED_VIBRATION_REPLAY_SEED_REPETITION_SCENARIOS)
     assert seeds_before == seeds_after
     assert names_before == names_after
 
@@ -431,8 +413,8 @@ def test_module_makes_no_threshold_verdict_or_real_world_claim():
         "proven accurate",
         "production-ready",
         "production ready",
-        "pass\"",
-        "fail\"",
+        'pass"',
+        'fail"',
         "passed the",
         "failed the",
     )
@@ -488,21 +470,15 @@ def test_module_does_not_modify_the_other_seed_repetition_modules():
     assert "from edge.eval.u06_seed_repetition_report import" not in source
     assert "from edge.eval.u06_seed_repetition_report_injected_current_spike import" not in source
     assert (
-        "from edge.eval.u06_seed_repetition_report_injected_temperature_drift import"
-        not in source
+        "from edge.eval.u06_seed_repetition_report_injected_temperature_drift import" not in source
     )
     assert (
-        "from edge.eval.u06_seed_repetition_report_injected_pressure_stuck_at import"
-        not in source
+        "from edge.eval.u06_seed_repetition_report_injected_pressure_stuck_at import" not in source
     )
     assert (
-        "from edge.eval.u06_seed_repetition_report_injected_humidity_bias_fdi import"
-        not in source
+        "from edge.eval.u06_seed_repetition_report_injected_humidity_bias_fdi import" not in source
     )
-    assert (
-        "from edge.eval.u06_seed_repetition_report_injected_gas_ramp_fdi import"
-        not in source
-    )
+    assert "from edge.eval.u06_seed_repetition_report_injected_gas_ramp_fdi import" not in source
 
 
 def test_module_documents_the_empirical_note_disclaimer():

@@ -290,8 +290,8 @@ def test_module_makes_no_threshold_verdict_or_real_world_claim():
         "proven accurate",
         "production-ready",
         "production ready",
-        "pass\"",
-        "fail\"",
+        'pass"',
+        'fail"',
         "passed the",
         "failed the",
     )

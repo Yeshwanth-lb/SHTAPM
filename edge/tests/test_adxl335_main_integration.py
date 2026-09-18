@@ -126,8 +126,7 @@ def test_frozen_contract_with_all_four_real_drivers(tmp_path):
     w1_device_dir = tmp_path / "w1" / "28-00000055547c"
     w1_device_dir.mkdir(parents=True)
     (w1_device_dir / "w1_slave").write_text(
-        "4e 01 4b 46 7f ff 0c 10 5d : crc=5d YES\n"
-        "4e 01 4b 46 7f ff 0c 10 5d t=27750\n"
+        "4e 01 4b 46 7f ff 0c 10 5d : crc=5d YES\n" "4e 01 4b 46 7f ff 0c 10 5d t=27750\n"
     )
 
     iio_device_dir = tmp_path / "iio" / "device0"

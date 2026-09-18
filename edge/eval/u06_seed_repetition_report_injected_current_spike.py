@@ -199,9 +199,7 @@ def build_seed_repetition_report() -> SeedRepetitionReport:
                     axis_i_false_isolation_interval=axis_i_false_isolation_interval(
                         episode_rate_summary
                     ),
-                    axis_i_missed_fault_interval=axis_i_missed_fault_interval(
-                        episode_rate_summary
-                    ),
+                    axis_i_missed_fault_interval=axis_i_missed_fault_interval(episode_rate_summary),
                     axis_ii_tracker_agreement_interval=axis_ii_tracker_agreement_interval(
                         tracker_agreement_summary
                     ),
@@ -227,8 +225,7 @@ def main() -> None:
     validation claim, NOT a pass/fail judgment, and NOT a cross-seed
     summary -- see module docstring."""
     print(
-        "=== U06 seed-repetition report: injected_current_spike, 5 seeds "
-        "(simulation-only) ==="
+        "=== U06 seed-repetition report: injected_current_spike, 5 seeds " "(simulation-only) ==="
     )
     report = build_seed_repetition_report()
     for result in report.results:

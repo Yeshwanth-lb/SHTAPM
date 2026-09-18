@@ -36,12 +36,9 @@ def _window_outcome(
     attribution: Attribution = Attribution.none,
 ) -> WindowOutcome:
     window = Window(start_index=0, end_index=30, features={ch: (0.0,) * 30 for ch in CHANNELS})
-    trust = {
-        ch: TrustReading(channel=ch, g=1.0, trust=trust_value, band=band) for ch in CHANNELS
-    }
+    trust = {ch: TrustReading(channel=ch, g=1.0, trust=trust_value, band=band) for ch in CHANNELS}
     attributions = {
-        ch: AttributionResult(channel=ch, attribution=attribution, reason="")
-        for ch in CHANNELS
+        ch: AttributionResult(channel=ch, attribution=attribution, reason="") for ch in CHANNELS
     }
     return WindowOutcome(
         window=window,

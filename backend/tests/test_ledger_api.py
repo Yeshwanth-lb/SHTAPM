@@ -155,9 +155,7 @@ def test_export_json_default(client, seed):
 
 def test_export_csv(client, seed):
     token = _login(client, "admin@example.com", "adminpw")
-    r = client.get(
-        "/api/ledger/pump-01/export", params={"format": "csv"}, headers=_auth(token)
-    )
+    r = client.get("/api/ledger/pump-01/export", params={"format": "csv"}, headers=_auth(token))
     assert r.status_code == 200
     assert r.headers["content-type"].startswith("text/csv")
     assert "block_index" in r.text
@@ -166,9 +164,7 @@ def test_export_csv(client, seed):
 
 def test_export_invalid_format_is_400(client, seed):
     token = _login(client, "admin@example.com", "adminpw")
-    r = client.get(
-        "/api/ledger/pump-01/export", params={"format": "xml"}, headers=_auth(token)
-    )
+    r = client.get("/api/ledger/pump-01/export", params={"format": "xml"}, headers=_auth(token))
     assert r.status_code == 400
 
 

@@ -107,8 +107,13 @@ def test_ws_non_admin_cannot_request_unowned_device_id(monkeypatch):
     _no_broker(monkeypatch)
     with TestClient(app) as client:
         token = _seed_user(app, UserRole.operator, owned_device_ids=("pump-01",))
-        with pytest.raises(Exception), client.websocket_connect(  # noqa: B017
-            f"/ws?token={token}&device_id=pump-02"
+        with (
+            # Starlette raises WebSocketDisconnect here, but the handshake is
+            # rejected before accept() so the client can surface it as a
+            # transport-level error instead -- the assertion is that connecting
+            # FAILS, not which exception type carries that.
+            pytest.raises(Exception),  # noqa: B017
+            client.websocket_connect(f"/ws?token={token}&device_id=pump-02"),
         ):
             pass
 

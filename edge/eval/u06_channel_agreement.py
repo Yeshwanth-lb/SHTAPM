@@ -177,9 +177,7 @@ def summarize_channel_agreement(record: EpisodeRecord) -> ChannelAgreementSummar
         channel_match_count=channel_match_count,
         channel_mismatch_count=channel_mismatch_count,
         channel_match_rate=channel_match_rate,
-        tracked_without_injection_observation_count=(
-            tracked_without_injection_observation_count
-        ),
+        tracked_without_injection_observation_count=(tracked_without_injection_observation_count),
         tracked_without_injection_channels_seen=tuple(
             sorted(tracked_without_injection_channels_seen)
         ),
