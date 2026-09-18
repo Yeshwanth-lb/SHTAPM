@@ -55,6 +55,18 @@ def _empty_window() -> Window:
     return Window(start_index=0, end_index=1, features={ch: (0.0,) for ch in CHANNELS})
 
 
+def _window_observing(value: float) -> Window:
+    """Window whose every channel's latest value is ``value``.
+
+    Divergence is the residual between the twin's reconstruction and the
+    channel's OBSERVED value in the window -- both in the preprocessor's
+    normalised space. Tests therefore vary the window to drive divergence;
+    ``raw_value`` (engineering units) is reported but never differenced,
+    so varying it cannot produce a residual.
+    """
+    return Window(start_index=0, end_index=1, features={ch: (value,) for ch in CHANNELS})
+
+
 class ManualClock:
     """Deterministic clock, same pattern as edge/tests/test_watchdog.py."""
 
@@ -79,7 +91,7 @@ def _make_orchestrator(
 ):
     twin = _FixedReconstructionTwinFixture(twin_value)
     divergence_scorer = DivergenceScorer()
-    # Tight residual spread around 0.0 so a raw_value far from twin_value
+    # Tight residual spread around 0.0 so an observed value far from twin_value
     # (residual far from 0) produces a large, easily-distinguishable z-score.
     # Both channels fit identically so multi-channel tests can reason about
     # either one predictably.
@@ -156,10 +168,10 @@ def test_unknown_channel_raises():
 def test_large_divergence_escalates_and_calls_safe_stop():
     clock = ManualClock()
     orchestrator, calls = _make_orchestrator(clock=clock)
-    # twin_value=0.0, residual fit tight around 0.0; raw_value far from 0.0
-    # forces a large residual -> large z-score -> exceeds the fixture threshold.
+    # twin_value=0.0, residual fit tight around 0.0; an OBSERVED value far from
+    # 0.0 forces a large residual -> large z-score -> exceeds the fixture threshold.
     outcome = orchestrator.process_isolated_channel(
-        "temperature", _empty_window(), raw_value=100.0, trust=0.2
+        "temperature", _window_observing(100.0), raw_value=0.0, trust=0.2
     )
     assert outcome.escalated is True
     assert outcome.escalation_reason == EscalationReason.DIVERGENCE_EXCEEDED
@@ -181,7 +193,7 @@ def test_divergence_escalation_clears_episode():
     clock = ManualClock()
     orchestrator, calls = _make_orchestrator(clock=clock)
     orchestrator.process_isolated_channel(
-        "temperature", _empty_window(), raw_value=100.0, trust=0.2
+        "temperature", _window_observing(100.0), raw_value=0.0, trust=0.2
     )
     assert calls["n"] == 1
     clock.advance(5.0)
@@ -204,9 +216,9 @@ def test_divergence_exactly_at_threshold_escalates():
     clock = ManualClock()
     divergence_scorer = DivergenceScorer()
     divergence_scorer.fit({"temperature": [-0.1, 0.0, 0.1]})
-    raw_value = -1.0
+    observed_value = -1.0
     reconstructed_value = 0.0
-    residual = reconstructed_value - raw_value
+    residual = reconstructed_value - observed_value
     exact_divergence = divergence_scorer.score("temperature", residual)
 
     twin = _FixedReconstructionTwinFixture(reconstructed_value)
@@ -223,7 +235,7 @@ def test_divergence_exactly_at_threshold_escalates():
         clock=clock,
     )
     outcome = orchestrator.process_isolated_channel(
-        "temperature", _empty_window(), raw_value=raw_value, trust=0.2
+        "temperature", _window_observing(observed_value), raw_value=0.0, trust=0.2
     )
     assert outcome.divergence == exact_divergence
     assert outcome.escalated is True
@@ -386,11 +398,11 @@ def test_uncertainty_cap_independent_of_divergence_value():
     clock = ManualClock()
     orchestrator, calls = _make_orchestrator(clock=clock, divergence_threshold=10_000.0)
     orchestrator.process_isolated_channel(
-        "temperature", _empty_window(), raw_value=100.0, trust=0.2
+        "temperature", _window_observing(100.0), raw_value=0.0, trust=0.2
     )
     clock.advance(50.0)
     outcome = orchestrator.process_isolated_channel(
-        "temperature", _empty_window(), raw_value=100.0, trust=0.2
+        "temperature", _window_observing(100.0), raw_value=0.0, trust=0.2
     )
     assert outcome.escalated is False  # divergence threshold never crossed
     assert outcome.divergence is not None and outcome.divergence > 0
@@ -403,7 +415,7 @@ def test_divergence_escalation_independent_of_uncertainty_cap():
     clock = ManualClock()
     orchestrator, calls = _make_orchestrator(clock=clock, uncertainty_cap=10_000.0)
     outcome = orchestrator.process_isolated_channel(
-        "temperature", _empty_window(), raw_value=100.0, trust=0.2
+        "temperature", _window_observing(100.0), raw_value=0.0, trust=0.2
     )
     assert outcome.escalated is True
     assert outcome.escalation_reason == EscalationReason.DIVERGENCE_EXCEEDED
@@ -445,10 +457,10 @@ def test_simultaneous_divergence_and_expiry_calls_safe_stop_once():
     orchestrator, calls = _make_orchestrator(clock=clock)
     orchestrator.process_isolated_channel("temperature", _empty_window(), raw_value=0.0, trust=0.2)
     clock.advance(SUBSTITUTION_MAX_SECONDS_FIXTURE)  # elapsed >= max: expiry condition true
-    # raw_value=100.0 also forces divergence >= threshold: both conditions
+    # the observed value of 100.0 also forces divergence >= threshold: both conditions
     # are true on this single call.
     outcome = orchestrator.process_isolated_channel(
-        "temperature", _empty_window(), raw_value=100.0, trust=0.2
+        "temperature", _window_observing(100.0), raw_value=0.0, trust=0.2
     )
     assert outcome.escalated is True
     assert outcome.escalation_reason == EscalationReason.DIVERGENCE_EXCEEDED
@@ -468,14 +480,14 @@ def test_repeated_escalation_after_reset():
     clock = ManualClock()
     orchestrator, calls = _make_orchestrator(clock=clock)
     outcome1 = orchestrator.process_isolated_channel(
-        "temperature", _empty_window(), raw_value=100.0, trust=0.2
+        "temperature", _window_observing(100.0), raw_value=0.0, trust=0.2
     )
     assert outcome1.escalated is True
     assert calls["n"] == 1
 
     clock.advance(5.0)
     outcome2 = orchestrator.process_isolated_channel(
-        "temperature", _empty_window(), raw_value=100.0, trust=0.2
+        "temperature", _window_observing(100.0), raw_value=0.0, trust=0.2
     )
     assert outcome2.escalated is True
     assert outcome2.escalation_reason == EscalationReason.DIVERGENCE_EXCEEDED
@@ -513,7 +525,7 @@ def test_two_channels_processed_independently_in_same_orchestrator():
     # Escalate "temperature" via large divergence; "current" must remain
     # unaffected -- own episode intact, not escalated.
     outcome_temp2 = orchestrator.process_isolated_channel(
-        "temperature", _empty_window(), raw_value=100.0, trust=0.2
+        "temperature", _window_observing(100.0), raw_value=0.0, trust=0.2
     )
     assert outcome_temp2.escalated is True
     assert calls["n"] == 1
@@ -553,7 +565,7 @@ def test_safe_stop_wired_to_real_relay_controller():
     )
 
     outcome = orchestrator.process_isolated_channel(
-        "temperature", _empty_window(), raw_value=100.0, trust=0.2
+        "temperature", _window_observing(100.0), raw_value=0.0, trust=0.2
     )
     assert outcome.escalated is True
     assert controller.state is RelayState.OFF

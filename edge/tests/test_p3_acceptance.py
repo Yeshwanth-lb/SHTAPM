@@ -88,6 +88,22 @@ def _window() -> Window:
     return Window(start_index=0, end_index=30, features={ch: (0.0,) * 30 for ch in CHANNELS})
 
 
+def _window_observing(value: float) -> Window:
+    """Window whose every channel observes ``value``.
+
+    Divergence is the residual between the twin's reconstruction and the
+    channel's observed value in the window (both normalised), so the window --
+    not ``raw_value`` -- is what drives it."""
+    return Window(start_index=0, end_index=30, features={ch: (value,) * 30 for ch in CHANNELS})
+
+
+def _residual_for(twin, window: Window, channel: str) -> float:
+    """The residual the orchestrator will actually compute for this
+    twin/window/channel -- used to fit a scorer that puts divergence near zero,
+    isolating whichever OTHER mechanism a test is exercising."""
+    return twin.reconstruct(window, channel) - window.features[channel][-1]
+
+
 def _make_orchestrator(clock: ManualClock, safe_stop=None):
     network = _LSTMTwinNet(hidden_size=HIDDEN_SIZE_FIXTURE)
     twin = LSTMTwinReconstructor(network)
@@ -130,15 +146,17 @@ def test_p3_heal_e1_substitution_near_uncertainty_cap_raises_alert():
 
     network = _LSTMTwinNet(hidden_size=HIDDEN_SIZE_FIXTURE)
     twin = LSTMTwinReconstructor(network)
-    # Track the (untrained, arbitrarily-initialized) twin's own
-    # reconstruction so raw_value keeps divergence near 0 throughout --
-    # isolates the uncertainty-cap mechanism from the independent
-    # divergence mechanism (the three signals are independent by design;
-    # see edge/pipeline/self_heal.py).
-    tracked_value = twin.reconstruct(window, "temperature")
+    # Fit the scorer around the residual this twin/window pair actually
+    # produces, so divergence stays near 0 throughout -- isolating the
+    # uncertainty-cap mechanism from the independent divergence mechanism
+    # (the three signals are independent by design; see
+    # edge/pipeline/self_heal.py).
+    tracked_residual = _residual_for(twin, window, "temperature")
 
     divergence_scorer = DivergenceScorer()
-    divergence_scorer.fit({"temperature": [-0.1, 0.0, 0.1]})
+    divergence_scorer.fit(
+        {"temperature": [tracked_residual - 0.1, tracked_residual, tracked_residual + 0.1]}
+    )
     uncertainty_proxy = ElapsedTimeUncertaintyProxy(scaling_fn=linear_scaling)
     calls = {"n": 0}
 
@@ -156,11 +174,9 @@ def test_p3_heal_e1_substitution_near_uncertainty_cap_raises_alert():
         clock=clock,
     )
 
-    orchestrator.process_isolated_channel("temperature", window, raw_value=tracked_value, trust=0.2)
+    orchestrator.process_isolated_channel("temperature", window, raw_value=0.0, trust=0.2)
     clock.advance(50.0)  # fraction = 50/60 = 0.833 >= UNCERTAINTY_CAP_D020 (0.8)
-    outcome = orchestrator.process_isolated_channel(
-        "temperature", window, raw_value=tracked_value, trust=0.2
-    )
+    outcome = orchestrator.process_isolated_channel("temperature", window, raw_value=0.0, trust=0.2)
 
     assert outcome.alert is not None
     assert outcome.alert.message == "Uncertainty flagged high (nearing cap); alert raised"
@@ -185,11 +201,11 @@ def test_p3_heal_s1_divergence_beyond_threshold_escalates_to_safe_pump_stop():
     controller = RelayController(FakeActuator())
     controller.on()
     orchestrator, _calls = _make_orchestrator(clock, safe_stop=controller.safe_off)
-    window = _window()
+    # The scorer is fit tightly around 0.0, so a window observing a value far
+    # from the twin's (small, untrained) reconstruction forces a large residual.
+    window = _window_observing(100.0)
 
-    outcome = orchestrator.process_isolated_channel(
-        "temperature", window, raw_value=100.0, trust=0.2
-    )
+    outcome = orchestrator.process_isolated_channel("temperature", window, raw_value=0.0, trust=0.2)
 
     assert outcome.escalated is True
     assert outcome.escalation_reason == EscalationReason.DIVERGENCE_EXCEEDED
@@ -222,10 +238,12 @@ def test_p3_heal_s2_bounded_window_prevents_indefinite_trust_despite_low_diverge
     # every cycle below -- guarantees residual == 0 (divergence == 0)
     # regardless of this random initialization's actual output, modeling
     # an attacker who perfectly tracks the twin's expectation every cycle.
-    tracked_value = twin.reconstruct(window, "temperature")
+    tracked_residual = _residual_for(twin, window, "temperature")
 
     divergence_scorer = DivergenceScorer()
-    divergence_scorer.fit({"temperature": [-0.1, 0.0, 0.1]})
+    divergence_scorer.fit(
+        {"temperature": [tracked_residual - 0.1, tracked_residual, tracked_residual + 0.1]}
+    )
     uncertainty_proxy = ElapsedTimeUncertaintyProxy(scaling_fn=linear_scaling)
     calls = {"n": 0}
 
@@ -246,7 +264,7 @@ def test_p3_heal_s2_bounded_window_prevents_indefinite_trust_despite_low_diverge
     for elapsed in (0.0, 10.0, 20.0, 30.0, 40.0, 50.0):
         clock.t = elapsed
         outcome = orchestrator.process_isolated_channel(
-            "temperature", window, raw_value=tracked_value, trust=0.2
+            "temperature", window, raw_value=0.0, trust=0.2
         )
         assert outcome.escalated is False, (
             f"divergence stayed ~0 by construction at elapsed={elapsed}s -- "
@@ -254,9 +272,7 @@ def test_p3_heal_s2_bounded_window_prevents_indefinite_trust_despite_low_diverge
         )
 
     clock.t = 60.0
-    outcome = orchestrator.process_isolated_channel(
-        "temperature", window, raw_value=tracked_value, trust=0.2
-    )
+    outcome = orchestrator.process_isolated_channel("temperature", window, raw_value=0.0, trust=0.2)
 
     assert outcome.escalated is True
     assert outcome.escalation_reason == EscalationReason.SUBSTITUTION_EXPIRED

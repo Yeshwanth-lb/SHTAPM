@@ -82,7 +82,13 @@ class SelfHealAlert:
 @dataclass(frozen=True)
 class SelfHealOutcome:
     """Everything the orchestrator produced for one isolated channel in one
-    cycle (internal structure, not a wire contract)."""
+    cycle (internal structure, not a wire contract).
+
+    ``reconstructed_value`` and ``observed_value`` are both in the twin's own
+    space -- the preprocessor's per-window min-max NORMALISED units, not
+    engineering units (see process_isolated_channel). ``raw_value`` carries the
+    sensor's reading in engineering units, for traceability only: it is
+    reported, never differenced against the reconstruction."""
 
     channel: str
     substituted: bool
@@ -92,6 +98,8 @@ class SelfHealOutcome:
     escalated: bool
     escalation_reason: str | None
     alert: SelfHealAlert | None
+    observed_value: float | None = None
+    raw_value: float | None = None
 
 
 @dataclass
@@ -156,6 +164,8 @@ class SelfHealOrchestrator:
                 escalated=False,
                 escalation_reason=None,
                 alert=None,
+                observed_value=None,
+                raw_value=raw_value,
             )
 
         episode = self._episodes.get(channel)
@@ -164,7 +174,22 @@ class SelfHealOrchestrator:
             self._episodes[channel] = episode
 
         reconstructed = self._twin.reconstruct(window, channel)
-        residual = reconstructed - raw_value
+        # The twin is trained to predict ``window.features[channel][-1]`` -- the
+        # preprocessor's per-window min-max NORMALISED value (see the target in
+        # edge/eval/twin_training.py). The residual must be taken against that
+        # same quantity. Differencing against ``raw_value`` instead compares a
+        # [0,1] prediction with an engineering-unit reading (e.g. 0.78 A, or
+        # 917 hPa), producing a residual with no physical meaning -- and one
+        # whose magnitude is dominated by the unit mismatch rather than by any
+        # disagreement between twin and sensor.
+        #
+        # Reading the channel's own value HERE is correct and is not the
+        # masking violation edge/models/twin.py warns about: that warning is
+        # about the network's INPUT (feeding the true value in would make
+        # reconstruction trivial). This is the ground truth the reconstruction
+        # is scored against, which is exactly what a residual is.
+        observed = window.features[channel][-1]
+        residual = reconstructed - observed
         divergence = self._divergence_scorer.score(channel, residual)
 
         elapsed = self._clock() - episode.start_time
@@ -192,6 +217,8 @@ class SelfHealOrchestrator:
                 escalated=True,
                 escalation_reason=EscalationReason.DIVERGENCE_EXCEEDED,
                 alert=alert,
+                observed_value=observed,
+                raw_value=raw_value,
             )
 
         if elapsed >= self._substitution_max_seconds:
@@ -206,6 +233,8 @@ class SelfHealOrchestrator:
                 escalated=True,
                 escalation_reason=EscalationReason.SUBSTITUTION_EXPIRED,
                 alert=alert,
+                observed_value=observed,
+                raw_value=raw_value,
             )
 
         return SelfHealOutcome(
@@ -217,4 +246,6 @@ class SelfHealOrchestrator:
             escalated=False,
             escalation_reason=None,
             alert=alert,
+            observed_value=observed,
+            raw_value=raw_value,
         )

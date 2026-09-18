@@ -62,15 +62,38 @@ class _CapturingTwinFixture:
         return self._value
 
 
+def _window_observing(value: float, **per_channel: float) -> Window:
+    """Window whose channels observe ``value``, overridden per channel by
+    keyword. The observed value is what the twin's reconstruction is scored
+    against, so this is what drives divergence."""
+    return Window(
+        start_index=0,
+        end_index=1,
+        features={ch: (per_channel.get(ch, value),) for ch in CHANNELS},
+    )
+
+
 def _empty_window() -> Window:
     return Window(start_index=0, end_index=1, features={ch: (0.0,) for ch in CHANNELS})
 
 
-def _window_outcome(trust_overrides: Mapping[str, float]) -> WindowOutcome:
+def _window_outcome(
+    trust_overrides: Mapping[str, float],
+    observing: float | None = None,
+    **per_channel: float,
+) -> WindowOutcome:
     """Build a minimal, realistic WindowOutcome. Only `window` and `trust`
     matter to the adapter under test; anomaly/channel_flags/attribution are
-    filled with inert placeholders."""
-    window = _empty_window()
+    filled with inert placeholders.
+
+    ``observing`` sets every channel's latest window value. Divergence is the
+    residual between the twin's reconstruction and that OBSERVED value (both
+    normalised), so this -- not ``raw_values`` -- is what drives escalation."""
+    window = (
+        _empty_window()
+        if observing is None and not per_channel
+        else _window_observing(observing or 0.0, **per_channel)
+    )
     anomaly = AnomalyResult(flag=False, severity=0.0)
     channel_flags = {ch: False for ch in CHANNELS}
     trust: dict[str, TrustReading] = {}
@@ -207,10 +230,15 @@ def test_window_passed_through_unchanged():
     assert called_channel == "temperature"
 
 
-def test_raw_value_passed_through_unchanged_escalates():
-    """twin reconstructs to 0.0; a raw_value far from 0.0 must produce a
-    large divergence and escalate -- proves the exact supplied raw_values
-    entry (not some derived/default value) reached the residual."""
+def test_raw_value_passed_through_unchanged():
+    """The exact supplied raw_values entry -- not a derived or default value --
+    reaches the orchestrator and is reported back.
+
+    This used to be asserted indirectly, by making raw_value large enough to
+    force an escalation. That worked only while the residual was (wrongly)
+    computed against raw_value; the orchestrator now scores the twin against
+    the window's observed value, so pass-through is asserted directly instead.
+    """
     orchestrator, calls = _make_orchestrator()
     outcome = _window_outcome({"temperature": 0.2})
 
@@ -221,11 +249,30 @@ def test_raw_value_passed_through_unchanged_escalates():
         orchestrator=orchestrator,
     )
 
+    assert result["temperature"].raw_value == 100.0
+    # raw_value is reported, never differenced: it cannot drive escalation.
+    assert result["temperature"].escalated is False
+    assert calls["n"] == 0
+
+
+def test_observed_value_far_from_reconstruction_escalates():
+    """twin reconstructs to 0.0; an observed value far from 0.0 produces a
+    large divergence and escalates."""
+    orchestrator, calls = _make_orchestrator()
+    outcome = _window_outcome({"temperature": 0.2}, observing=100.0)
+
+    result = process_isolated_channels(
+        outcome,
+        isolated_channels={"temperature"},
+        raw_values={"temperature": 0.0},
+        orchestrator=orchestrator,
+    )
+
     assert result["temperature"].escalated is True
     assert calls["n"] == 1
 
 
-def test_raw_value_near_reconstruction_does_not_escalate():
+def test_observed_value_near_reconstruction_does_not_escalate():
     orchestrator, calls = _make_orchestrator()
     outcome = _window_outcome({"temperature": 0.2})
 
@@ -250,15 +297,15 @@ def test_two_channels_processed_independently():
     their own correct window/raw_value/trust routed through, with no
     cross-contamination between the two result entries."""
     orchestrator, calls = _make_orchestrator()
-    outcome = _window_outcome({"temperature": 0.2, "current": 0.2})
+    # "temperature" observes near its reconstruction (no escalation); "current"
+    # observes far from it (escalates) -- proving each channel is scored against
+    # its OWN window values, not a shared or averaged one.
+    outcome = _window_outcome({"temperature": 0.2, "current": 0.2}, observing=0.0, current=100.0)
 
     result = process_isolated_channels(
         outcome,
         isolated_channels={"temperature", "current"},
-        # "temperature" stays near its reconstruction (no escalation);
-        # "current" is far from it (escalates) -- proves per-channel
-        # raw_values are routed independently, not shared/averaged.
-        raw_values={"temperature": 0.0, "current": 100.0},
+        raw_values={"temperature": 0.0, "current": 55.0},
         orchestrator=orchestrator,
     )
 
@@ -268,6 +315,9 @@ def test_two_channels_processed_independently():
     assert result["current"].escalated is True
     assert result["current"].substituted is False
     assert calls["n"] == 1
+    # Per-channel raw_values are also routed independently, not shared.
+    assert result["temperature"].raw_value == 0.0
+    assert result["current"].raw_value == 55.0
 
 
 # ---------------------------------------------------------------------------
