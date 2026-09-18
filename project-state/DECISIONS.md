@@ -2718,3 +2718,57 @@ does not authorize any wiring or actuation.
 - U06's status in the UNDECIDED list above is unchanged: fully open, zero
   partial resolution.
 - U05 remains open.
+
+### D029 — APPROVED: the digital twin uses a fixed clean-baseline z-score scale, so reconstructions are invertible to engineering units
+- **Date:** 2026-09-18 (recorded), **approved** by the project supervisor.
+- **Status:** APPROVED. Implemented in `edge/models/scaling.py` (`ChannelScaler`).
+
+- **Problem this resolves.** FR-H1/FR-H2 require an isolated channel's value to
+  be *substituted* by the twin's reconstruction. That is only possible if the
+  reconstruction can be expressed in the channel's own engineering units. It
+  could not be:
+  - `edge/anomaly/preprocess.py` normalises each window to its OWN min/max, so a
+    normalised value means "where this sample sits within this window's range".
+  - Recovering engineering units from that requires the window's min/max, which
+    are computed from the very channel the self-healing path has just decided
+    not to trust — circular, and exactly the R3 gameability risk the PRD names.
+
+- **Decision.** The twin uses a per-channel **mean/std (z-score) scale fitted
+  once on clean-baseline data and then held fixed**, independent of any window.
+  `denormalize(normalize(x)) == x` for all x, so a reconstruction converts back
+  to engineering units unambiguously.
+
+- **Why z-score rather than min-max.** A min-max fit is defined entirely by the
+  two extreme samples. The 2026-09-18 bench capture contains genuine
+  single-sample dropouts (BMP280 read exactly 750.86 hPa twice against a ~917
+  hPa baseline), and one such sample would redefine the whole range and push
+  every ordinary reading to one end of it. Mean/std dilutes an outlier across
+  all n samples. **This is not a claim that mean/std is robust to outliers** —
+  the fitted std is noticeably inflated by one — only that typical values are
+  not relocated to the edge of the scale.
+
+- **Why fitted on clean data only.** Same leakage discipline already required of
+  `ConsistencyProvider`, `ChannelFlagPolicy` and `DivergenceScorer`: an attacked
+  or faulty segment must never define what "normal scale" means.
+
+- **What is explicitly NOT changed:**
+  - **P2's own preprocessing is untouched.** `edge/anomaly/preprocess.py` keeps
+    per-window min-max for anomaly detection, as previously confirmed
+    (`P2_RESUME.md` §3a — "per-window min-max confirmed, not changed"). That
+    decision concerned the Isolation Forest's inputs; this one concerns the
+    twin's, and the two are independent.
+  - The twin architecture (D016): single-layer unidirectional LSTM → final
+    hidden state → Linear → scalar, `hidden_size` still required with no
+    default.
+  - D018's divergence semantics, D019/D020's uncertainty method and values.
+
+- **Does NOT resolve:** `divergence_threshold`'s numeric value (U05 — still
+  open at the time of this entry), any claim of reconstruction accuracy, or
+  whether a twin trained on this bench generalises to the project's pump.
+
+- **Related correction (same session, commit `58ae8af`).** `SelfHealOrchestrator`
+  previously computed `residual = reconstructed - raw_value`, differencing a
+  normalised prediction against an engineering-unit reading. The residual is now
+  taken against the channel's observed value in the twin's own space. That was a
+  latent defect, never executed (P3 is not wired into `edge/main.py`), which
+  would have produced meaningless divergence scores the moment it was.
