@@ -43,6 +43,11 @@ from datetime import UTC, datetime
 
 try:
     from edge.drivers.adxl335 import ADXL335Driver, ADXL335MCP3008Reader
+    from edge.drivers.bmp280 import BMP280Driver
+    from edge.drivers.dht22_adafruit import (
+        DHT22AdafruitDriver,
+        DHT22AdafruitTemperatureDriver,
+    )
     from edge.drivers.ina219 import INA219Driver
 except ImportError as e:  # pragma: no cover - bench script
     print(f"ERROR: could not import edge drivers ({e}).", file=sys.stderr)
@@ -56,9 +61,17 @@ except ImportError as e:  # pragma: no cover - bench script
 # Bench wiring -- matches edge/main.py's _DEFAULT_CHANNEL_SPECS.
 INA219_BUS = 1
 INA219_ADDR = 0x40
+BMP280_BUS = 1
+BMP280_ADDR = 0x76
+DHT22_PIN = 17
 ADXL335_X_CHANNEL = 0
 ADXL335_Y_CHANNEL = 1
 ADXL335_Z_CHANNEL = 2
+
+# `gas` is deliberately absent: no MQ-135 driver exists (edge/drivers/registry.py),
+# and a capture is evidence -- writing a synthetic value into one would make the
+# file indistinguishable from measured data later. A consumer that needs six
+# channels supplies its own placeholder, explicitly.
 
 SAMPLE_INTERVAL_S = 1.0
 
@@ -82,12 +95,18 @@ def main() -> int:
         x_channel=ADXL335_X_CHANNEL, y_channel=ADXL335_Y_CHANNEL, z_channel=ADXL335_Z_CHANNEL
     )
     ina_driver = INA219Driver(bus_num=INA219_BUS, address=INA219_ADDR)
+    bmp_driver = BMP280Driver(bus_num=BMP280_BUS, address=BMP280_ADDR)
+    temp_driver = DHT22AdafruitTemperatureDriver(pin=DHT22_PIN)
+    hum_driver = DHT22AdafruitDriver(pin=DHT22_PIN)
 
     signal.signal(signal.SIGINT, _stop)
     signal.signal(signal.SIGTERM, _stop)
 
     print(f"logging to {out_path} (Ctrl+C to stop)")
-    print(f"{'time':<14}{'current_A':>12}{'adc_x':>8}{'adc_y':>8}{'adc_z':>8}{'vib_g':>10}")
+    print(
+        f"{'time':<10}{'current_A':>11}{'adc_x':>7}{'adc_y':>7}{'adc_z':>7}"
+        f"{'vib_g':>9}{'press':>10}{'temp':>7}{'humid':>7}"
+    )
 
     written = 0
     with open(out_path, "a", encoding="utf-8") as fh:
@@ -105,8 +124,14 @@ def main() -> int:
                 x = y = z = None
                 print(f"  [warn] ADXL335 raw read failed: {e}", file=sys.stderr)
 
+            # Every driver's read() is already non-raising (firmware discipline
+            # TRD 02.8): a failure surfaces as healthy=False, so one dead sensor
+            # never stops the rest -- which is the whole point of this script.
             vib = vib_driver.read()
             cur = ina_driver.read()
+            press = bmp_driver.read()
+            temp = temp_driver.read()
+            hum = hum_driver.read()
 
             record = {
                 "ts": ts,
@@ -117,18 +142,27 @@ def main() -> int:
                 "adc_z": z,
                 "vibration_g_driver": vib.value if vib.healthy else None,
                 "vibration_healthy": vib.healthy,
+                "pressure_hpa": press.value if press.healthy else None,
+                "pressure_healthy": press.healthy,
+                "temperature_c": temp.value if temp.healthy else None,
+                "temperature_healthy": temp.healthy,
+                "humidity_pct": hum.value if hum.healthy else None,
+                "humidity_healthy": hum.healthy,
             }
             fh.write(json.dumps(record) + "\n")
             fh.flush()  # survive an abrupt kill; a bench capture is not worth buffering
             written += 1
 
             print(
-                f"{ts[11:19]:<14}"
-                f"{(f'{cur.value:.6f}' if cur.healthy else 'FAIL'):>12}"
-                f"{(x if x is not None else '-'):>8}"
-                f"{(y if y is not None else '-'):>8}"
-                f"{(z if z is not None else '-'):>8}"
-                f"{(f'{vib.value:.4f}' if vib.healthy else 'FAIL'):>10}"
+                f"{ts[11:19]:<10}"
+                f"{(f'{cur.value:.5f}' if cur.healthy else 'FAIL'):>11}"
+                f"{(x if x is not None else '-'):>7}"
+                f"{(y if y is not None else '-'):>7}"
+                f"{(z if z is not None else '-'):>7}"
+                f"{(f'{vib.value:.3f}' if vib.healthy else 'FAIL'):>9}"
+                f"{(f'{press.value:.2f}' if press.healthy else 'FAIL'):>10}"
+                f"{(f'{temp.value:.1f}' if temp.healthy else 'FAIL'):>7}"
+                f"{(f'{hum.value:.1f}' if hum.healthy else 'FAIL'):>7}"
             )
             time.sleep(SAMPLE_INTERVAL_S)
 
