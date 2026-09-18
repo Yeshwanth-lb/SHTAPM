@@ -243,11 +243,19 @@ _BASELINE_FIT = _fit_baseline(_clean_stream(_FIT_LEN, seed=1))
 
 @pytest.mark.xfail(
     reason=(
-        "P2-ANOM-H1: known, decision-backed limitation -- IF/threshold/"
-        "normalization clean-FP behavior is not yet tuned against real "
-        "clean-baseline data (U07-gated), not a missing-code gap. See "
-        "DECISIONS.md D013's own recorded evidence and TODO.md's P2 status "
-        "matrix. Not introduced by, or related to, the PRONOSTIA/prognosis work."
+        "P2-ANOM-H1: fails on THIS FIXTURE'S synthetic stream, not on real "
+        "hardware. Measured 2026-09-18 with the identical detector, threshold "
+        "and preprocessing: 12.7% clean false-positive rate on the synthetic "
+        "stream this test uses (250/1971 windows) versus 0.1% on a real 7.18 h "
+        "bench idle capture (9/10871). The synthetic stream is independent "
+        "uniform noise per channel, so per-window min-max makes every window "
+        "look distinct; real sensors are temporally smooth and consecutive "
+        "windows resemble each other. U07's data gate is therefore DISCHARGED "
+        "for false positives -- the deployed 0.90 threshold is conservative on "
+        "this bench -- but this scenario still fails because it evaluates the "
+        "detector on the fixture, not the rig. Detection rate remains "
+        "unmeasured: no labelled faults on real hardware exist. See "
+        "project-state/BENCH_LOAD_VALIDATION.md and DECISIONS.md D013."
     ),
     strict=False,
 )
@@ -310,11 +318,13 @@ def test_p2_anom_h2_spike_fault_flagged_within_3_windows_and_attributed_fault():
 
 @pytest.mark.xfail(
     reason=(
-        "P2-ANOM-E1: known, decision-backed limitation -- shares P2-ANOM-H1's "
-        "IF/threshold/normalization root cause, U07-gated (real clean-baseline "
-        "data required), not a missing-code gap. See DECISIONS.md D013's own "
-        "recorded evidence and TODO.md's P2 status matrix. Not introduced by, "
-        "or related to, the PRONOSTIA/prognosis work."
+        "P2-ANOM-E1: shares P2-ANOM-H1's root cause, which was measured on "
+        "2026-09-18 and found to be a property of this fixture's synthetic "
+        "stream (12.7% clean FP) rather than of the detector on real hardware "
+        "(0.1% on a 7.18 h bench capture, same threshold and preprocessing). "
+        "U07's data gate is discharged for false positives; this scenario "
+        "still fails because it evaluates the synthetic stream. See "
+        "P2-ANOM-H1's own reason and project-state/BENCH_LOAD_VALIDATION.md."
     ),
     strict=False,
 )

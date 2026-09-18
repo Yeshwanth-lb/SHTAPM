@@ -252,3 +252,66 @@ evaluated per-window at all rather than over a longer horizon.
 isolated channel) is supported by the 45.8% skill result for `current`. The
 divergence *backstop* that escalates to Safe Pump-Stop is not. Wiring the loop
 with escalation enabled on this evidence would produce frequent spurious stops.
+
+---
+
+## 9. U07: Isolation Forest false positives on real bench data (2026-09-18)
+
+`edge/main.py`'s `_P2_DETECTOR_FLAG_THRESHOLD = 0.90` came from a full SWaT.A1
+sweep (`P2_IF_SWAT_TUNING.md`). SWaT is a water treatment plant; that module's
+own docstring says the value travels as a "flag the most unusual ~10%" policy
+choice and "must be revisited once real bench clean/faulty/spoofed data exists
+to validate this value directly (U07)".
+
+Ran `edge/eval/bench_if_tuning.py` against the 7.18 h idle capture. Fit on the
+first half, evaluated on the second — strict temporal separation, never
+shuffled, matching D011-F's requirement for the SWaT harness. Every evaluation
+window is clean, so every flag is a false positive by construction.
+
+| threshold | false flags (n=10,871) | FP rate |
+|---|---|---|
+| 0.80 | 786 | 7.2% |
+| 0.85 | 273 | 2.5% |
+| **0.90 (deployed)** | **9** | **0.1%** |
+| 0.95 | 0 | 0.0% |
+
+**The deployed threshold is conservative on this bench: 0.1% false positives.**
+False positives are spread thinly across channels (≤2 windows each), not
+concentrated in one.
+
+### The finding that matters more: the simulator is ~127× harsher than reality
+
+Identical detector, threshold, preprocessing and fit/eval discipline, applied to
+two clean data sources:
+
+| source (all genuinely clean) | flagged | FP rate |
+|---|---|---|
+| `test_p2_acceptance.py`'s synthetic stream | 250 / 1,971 | **12.7%** |
+| real bench idle capture | 9 / 10,871 | **0.1%** |
+
+The synthetic stream is independent uniform noise per channel. Per-window
+min-max then rescales each window to its own range, so structureless noise makes
+every window look distinct. Real sensor data is temporally smooth and drifts
+slowly, so consecutive windows resemble one another and the detector's
+clean-baseline distribution is tight.
+
+**Consequence for P2-ANOM-H1 and P2-ANOM-E1.** Both were recorded as "IF/
+threshold/normalization not yet tuned against real clean-baseline data
+(U07-gated)". That gate is now **discharged for false positives**, and the
+answer re-characterises the failures: they are a property of the fixture's
+synthetic stream, not of the detector on the hardware it actually runs on. Both
+tests still fail, because both evaluate the synthetic stream — this is a
+correction to the *diagnosis*, not to the result. Their xfail reasons now carry
+these numbers.
+
+### What is still NOT established
+
+**Detection rate.** This measures only how often a healthy rig is wrongly
+flagged. It says nothing about whether a real fault or attack would be caught,
+because no capture contains labelled faults on real hardware. A threshold chosen
+on false positives alone trades away sensitivity invisibly, so 0.90 is reported
+here as *validated-not-to-over-flag*, never as *validated*.
+
+Producing a detection-rate figure needs deliberate fault injection on the
+physical rig — the natural next bench session, and the one that would let AC2
+and O2/O3/O10 be attempted honestly.
