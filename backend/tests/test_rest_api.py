@@ -37,6 +37,7 @@ from app.schemas.decision_diagnostic import (  # noqa: E402
     DecisionDiagnosticMessage,
 )
 from app.services.decision_diagnostic_persistence import DecisionDiagnosticPersistence  # noqa: E402
+from app.services.latency_tracker import LatencyTracker  # noqa: E402
 from fastapi import FastAPI  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 from sqlalchemy import create_engine  # noqa: E402
@@ -80,6 +81,9 @@ def client(session_factory):
     app.state.telemetry_consumer = _FakeConsumer()
     app.state.telemetry_broadcaster = _FakeBroadcaster()
     app.state.telemetry_store = _FakeStore()
+    # A real tracker with no samples: /api/system/health must report null
+    # latency rather than fabricating a figure before any frame arrives.
+    app.state.latency_tracker = LatencyTracker()
 
     def _get_db():
         with session_factory() as session:

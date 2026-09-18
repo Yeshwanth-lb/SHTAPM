@@ -58,6 +58,8 @@ from app.mqtt.consumer import TelemetryConsumer
 from app.mqtt.decision_diagnostic_consumer import DecisionDiagnosticConsumer
 from app.mqtt.status_consumer import StatusConsumer
 from app.services.decision_diagnostic_persistence import DecisionDiagnosticPersistence
+from app.services.decision_ledger import DecisionLedgerRecorder
+from app.services.latency_tracker import LatencyTracker
 from app.services.status_persistence import StatusPersistence
 from app.services.telemetry_persistence import TelemetryPersistence
 from app.services.telemetry_store import TelemetryStore
@@ -82,6 +84,11 @@ async def lifespan(app: FastAPI):
     consumer = TelemetryConsumer(store)
     consumer.add_sink(broadcaster.publish_from_thread)  # MQTT → WS seam
     consumer.add_sink(persistence.persist)  # MQTT → DB seam (off the WS hot path)
+    # Third sink: measure edge→backend latency from the frames themselves, so
+    # /api/system/health can report a real number instead of null.
+    latency_tracker = LatencyTracker()
+    consumer.add_sink(lambda message: latency_tracker.record(message.ts))
+    app.state.latency_tracker = latency_tracker
     settings = MqttSettings.from_env()
     consumer.start(settings.host, settings.port)  # non-blocking; tolerates broker down
     app.state.telemetry_store = store
@@ -93,6 +100,11 @@ async def lifespan(app: FastAPI):
     decision_diagnostic_persistence = DecisionDiagnosticPersistence(session_factory)
     decision_diagnostic_consumer = DecisionDiagnosticConsumer()
     decision_diagnostic_consumer.add_sink(decision_diagnostic_persistence.persist)
+    # Second sink: chain safety-relevant transitions into the tamper-evident
+    # ledger (AC5). Edge-triggered, so a sustained condition produces one block
+    # rather than one per cycle. Its own errors are swallowed, so a ledger fault
+    # cannot stop decision ingestion.
+    decision_diagnostic_consumer.add_sink(DecisionLedgerRecorder(session_factory).record)
     decision_diagnostic_consumer.start(settings.host, settings.port)
     app.state.decision_diagnostic_consumer = decision_diagnostic_consumer
 
