@@ -5,6 +5,55 @@
 > `[x]` = done + verified. Mark `[x]` ONLY when actually implemented and verified.
 > Full task/test detail: PRD §20 + `docs/SHTAPM_Doc06_ImplementationPlan.md`.
 
+---
+
+## ⚠️ STATUS AS OF 2026-09-18 — read before trusting a checkbox below
+
+Sections further down were last revised on 2026-09-07 and **46 commits have
+landed since**. They have been corrected where they were outright wrong, but
+read this summary first. Full detail: `CURRENT_STATE.md`'s top section.
+
+### Acceptance criteria
+
+| | criterion | status |
+|---|---|---|
+| AC1 | 6 channels live, <1% loss/10 min | 🟡 5 real channels; **gas is simulated** |
+| AC2 | Attack detected + attributed, trust <0.4 in ≤3 windows | ❌ D015 structural limitation |
+| AC3 | Isolation → virtual substitution, marked VIRTUAL | ✅ **live end-to-end** |
+| AC4 | Dry-run → autonomous Safe Pump-Stop | ❌ no dry-run detection; no actuation wired |
+| AC5 | Every decision hash-chained, tamper caught | ✅ decision events chained, edge-triggered |
+| AC6 | Sensor→UI <2 s under load | 🟡 edge→backend measured; browser leg not included |
+| AC7 | Auth + RBAC enforced and audited | ✅ |
+| AC8 | Demo script runs twice incl. fallback | ❌ not attempted |
+| AC9 | SWaT/WADI + ablations + confusion matrix | 🟡 SWaT done; **ablations missing** |
+| AC10 | Every Must feature passes Happy/Edge/Sad | ❌ not systematically verified |
+
+### The next thing worth doing
+
+**A fault-injection bench session.** Physically disturb or unplug a sensor while
+capturing. It is the only route to a detection-rate figure, and it unblocks AC2
+and O2/O3/O10 together — the last major evidence gap. Everything else remaining
+is refinement.
+
+### Blockers, with their real reasons
+
+- **U05** — OPEN, reason changed from "no data" to "measurement failed": 5.8%
+  false-escalation at 3σ on clean data. Escalation is disabled (`+inf`) in the
+  live wiring rather than set to a convenient number.
+- **U07** — DISCHARGED for false positives (0.1% on real bench data at the
+  deployed threshold). Detection rate still unmeasured.
+- **U06** — OPEN. Blocks the entire RL pathway. A decision, not a data problem.
+- **U01**, **U14** — OPEN, unchanged.
+- **Live dashboard with the motor running** — blocked by DHT22 EMI; a 0.1 µF
+  ceramic across the motor terminals is the standard fix, untried.
+
+### Still dormant (built + tested, never executed)
+
+`edge/rl/*`, `lstm_prognosis`, `prognosis_runtime`, `actuation/*`. No actuation
+is wired anywhere, by instruction.
+
+---
+
 ## Pre-phase (planning / handoff)
 - [x] Documentation authored (`docs/`)
 - [x] Git repo + CLAUDE.md + GitHub push
@@ -52,14 +101,14 @@
 - [ ] SPIKE (Pi): read one sensor per interface; INA219 resolves pump current  🔒 hardware-blocked
 - [ ] SPIKE (Pi): time LSTM + Isolation Forest forward pass (<500ms budget)  🔒 hardware-blocked
 
-## P1 — Hardware / Acquisition  (hardware-free software COMPLETE; physical gates blocked)
+## P1 — Hardware / Acquisition  (software COMPLETE; FIVE real sensors live since 2026-09-13)
 - [x] **C1** sensor driver abstraction — `SensorDriver`/`Reading` interface + `Sensor` (calibration, range-clamp, health, ts) + fakes (511537c). Real driver bodies now exist and are each individually hardware-validated for five of six channels: `edge/drivers/{adxl335,bmp280,ds18b20,ina219,dht22}.py` (vibration/pressure/temperature/current/humidity — BMP280 replaces the originally-documented BMP180 per D027, added `3e34bd1`/2026-09-03). Gas (MQ-135) still has no driver. **Current bench state (`054caa6`, 2026-09-07): only ADXL335 (vibration) is physically connected** — `edge/main.py`'s config-driven registry wires it as real and the other five channels as fake constants; BMP280 and DS18B20 were each connected alongside/instead of it earlier the same week (`d419d6b`, `adc2eb6`, `8fa7363`) before the bench was reconfigured back to ADXL335 alone, this time also confirming the `decision_diagnostic` MQTT topic live for the first time. See `CURRENT_STATE.md`'s P1 physical-hardware bullet and `IMPLEMENTATION_LOG.md`'s 2026-09-03/09-04/09-07 entries for full detail.
 - [x] **C2** 1 Hz sampler → frozen telemetry frame via shared `build_telemetry` → bounded overwrite ring buffer; monotonic `sample_seq`; 1–10 Hz; injected clock (3bbbf19).
 - [x] **C3** resilient MQTT publisher — retained LWT `online`/`offline`, online-on-connect, FR-Q4 buffered resume (`ceil(rate×60)`) + FIFO replay, reconnect backoff (3a82229); real-broker integration verified.
 - [x] **C2→C3 runtime** — `AcquisitionRuntime` (sample_once→publish) + hardware-free dev CLI `edge/main.py` (345fdde); real-broker integration verified.
 - [x] **C4** relay + deadman watchdog software abstraction — default OFF, `on`/`off`/`safe_off`, watchdog expiry→OFF, explicit reset/recovery, injected clock (10d39be).
-- [ ] Pi OS + I2C/SPI/1-Wire enabled  🔒 hardware-blocked
-- [ ] **Physical acquisition gate** (needs Pi/rig — DO NOT fake): <1% dropped over 10 min on real sensors; **INA219 pump-current resolved**; **physical relay safe-stop** clicks pump OFF before damage; watchdog defaults pump OFF on real process death  🔒 hardware-blocked
+- [x] Pi OS + I2C/SPI enabled — five sensors read live on a Raspberry Pi 5 (DHT22 GPIO17, ADXL335/MCP3008 SPI0, BMP280 + INA219 on I²C bus 1). 1-Wire unused: DS18B20 is an optional alternate (D028), not required.
+- [~] **Physical acquisition gate** — PARTIALLY met. <1% dropped over 10 min: a 7.18 h capture shows no inter-frame gap > 5 s (21,799 frames). NOTE: contiguous `sample_seq` does NOT prove zero drops — unhealthy ticks consume no sequence number. **INA219 pump-current RESOLVED**: 0.78 A measured under motor load, repeatable to 3% across four cycles. **Relay safe-stop and watchdog remain UNVERIFIED physically** — no actuation is wired, by instruction.
 
 ## P2 — Anomaly Detection + Attribution + Trust  ⚠ (no Doc06 phase; from PRD P2)
 > **Hardware-free P2 has NO remaining mandatory software implementation**
@@ -332,9 +381,9 @@ the committed fixture seed/parameters only, not multi-seed stress-tested.
 - [ ] LSTM health (Healthy/Warning/Critical) + failure-ETA on trust-weighted windows  *(architecture skeleton implemented hardware-free 2026-08-31 — `LSTMPrognosisPredictor`/`_LSTMPrognosisNet`, `edge/models/lstm_prognosis.py`, `9f802df`: untrained, no accuracy/calibration claim, no Protocol, no pipeline integration, still 6-wide. Training-data source partially addressed: D021 adopts PRONOSTIA/FEMTO (acquired + inspected read-only) for vibration+temperature methodology validation only — pressure/humidity/gas/current still have no real data source. D022 resolves the temperature-downsampling method, vibration-burst-summary statistic, and a missing-vibration indicator (eventual input contract `len(CHANNELS)+1`). A preprocessing/loader layer exists (`edge/eval/pronostia_prep.py`, committed `c425de0`) and a full 17-bearing data-quality audit found 12/17 bearings usable after D023's three subtractive treatments (implemented and verified against real data). D024 authorizes the eventual four-channel availability-indicator representation (Option B, per-channel, eventual input width 11) — **implemented and committed** (`8b7aa6c`). D025 establishes the RUL/HealthState target-generation methodology (training-bearings-only RUL in seconds, proportional HealthState bands); **D026 resolves the numeric proportions (20% Warning / 5% Critical, explicit policy)**. HealthState methodology AND numeric thresholds are now both resolved on paper, and **target-generation code implementing D025/D026 exists** (`compute_prognosis_targets`, `edge/eval/pronostia_prognosis_targets.py`). **A training harness now exists and has been run against real PRONOSTIA data** (`edge/eval/pronostia_prognosis_training.py`, `68addbb`: 30-sample sliding windows, stride=1, target at each window's final timestep, leave-one-bearing-out cross-validation across the 4 D025 bearings, CrossEntropy+MSE multi-task loss, full evaluation metrics — window/stride/loss/optimizer-interface choices are implementation-level, documented in-module, not DECISIONS.md entries). The first real-data run collapsed to always predicting the majority HealthState class (macro F1 ~0.30, zero Warning/Critical recall in every fold); root-caused via a forward-pass-only diagnostic to unnormalized raw input values (e.g. temperature 70–164°C) saturating the LSTM's gates, confirmed on a fresh untrained network before any training occurred. **Fixed (`983eb04`)**: per-channel z-score input normalization + inverse-frequency class-weighted loss, both fit from training-split examples only per fold (leakage-safe). Re-running confirmed the collapse is gone (all three classes now predicted), but cross-bearing generalization remains inconsistent (1 of 4 folds macro F1 ~0.59, the other 3 weak) — a known small-sample limitation (only 4 bearings, confirmed heterogeneous degradation shapes even within one operating condition), not a code defect. **No claim of a validated/production-ready prognosis model is made.** Real pump/bench validation still required)*
 - [x] Digital-twin: channel-agnostic reconstruction + uncertainty estimate  *(concrete LSTM reconstruction implemented + tested hardware-free 2026-08-31 — `LSTMTwinReconstructor`/`_LSTMTwinNet`, `edge/models/lstm_twin.py`, `43e114d`: single-layer unidirectional LSTM → final hidden state → Linear → scalar; `hidden_size` REQUIRED, no default; masked-channel input never reads the true value + one-hot indicator; satisfies the unmodified `TwinReconstructor` Protocol, integration-tested with `SelfHealOrchestrator` at `66f790e`. Diagnostic-only training harness at `edge/eval/twin_training.py` uses the existing simulator + Preprocessor only. **No meaningful reconstruction accuracy or real-world validation claimed** — the simulator's clean baseline has no cross-channel/temporal structure beyond each channel's own fitted mean. Uncertainty estimate implemented + tested hardware-free (`ElapsedTimeUncertaintyProxy`, `edge/pipeline/uncertainty.py`, D019) — scaling formula (linear, D020) and uncertainty-cap (0.8, D020) both resolved as policy decisions, documentation-only; still required, never-defaulted constructor arguments in code, no value baked in)*
 - [ ] DQN over state `[health, anomaly_flag, T1..T6, failure_eta]` + reward  *(blocked: U06)*
-- [ ] Deterministic rule-based RL fallback (fail-safe)
-- [x] Self-heal: isolate/re-weight + bounded uncertainty-capped virtual substitution  *(orchestration plumbing implemented + tested hardware-free 2026-08-31 — `SelfHealOrchestrator`, `edge/pipeline/self_heal.py`, `8cc5564`: recovery at reused `TRUSTED_MIN`, 60s expiry reused from the Doc05-documented default, wired to the existing `RelayController.safe_off()`. P2→P3 adapter (`process_isolated_channels`, `edge/pipeline/cycle.py`, `fe4042e`/`0cc4d31`) wires an existing P2 `WindowOutcome` through, taking `isolated_channels`/`raw_values` as REQUIRED caller-supplied inputs (never derived from trust/band), validate-all-upfront. Now integration-tested with the real `LSTMTwinReconstructor` (`66f790e`). 68 tests total incl. exact-boundary-equality, simultaneous-conditions, repeated-escalation, multi-channel, and zero-side-effect cases. `uncertainty_cap` (0.8) and the scaling formula (linear) resolved by D020 (policy, documentation-only — still REQUIRED constructor arguments, no default added); `divergence_threshold` remains the sole open numeric value, data-gated (U05). Nothing in this repo yet decides *which* channels are isolated (FR-RL2/FR-RL4 unbuilt); not validated on real hardware)*
-- [x] Divergence detection → escalate to Safe Pump-Stop  *(implemented + tested hardware-free 2026-08-31 — `DivergenceScorer`, `edge/pipeline/divergence.py`, `8cc5564`: fit-time z-score of the twin-vs-isolated-sensor residual (D018 pt.1), wired through `SelfHealOrchestrator` to the existing `RelayController.safe_off()`; numeric `divergence_threshold` remains a REQUIRED parameter, no value chosen — still data-gated, U05)*
+- [~] Deterministic rule-based RL fallback (fail-safe) — the isolation decision slice is live and log-only (`isolation_fallback.py` + `isolation_tracker.py`); `edge/rl/fallback_gate.py` exists but is dormant (U06).
+- [x] Self-heal: isolate/re-weight + bounded uncertainty-capped virtual substitution  **— WIRED AND RUNNING ON THE LIVE PI since 2026-09-18** (`self_heal_runtime.py`, trained twin, substituted channels published → persisted → dashboard VIRTUAL). Escalation to Safe Pump-Stop is DISABLED (`divergence_threshold=+inf`) because U05 failed on measurement, and no actuation is wired. *(earlier note, still accurate for the plumbing itself: implemented + tested hardware-free 2026-08-31 — `SelfHealOrchestrator`, `edge/pipeline/self_heal.py`, `8cc5564`: recovery at reused `TRUSTED_MIN`, 60s expiry reused from the Doc05-documented default, wired to the existing `RelayController.safe_off()`. P2→P3 adapter (`process_isolated_channels`, `edge/pipeline/cycle.py`, `fe4042e`/`0cc4d31`) wires an existing P2 `WindowOutcome` through, taking `isolated_channels`/`raw_values` as REQUIRED caller-supplied inputs (never derived from trust/band), validate-all-upfront. Now integration-tested with the real `LSTMTwinReconstructor` (`66f790e`). 68 tests total incl. exact-boundary-equality, simultaneous-conditions, repeated-escalation, multi-channel, and zero-side-effect cases. `uncertainty_cap` (0.8) and the scaling formula (linear) resolved by D020 (policy, documentation-only — still REQUIRED constructor arguments, no default added); `divergence_threshold` remains the sole open numeric value, data-gated (U05). Nothing in this repo yet decides *which* channels are isolated (FR-RL2/FR-RL4 unbuilt); not validated on real hardware)*
+- [~] Divergence detection → escalate to Safe Pump-Stop — divergence is COMPUTED and reported every cycle on the live Pi; **escalation is unreachable by construction** (`+inf`). U05 is open because the measurement FAILED: 5.8% false-escalation at 3σ on clean held-out data, 4.2% at 6σ, max 68.4σ. *(plumbing: implemented + tested hardware-free 2026-08-31 — `DivergenceScorer`, `edge/pipeline/divergence.py`, `8cc5564`: fit-time z-score of the twin-vs-isolated-sensor residual (D018 pt.1), wired through `SelfHealOrchestrator` to the existing `RelayController.safe_off()`; numeric `divergence_threshold` remains a REQUIRED parameter, no value chosen — still data-gated, U05)*
 - [ ] Dry-run detection → autonomous Safe Pump-Stop
 - [ ] Gate: rule fallback engages if policy missing; divergence→safe-stop (60s-expiry-without-recovery also escalates, D018); dry-run stops before damage; self-heal <500ms
 
@@ -349,32 +398,40 @@ the committed fixture seed/parameters only, not multi-seed stress-tested.
 - [x] SQLAlchemy models (all 10 Doc05 §05.2 tables) + one Alembic migration (`0001_initial_schema`) — untested against real Postgres (no instance available here)
 - [x] TimescaleDB hypertable conversion for `sensor_readings`/`decisions` (migration-only, unverified against real Postgres)
 - [ ] Continuous aggregates (`readings_1min`/`decisions_5min`) + retention policies — deliberately deferred: Doc05 §05.3 only describes them in prose, no consumer exists yet (Analytics page is P5), exact column shape unspecified
-- [ ] `devices.health_state` rollup on decision insert — not done: nothing writes to `decisions` yet (no P2/P3 MQTT producer exists), so there's nothing to roll up from
+- [ ] `devices.health_state` rollup on decision insert — still not done, but the reason has changed: `decisions` rows ARE written now (anomaly, trust, substituted_channels), yet `health_state` itself has no producer because no prognosis model is trained on pump data. Rolling up a column nothing computes would fabricate a health assessment.
 - [x] Auth: login/refresh/logout (rotating+revocable refresh, reuse-detection revokes all of a user's tokens — Doc05's flat schema has no lineage column, see `services/auth_service.py` docstring); bcrypt (pinned `bcrypt==4.0.1` — `passlib` 1.7.4 is incompatible with `bcrypt>=4.1`); JWT access token; `require_role()` RBAC dependency. No public self-register endpoint (Doc05 §05.7 doesn't list one — users are admin-created via `POST /api/users`)
 - [ ] Row-Level Security (DB-level) — deferred to a follow-up (needs a real Postgres to verify policies against); app-level ownership scoping implemented instead (`api/deps.py`: `require_device_access`/`scope_devices_query` — unowned/not-owned devices return 404, never 403)
 - [~] Seed: admin user only (`core/seed.py`, idempotent, password from `SEED_ADMIN_PASSWORD` env, never hardcoded) — operator/analyst/device/thresholds/sensors seeding not scripted; `thresholds` rows are lazily created on first GET/PATCH with Doc05's documented defaults instead
 - [ ] Mosquitto config (auth/topics/persistence) — infra config, out of this backend-code slice
 - [~] Subscriber → DB: telemetry (`services/telemetry_persistence.py`, wired via the existing `TelemetryConsumer.add_sink()` seam, off the WS hot path) **plus, since 2026-09-06, a separate `decision_diagnostic` partial-ingestion path** (`app/mqtt/decision_diagnostic_consumer.py` + `app/services/decision_diagnostic_persistence.py`, wired in `app/main.py`'s lifespan as a wholly independent consumer/subscription) — writes partial `decisions` rows (`anomaly_flag`/`anomaly_severity`/6 trust columns; `health_state`/`failure_eta`/`rl_action`/`isolated_channels`/`substituted_channels`/`attribution`/`reason` stay `NULL`, never fabricated) from the NEW `shtapm/{device_id}/decision_diagnostic` topic, NOT the frozen Doc05 `.../decision` topic/`DecisionMessage` shape. `GET /api/devices/:id/decisions` needed zero code changes to start returning these partial rows. Real ledger/status MQTT ingestion, and ingestion of an actual full `DecisionMessage`, remain NOT built — no producer publishes those yet (no live RL policy/self-heal exists); see `DECISIONS.md`'s decision-diagnostic and U06 non-resolution records for why this is deliberately a separate, additive path rather than the frozen one.
 - [x] WebSocket gateway: `/ws?token=<jwt>&device_id=<id>` now requires a valid JWT (rejects before `accept()` — no frame can leak); non-admin scoped to their owned devices (all of them when no `device_id` filter given, not just one); admin unrestricted
-- [ ] `system_health` WS push frame (Doc05 §05.8, Aurora feed) — NOT built; only the REST `GET /api/system/health` poll endpoint was implemented this slice. `e2e_latency_ms` is honestly `null` there (no continuous latency measurement exists in the running backend to report a real number from)
+- [~] `system_health` — the REST `GET /api/system/health` endpoint now reports a REAL `e2e_latency_ms` measured from the live stream (edge publish → backend receipt; excludes browser rendering, and reports null with a stated reason when clocks disagree). The Doc05 §05.8 **WS push frame is still not built** — REST poll only.
 - [x] REST endpoints (Doc05 §05.7) — full surface except `/inject`
 - [ ] Define `…/command` inject payload — still 🔒 BLOCKED U14 (unspecified in docs; not invented; `POST /api/devices/:id/inject` was not built)
-- [x] Ledger verify service (SHA-256 hash chain per D004; walk chain, report `broken_at`) — `services/ledger.py` + `api/ledger.py` (list/verify/export JSON+CSV); wired to threshold-PATCH config changes (`event_type="config_update"`). RBAC denials stay in `audit_log` only (Doc05's own `audit_log.action` examples already list `"rbac_denied"` there, not in `ledger_blocks`, and most RBAC-checked endpoints have no device to chain against)
+- [x] Ledger verify service (SHA-256 hash chain per D004; walk chain, report `broken_at`) — `services/ledger.py` + `api/ledger.py` (list/verify/export JSON+CSV). **Since 2026-09-18 the live decision path also chains events** (`decision_ledger.py`: `trust_drop`, `isolate`), edge-triggered so a sustained condition writes one block rather than ~86,400/day. Also wired to threshold-PATCH config changes (`event_type="config_update"`). RBAC denials stay in `audit_log` only (Doc05's own `audit_log.action` examples already list `"rbac_denied"` there, not in `ledger_blocks`, and most RBAC-checked endpoints have no device to chain against)
 - [x] Gate (hardware-free portion): role checks pass + audited; tamper caught (`verify()`, including a real SQLite-tzinfo-round-trip bug found and fixed before it could false-positive); malformed input never downs a service (existing MQTT consumer behavior preserved + re-tested). MQTT→WS <1s already established at P0, unaffected by this phase.
 
-## P5 — Dashboard / Aurora
-- [ ] Vite + TS app; Tailwind + Aurora tokens (Doc04 §04.2); shadcn/Radix restyled glass; Framer presets
-- [ ] `components/aurora/`: MeshBackground (health-reactive), GlassTile, TactileToggle
-- [ ] Glass auth screens + token handling + silent refresh; protected layout (sidebar rail, top bar, latency chip)
-- [ ] `useWebSocket` reconnecting hook + Zustand live store; `useHealthField`; TanStack Query REST clients
-- [ ] Pages wired to real data: Overview, Device Detail cockpit, Alerts, Ledger, Analytics, Devices, Settings, Users, System
-- [ ] All empty/error/demo states (Doc03 §03.6)
-- [ ] uPlot live charts (60s scroll, luminous line, breathing cursor, 140ms ease, per-channel hue)
-- [ ] Fault=amber glow / Attack=rose glow+shimmer / VIRTUAL=dashed violet + purple aura + pulsing chip
-- [ ] Trust constellation (ECharts) + dense bar fallback; RUL/health gauge + hero numeral
-- [ ] RL Action Log + Ledger stream in glass wells (bloom-in, mono truncated hash, verify cascade, tamper fracture)
-- [ ] System-health micro-tiles + live E2E latency chip (teal/amber/rose)
-- [ ] Gate: AA contrast over brightest aurora; color+shape/label never color-alone; reduced-motion + reduce-transparency parity; no console errors
+## P5 — Dashboard / Aurora  (BUILT 2026-09-09/10, verified in a browser 2026-09-18)
+
+> This section previously showed every item unchecked. That was **stale by 46
+> commits**: the operator application exists, runs on real backend data, and was
+> verified in a browser against the live Pi stream. Corrected below. Items still
+> unchecked are genuinely not built — several deliberately, because the
+> underlying data has no producer.
+
+- [x] Vite + TS app; Aurora tokens (Doc04 §04.2) in `styles/aurora.css`. **Deviation:** plain CSS, not Tailwind/shadcn/Radix/Framer — no dependency on those was added. Functionally complete; not spec-literal.
+- [~] `components/aurora/`: `MeshBackground`, `GlassTile`, `StateBlock` exist. **Health-reactivity of MeshBackground is UNVERIFIED** — it is not confirmed wired to live health. `TactileToggle` not built.
+- [x] Glass auth screen + token handling; protected layout with sidebar rail and top bar (`AppShell`, `RequireAuth`, `AuthContext`). Silent refresh not verified.
+- [x] `useTelemetryWebSocket` reconnecting hook; `useApiResource` REST clients. **Deviation:** plain React state, not Zustand/TanStack Query. `useHealthField` not built.
+- [x] Pages wired to real data — 9 pages: Overview, Device, Devices, Decisions, History, Alerts, Ledger, Settings, System, Users. Analytics not built.
+- [x] Empty/error/loading states throughout (`StateBlock`, per-page error paths, "no reading received yet" rather than a fabricated 0.0).
+- [ ] uPlot live charts — **deviation:** `Sparkline` is a simple custom chart. No uPlot, no 60 s scroll/glow/breathing cursor/per-channel hue.
+- [~] **VIRTUAL = dashed violet + pulsing dot IS implemented** (`SensorCard`, reserved `--status-virtual`, reduced-motion gated, and text-labelled so state is never colour-alone). Fault=amber / attack=rose channel styling NOT implemented.
+- [~] Trust constellation exists (`TrustConstellation`) with size+colour+printed-value encoding and a "not a live sensor" caveat. **Deviation:** custom CSS, not ECharts; no animated shrink/rekindle. RUL/health gauge NOT built — no prognosis produces a health value to show.
+- [~] Ledger stream built (`LedgerPage`, verify + tamper reporting). RL Action Log NOT built — no RL policy produces actions (U06).
+- [~] System-health tiles built (`SystemPage`). Live E2E latency chip NOT built, though the REST endpoint now serves a real number.
+- [ ] Gate: AA contrast, reduced-motion and reduce-transparency parity, zero console errors — **not systematically verified.** Reduced-motion is respected in the VIRTUAL styling specifically.
+- [x] **Channel provenance surfaced** (not in the original list, added because the frozen contract cannot express it): every channel renders LIVE / PLACEHOLDER / UNVERIFIED from the backend's declaration+registry reconciliation, so a simulated `gas` can never be read as measured.
 
 ## P6 — End-to-End Integration + Demo Hardening
 - [ ] Full stack on real rig via compose; run PRD §18.4 script end to end

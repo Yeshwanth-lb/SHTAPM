@@ -4,6 +4,106 @@
 > `DECISIONS.md`, `TODO.md`, `IMPLEMENTATION_LOG.md`. Authoritative product spec
 > lives in `../CLAUDE.md` and `../docs/` — not duplicated here.
 
+---
+
+# ⚠️ CURRENT STATE — 2026-09-18 (read this section first)
+
+**Everything below the horizontal rule after this section is HISTORICAL.** It
+was accurate when written and is kept for the decision trail, but several of its
+claims are now superseded — most importantly "only ADXL335 is connected",
+"P5 not started", and "P3 is dormant". Where the two disagree, this section wins.
+
+**HEAD:** `ff7c9fb`, pushed. Working tree clean except `frontend/package-lock.json`
+(untracked, protected).
+
+## The bench is real now
+
+Five physical sensors stream live at 1 Hz, verified end-to-end to the dashboard:
+
+| channel | part | status |
+|---|---|---|
+| temperature | DHT22 (GPIO17) | REAL |
+| humidity | DHT22 (same part, D028) | REAL |
+| vibration | ADXL335 → MCP3008 SPI0 | REAL |
+| pressure | BMP280 I²C 0x76 | REAL |
+| current | INA219 I²C 0x40 | REAL |
+| **gas** | — | **SIMULATED. No MQ-135 driver exists.** Never present it as measured. |
+
+Evidence: a 7.18 h idle capture (21,799 frames, no inter-frame gap > 5 s) and a
+19-minute motor-load capture with four ON/OFF cycles. Both are gitignored;
+findings live in `BENCH_LOAD_VALIDATION.md`.
+
+## What changed on 2026-09-18 (23 commits)
+
+**P3 is no longer dormant.** The self-healing loop runs on the live Pi:
+isolation → digital-twin reconstruction → `substituted_channels` published →
+persisted → dashboard renders VIRTUAL. **AC3 is met.**
+
+- **Twin trained on real bench data** — reconstructs `current` with 45.8% skill
+  against a predict-the-mean baseline (RMSE 0.0985 A vs 0.1818 A). `vibration`
+  reached 5.6% and is NOT deployed.
+- **D029 recorded**: the twin uses a fixed clean-baseline z-score scale
+  (`edge/models/scaling.py`), which is what makes a reconstruction invertible to
+  engineering units. P2's per-window min-max is untouched.
+- **D010 validated for the first time**: current↔vibration measured at r = 0.76,
+  R² = 0.58 under motor load, against R² = 0.019 on the idle rig.
+- **AC5**: decision events are now chained into the ledger (`trust_drop`,
+  `isolate`), edge-triggered so a sustained condition is one block, not 86,400/day.
+- **AC6**: `e2e_latency_ms` is a real measurement (edge→backend), null with a
+  stated reason when unmeasurable. Excludes browser rendering.
+
+## Four real bugs found by running on hardware
+
+1. **SQLite thread race** — `StaticPool` shared one connection between the MQTT
+   writer thread and API readers; `/readings` returned 200 or 500 depending on
+   timing. Unit tests are single-threaded and never saw it.
+2. **DHT22 published `0.0`/`0.0` as healthy** under motor EMI. All-zero bits
+   carry a valid checksum, so the library accepted them and the system published
+   0 °C / 0 %RH as truth while the room was 29 °C. Exactly the failure mode this
+   project exists to detect.
+3. **Twin divergence computed across two different unit spaces** — a normalised
+   prediction differenced against an engineering-unit reading. Never executed
+   (P3 was dormant), but would have produced meaningless scores the moment it was.
+4. **`str(Channel.current)` → `"Channel.current"`** would have written corrupted
+   channel names into the tamper-evident ledger.
+
+## Open blockers, with their REAL reasons
+
+| item | status |
+|---|---|
+| **U05** `divergence_threshold` | **OPEN.** The gate changed from "no data" to "measurement failed": on clean held-out data the false-escalation rate is 5.8% at 3σ and 4.2% at 6σ, max 68.4σ. No responsible value exists. Escalation is therefore `+inf` (unreachable) in the live wiring. |
+| **U07** IF tuning | **DISCHARGED for false positives.** 0.1% FP on real bench data at the deployed 0.90 threshold. Detection rate remains unmeasured — no labelled faults on real hardware exist. |
+| **U06** RL reward shaping | OPEN. A policy decision, not a data problem. Blocks the whole RL pathway. |
+| **U01**, **U14** | OPEN, unchanged. |
+| Prognosis on pump data | No degradation source. PRONOSTIA is a methodology proxy only. |
+| Live dashboard **with motor running** | Blocked by DHT22 EMI: the frozen contract has no per-channel health field, so one dropped channel withholds the whole frame. A 0.1 µF ceramic across the motor terminals is the standard fix and has not been tried. |
+
+## Correction to a claim previously made here
+
+Contiguous `sample_seq` does **not** prove zero dropped frames: the counter
+increments only on *published* frames, so unhealthy ticks leave no gap. The idle
+capture's reliability is properly stated as "no inter-frame gap exceeded 5 s over
+7.18 h".
+
+## The single highest-value next step
+
+**A fault-injection bench session** — physically disturb or unplug a sensor while
+capturing. That one session unblocks detection rate, AC2, and O2/O3/O10, which is
+the last major evidence gap. Everything else remaining is refinement.
+
+## Still dormant (built, tested, never executed)
+
+`edge/rl/*` (~1,540 lines, blocked on U06), `lstm_prognosis`,
+`prognosis_runtime`, `actuation/relay.py`, `actuation/watchdog.py`. All
+self-document as simulation-only. No actuation is wired anywhere, by instruction.
+
+**Tests:** 2,056 Python + 149 frontend, zero failures. Ruff and black clean
+repo-wide as of `ff7c9fb`.
+
+---
+
+# HISTORICAL RECORD (pre-2026-09-18) — superseded where it conflicts with the above
+
 **Last updated:** 2026-08-31, end of session — **`983eb04` is the local
 `main` HEAD** (commits ahead of `origin/main`, not yet pushed; working
 tree clean once this documentation sync is committed). This session: P3 scoping closed U03/U04
