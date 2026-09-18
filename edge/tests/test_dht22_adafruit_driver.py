@@ -225,18 +225,30 @@ def test_none_humidity_raises_oserror(patched_library, fake_device):
         reader.read_humidity_percent()
 
 
-def test_reading_humidity_does_not_touch_temperature(patched_library, fake_device):
-    """The humidity path reads only .humidity. (This file's original
-    `test_never_reads_temperature` asserted temperature was NEVER sourced
-    from this sensor; the project now sources both channels from the DHT22
-    by approved decision -- D028 -- so that guard is scoped to what remains
-    true: reading one channel never silently pulls the other, as long as no
-    shared-measurement failure is being propagated -- see the shared-window
-    tests below for that case.)"""
+def test_reading_humidity_peeks_at_temperature_only_to_validate(patched_library, fake_device):
+    """The humidity path DOES now read .temperature, deliberately.
+
+    History of this guard: it began as `test_never_reads_temperature` (when
+    temperature was not sourced from this sensor at all), was narrowed after
+    D028 made the DHT22 serve both channels, and is narrowed again here.
+
+    What changed: the 2026-09-18 bench regression showed the sensor returning
+    0.0 on BOTH channels under motor EMI and publishing it as healthy. Catching
+    that requires seeing the pair, so the humidity path now reads the sibling.
+
+    What is still guaranteed, and is the part that actually mattered: this costs
+    no extra HARDWARE measurement. adafruit_dht re-measures only after its own
+    sampling period, so both property accesses inside one call are served by the
+    single measurement the caller already triggered -- asserted below via the
+    device factory being invoked exactly once.
+    """
     fake_device._script = [50.0]
+    fake_device._temp_script = [26.0]
     reader = DHT22AdafruitReader()
-    reader.read_humidity_percent()
-    assert fake_device.temperature_accessed is False
+
+    assert reader.read_humidity_percent() == pytest.approx(50.0)
+    assert fake_device.temperature_accessed is True  # deliberate, for validation
+    assert patched_library.call_count == 1  # one device, one measurement
 
 
 # ---------------------------------------------------------------------------
@@ -472,3 +484,71 @@ def test_sibling_channel_gets_a_fresh_attempt_once_the_window_elapses(patched_li
 
     clock.now += 2.1  # past the DHT22's own minimum measurement interval
     assert reader.read_humidity_percent() == pytest.approx(61.0)
+
+
+# ---------------------------------------------------------------------------
+# Corrupted 0.0/0.0 read rejection (bench regression, 2026-09-18)
+#
+# Observed on the physical rig: with a brushed DC motor running nearby, the
+# DHT22 stopped raising and instead returned 0.0 for BOTH channels. Those
+# published as healthy 0.0 degC / 0.0 %RH frames while the room was actually
+# 29.2 degC / 59 %RH -- indistinguishable downstream from real measurements.
+# ---------------------------------------------------------------------------
+
+
+def test_humidity_rejects_the_zero_pair(patched_library, fake_device):
+    """0.0 %RH alongside 0.0 degC is a corrupted read, not a measurement."""
+    fake_device._script = [0.0]
+    fake_device._temp_script = [0.0]
+    reader = DHT22AdafruitReader()
+
+    with pytest.raises(OSError, match="corrupted read"):
+        reader.read_humidity_percent()
+
+
+def test_temperature_rejects_the_zero_pair(patched_library, fake_device):
+    fake_device._script = [0.0]
+    fake_device._temp_script = [0.0]
+    reader = DHT22AdafruitReader()
+
+    with pytest.raises(OSError, match="corrupted read"):
+        reader.read_temperature_c()
+
+
+def test_zero_celsius_with_real_humidity_is_still_valid(patched_library, fake_device):
+    """0.0 degC on its own is an ordinary winter temperature and MUST NOT be
+    rejected -- the pair is the discriminator, not either value alone."""
+    fake_device._script = [58.0]
+    fake_device._temp_script = [0.0]
+    reader = DHT22AdafruitReader()
+
+    assert reader.read_temperature_c() == pytest.approx(0.0)
+
+
+def test_zero_humidity_with_real_temperature_is_not_rejected(patched_library, fake_device):
+    """Deliberately narrow: only the BOTH-zero pair is treated as corruption,
+    so this check cannot become an invented plausible-range specification."""
+    fake_device._script = [0.0]
+    fake_device._temp_script = [26.0]
+    reader = DHT22AdafruitReader()
+
+    assert reader.read_humidity_percent() == pytest.approx(0.0)
+
+
+def test_driver_reports_unhealthy_instead_of_publishing_the_zero_pair(patched_library, fake_device):
+    """End of the chain: the corrupted read must surface as healthy=False so
+    the sampler withholds the frame, rather than shipping 0.0 as truth."""
+    fake_device._script = [0.0]
+    fake_device._temp_script = [0.0]
+
+    humidity_reading = DHT22AdafruitDriver().read()
+    assert humidity_reading.healthy is False
+    assert humidity_reading.value is None
+
+    dht22_adafruit_module.reset_shared_readers()
+    fake_device._i = 0
+    fake_device._temp_i = 0
+
+    temperature_reading = DHT22AdafruitTemperatureDriver().read()
+    assert temperature_reading.healthy is False
+    assert temperature_reading.value is None

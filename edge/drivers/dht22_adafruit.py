@@ -164,6 +164,42 @@ class DHT22AdafruitReader:
         self._last_attempt_at = self._monotonic()
         self._last_error = error
 
+    def _sibling_value(self, device: object, attribute: str) -> float | None:
+        """Best-effort read of the OTHER channel from the same measurement.
+
+        Never raises and never records a failure -- it exists only to
+        recognise the corruption signature below. adafruit_dht re-measures
+        only after its own sampling period, so this reuses the measurement
+        the caller already triggered rather than costing a second one."""
+        try:
+            return getattr(device, attribute)
+        except Exception:
+            return None
+
+    def _reject_corrupt_pair(self, *, temperature: float | None, humidity: float | None) -> None:
+        """Reject a measurement reading exactly 0.0 on BOTH channels.
+
+        Observed on the physical bench (2026-09-18): while a brushed DC motor
+        ran nearby, the DHT22 stopped raising and instead returned 0.0 for both
+        channels, which then published as healthy 0.0 degC / 0.0 %RH readings
+        while the room was 29.2 degC / 59 %RH. Nothing downstream could tell
+        those from real measurements.
+
+        The pair is the discriminator, deliberately, not either value alone:
+        0.0 degC on its own is an ordinary winter temperature and must stay
+        valid, whereas 0.0 %RH does not occur in ambient air (it is a
+        desiccator condition). Requiring BOTH keeps this narrow enough to
+        catch the observed failure without inventing a plausible-range
+        specification this project has not established.
+        """
+        if temperature == 0.0 and humidity == 0.0:
+            error = OSError(
+                f"DHT22 (Adafruit, GPIO{self._pin}) returned 0.0 degC and 0.0 %RH together "
+                "-- corrupted read, not a measurement"
+            )
+            self._record_failure(error)
+            raise error
+
     def read_humidity_percent(self) -> float:
         """Read relative humidity (%RH).
 
@@ -186,6 +222,9 @@ class DHT22AdafruitReader:
             error = OSError(f"DHT22 (Adafruit, GPIO{self._pin}) returned no humidity value")
             self._record_failure(error)
             raise error
+        self._reject_corrupt_pair(
+            temperature=self._sibling_value(device, "temperature"), humidity=value
+        )
         self._record_success()
         return float(value)
 
@@ -216,6 +255,9 @@ class DHT22AdafruitReader:
             error = OSError(f"DHT22 (Adafruit, GPIO{self._pin}) returned no temperature value")
             self._record_failure(error)
             raise error
+        self._reject_corrupt_pair(
+            temperature=value, humidity=self._sibling_value(device, "humidity")
+        )
         self._record_success()
         return float(value)
 
