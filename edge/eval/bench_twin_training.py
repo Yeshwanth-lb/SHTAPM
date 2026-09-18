@@ -45,6 +45,7 @@ from app.schemas.contracts import CHANNELS
 from edge.anomaly.preprocess import Window
 from edge.models.lstm_twin import LSTMTwinReconstructor, _LSTMTwinNet, build_masked_input
 from edge.models.scaling import ChannelScaler
+from edge.models.twin_bundle import save_bundle
 
 # Channels a bench capture actually measures. `gas` is absent by construction
 # (no MQ-135 driver); see module docstring.
@@ -356,7 +357,28 @@ def main() -> int:
         if result.skill > 0.1:
             derive_divergence_threshold(network, train_windows, test_windows, channel)
         if args.save_prefix:
-            LSTMTwinReconstructor(network).save(f"{args.save_prefix}_{channel}.pt")
+            # Save the SCALE and residual statistics with the weights: a
+            # checkpoint loaded against a different scale produces confident,
+            # plausible, meaningless numbers rather than an error.
+            reconstructor = LSTMTwinReconstructor(network)
+            residuals = [
+                reconstructor.reconstruct(w, channel) - w.features[channel][-1]
+                for w in train_windows
+            ]
+            residual_mean = statistics.mean(residuals)
+            residual_std = statistics.pstdev(residuals) or 1e-8
+            save_bundle(
+                f"{args.save_prefix}_{channel}",
+                channel=channel,
+                reconstructor=reconstructor,
+                scaler=scaler,
+                residual_mean=residual_mean,
+                residual_std=residual_std,
+                hidden_size=args.hidden_size,
+                skill=result.skill,
+                trained_on=args.capture,
+            )
+            print(f"  saved bundle: {args.save_prefix}_{channel}.pt + .json")
 
     print(
         "\nSkill = fraction of the mean-predictor's error removed. <= 0 means the\n"

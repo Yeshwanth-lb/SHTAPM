@@ -149,6 +149,7 @@ import logging
 import os
 import signal
 import time
+from collections import deque
 
 from app.schemas.contracts import CHANNELS
 
@@ -169,6 +170,7 @@ from edge.pipeline.decision_diagnostic import (
 from edge.pipeline.isolation_fallback import decide_isolation
 from edge.pipeline.isolation_tracker import IsolationFallbackTracker, IsolationTrackerResult
 from edge.pipeline.monitor import LiveP2Monitor, RawChannelValues
+from edge.pipeline.self_heal_runtime import SelfHealRuntime, load_self_heal_runtime
 from edge.trust.c_consistency import ConsistencyProvider
 from edge.trust.engine import TrustEngine
 from edge.trust.h_reliability import HReliabilityProvider
@@ -228,6 +230,8 @@ def _build_p2_monitor(
     fit_window_count: int,
     device_id: str,
     decision_publisher: DecisionDiagnosticPublisher,
+    self_heal: SelfHealRuntime | None = None,
+    recent_frames: deque | None = None,
 ) -> LiveP2Monitor:
     """Compose the real (non-stub) P2 pipeline for observe-only live
     monitoring. The detector, flag policy, and physics rule are real, fitted
@@ -277,6 +281,7 @@ def _build_p2_monitor(
         tracked = last_tracked.get("result")
         if tracked is None:
             return
+        _run_self_heal(outcome, tracked, self_heal, recent_frames)
         try:
             message = build_decision_diagnostic_message(device_id, outcome, tracked, raw)
             decision_publisher.publish(message)
@@ -295,6 +300,51 @@ def _build_p2_monitor(
         on_outcome=_on_outcome,
         on_raw_values=_on_raw_values,
     )
+
+
+def _run_self_heal(
+    outcome: WindowOutcome,
+    tracked: IsolationTrackerResult,
+    self_heal: SelfHealRuntime | None,
+    recent_frames: deque | None,
+) -> None:
+    """Reconstruct any isolated channel the trained twin can serve, and log it.
+
+    OBSERVE-ONLY, in three specific senses:
+      * the reconstruction is logged, never written into the telemetry frame --
+        the frozen contract keeps carrying what the sensor actually said;
+      * escalation to Safe Pump-Stop is unreachable (divergence_threshold is
+        +inf, see edge/pipeline/self_heal_runtime.py) because U05 failed on
+        measured evidence, not because a number is merely pending;
+      * no actuation, relay or GPIO call exists anywhere in this path.
+
+    Substitution runs on the tracker's PERSISTENT candidates rather than this
+    cycle's stateless decision: a channel whose trust briefly recovers is still
+    being substituted, and flapping the reconstruction on and off would
+    misrepresent that.
+    """
+    if self_heal is None or recent_frames is None:
+        return
+    if not tracked.tracked_channels:
+        return
+    try:
+        reports = self_heal.substitute(
+            outcome, frozenset(tracked.tracked_channels), list(recent_frames)
+        )
+    except Exception:
+        # A self-healing fault must never stop telemetry or P2.
+        log.debug("self-heal substitution failed (observe-only)", exc_info=False)
+        return
+    for report in reports:
+        log.info(
+            "SELF-HEAL substitution (observe-only, not written to telemetry): "
+            "%s sensor=%.6f twin=%.6f divergence=%s uncertainty=%s",
+            report.channel,
+            report.observed_value,
+            report.substituted_value,
+            f"{report.divergence:.3f}" if report.divergence is not None else "n/a",
+            f"{report.uncertainty:.3f}" if report.uncertainty is not None else "n/a",
+        )
 
 
 def _log_window_outcome(
@@ -379,16 +429,30 @@ def main() -> None:
     # never raise, so a failure here can never affect `publisher` above.
     decision_publisher = DecisionDiagnosticPublisher(device_id=device_id)
     decision_publisher.start(host, port)
+    # The twin consumes windows in D029's fixed clean-baseline scale, which is
+    # NOT the per-window min-max space LiveP2Monitor's windows use. Keep the raw
+    # frames so the self-heal runtime can build its own correctly-scaled window.
+    window_size = int(os.environ.get("WINDOW_SIZE", "30"))
+    recent_frames: deque = deque(maxlen=window_size)
+    self_heal = load_self_heal_runtime(os.environ.get("MODEL_DIR", "./models"), window_size)
+
     p2_monitor = _build_p2_monitor(
         fit_window_count=p2_fit_window_count,
         device_id=device_id,
         decision_publisher=decision_publisher,
+        self_heal=self_heal,
+        recent_frames=recent_frames,
     )
+
+    def _on_healthy_frame(frame) -> None:
+        recent_frames.append(frame)
+        p2_monitor.on_frame(frame)
+
     runtime = AcquisitionRuntime(
         sampler=sampler,
         publisher=publisher,
         rate_hz=rate_hz,
-        on_healthy_frame=p2_monitor.on_frame,
+        on_healthy_frame=_on_healthy_frame,
     )
 
     running = {"go": True}

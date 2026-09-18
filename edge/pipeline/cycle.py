@@ -44,6 +44,7 @@ from collections.abc import Collection, Mapping
 from app.schemas.contracts import CHANNELS
 
 from edge.anomaly.pipeline import WindowOutcome
+from edge.anomaly.preprocess import Window
 from edge.pipeline.self_heal import SelfHealOrchestrator, SelfHealOutcome
 
 
@@ -52,6 +53,7 @@ def process_isolated_channels(
     isolated_channels: Collection[str],
     raw_values: Mapping[str, float],
     orchestrator: SelfHealOrchestrator,
+    window_override: Window | None = None,
 ) -> dict[str, SelfHealOutcome]:
     """Run ``orchestrator.process_isolated_channel`` for exactly the
     channels named in ``isolated_channels`` -- no more, no fewer.
@@ -66,6 +68,14 @@ def process_isolated_channels(
             REQUIRED -- not obtainable from ``outcome`` (see module
             docstring).
         orchestrator: the already-configured ``SelfHealOrchestrator``.
+        window_override: window to reconstruct from, INSTEAD of
+            ``outcome.window``. Required when the twin was trained on a
+            different normalisation than P2's: ``Preprocessor`` rescales every
+            window to its own min/max, while a twin trained under D029 expects
+            a fixed clean-baseline scale. Those are different spaces and are
+            not interchangeable -- passing the wrong one yields confident,
+            meaningless reconstructions rather than an error. ``None`` keeps
+            the original behaviour of using ``outcome.window``.
 
     Returns:
         ``{channel: SelfHealOutcome}`` for exactly the channels in
@@ -96,7 +106,7 @@ def process_isolated_channels(
     for channel in isolated_channels:
         results[channel] = orchestrator.process_isolated_channel(
             channel=channel,
-            window=outcome.window,
+            window=outcome.window if window_override is None else window_override,
             raw_value=raw_values[channel],
             trust=outcome.trust[channel].trust,
         )

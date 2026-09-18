@@ -22,6 +22,14 @@ edge/models/*.pkl
 edge/models/*.pt
 edge/models/*.zip
 edge/models/*.onnx
+# MODEL_DIR (.env default ./models): trained twin bundles. A bundle is an
+# artifact of one specific bench capture — and that capture is itself
+# gitignored evidence — so committing weights would orphan them from the data
+# that justifies them.
+#
+# Leading slash matters: an unanchored `models/` also matches edge/models/,
+# which is SOURCE, and would silently exclude new files there from git.
+/models/
 
 # Recorded/replay session data (generated; can be large)
 data/replay/
