@@ -281,9 +281,11 @@ def _build_p2_monitor(
         tracked = last_tracked.get("result")
         if tracked is None:
             return
-        _run_self_heal(outcome, tracked, self_heal, recent_frames)
+        substituted = _run_self_heal(outcome, tracked, self_heal, recent_frames)
         try:
-            message = build_decision_diagnostic_message(device_id, outcome, tracked, raw)
+            message = build_decision_diagnostic_message(
+                device_id, outcome, tracked, raw, substituted_channels=substituted
+            )
             decision_publisher.publish(message)
         except Exception:
             # Best-effort, observe-only (see module docstring's
@@ -307,7 +309,7 @@ def _run_self_heal(
     tracked: IsolationTrackerResult,
     self_heal: SelfHealRuntime | None,
     recent_frames: deque | None,
-) -> None:
+) -> list[str]:
     """Reconstruct any isolated channel the trained twin can serve, and log it.
 
     OBSERVE-ONLY, in three specific senses:
@@ -324,9 +326,9 @@ def _run_self_heal(
     misrepresent that.
     """
     if self_heal is None or recent_frames is None:
-        return
+        return []
     if not tracked.tracked_channels:
-        return
+        return []
     try:
         reports = self_heal.substitute(
             outcome, frozenset(tracked.tracked_channels), list(recent_frames)
@@ -334,7 +336,7 @@ def _run_self_heal(
     except Exception:
         # A self-healing fault must never stop telemetry or P2.
         log.debug("self-heal substitution failed (observe-only)", exc_info=False)
-        return
+        return []
     for report in reports:
         log.info(
             "SELF-HEAL substitution (observe-only, not written to telemetry): "
@@ -345,6 +347,7 @@ def _run_self_heal(
             f"{report.divergence:.3f}" if report.divergence is not None else "n/a",
             f"{report.uncertainty:.3f}" if report.uncertainty is not None else "n/a",
         )
+    return [report.channel for report in reports]
 
 
 def _log_window_outcome(

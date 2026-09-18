@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { CHANNELS } from "../../types/contracts";
 import {
   UNCOMPUTED_DECISION_FIELDS,
+  isSubstituted,
   trustBand,
   trustScores,
   type DecisionOut,
@@ -77,7 +78,9 @@ describe("UNCOMPUTED_DECISION_FIELDS", () => {
     expect(fields).toContain("failure_eta");
     expect(fields).toContain("rl_action");
     expect(fields).toContain("isolated_channels");
-    expect(fields).toContain("substituted_channels");
+    // substituted_channels is deliberately NOT here any more: the edge now
+    // runs a trained digital twin and reports what it reconstructed.
+    expect(fields).not.toContain("substituted_channels");
     expect(UNCOMPUTED_DECISION_FIELDS.every((f) => f.why.length > 0)).toBe(true);
   });
 
@@ -92,5 +95,31 @@ describe("UNCOMPUTED_DECISION_FIELDS", () => {
     const fields = UNCOMPUTED_DECISION_FIELDS.map((f) => f.field);
     expect(fields.some((f) => f.includes("confidence"))).toBe(false);
     expect(Object.keys(row()).some((k) => k.includes("confidence"))).toBe(false);
+  });
+});
+
+describe("isSubstituted", () => {
+  const withSubstituted = (substituted: string[] | null) =>
+    ({ substituted_channels: substituted }) as never;
+
+  it("reports a channel the twin reconstructed", () => {
+    expect(isSubstituted(withSubstituted(["current"]), "current")).toBe(true);
+  });
+
+  it("does not report channels the twin did not reconstruct", () => {
+    expect(isSubstituted(withSubstituted(["current"]), "pressure")).toBe(false);
+  });
+
+  it("treats an empty list as nothing substituted", () => {
+    expect(isSubstituted(withSubstituted([]), "current")).toBe(false);
+  });
+
+  it("treats null as nothing substituted", () => {
+    // NULL means no twin ran at all (rows written before substitution existed).
+    expect(isSubstituted(withSubstituted(null), "current")).toBe(false);
+  });
+
+  it("treats a missing row as nothing substituted", () => {
+    expect(isSubstituted(null, "current")).toBe(false);
   });
 });

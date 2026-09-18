@@ -339,9 +339,13 @@ def test_get_decisions_returns_partial_diagnostic_row(client, seed, session_fact
     assert row["failure_eta"] is None
     assert row["rl_action"] is None
     assert row["isolated_channels"] is None
-    assert row["substituted_channels"] is None
     assert row["attribution"] is None
     assert row["reason"] is None
+    # substituted_channels is NOT in that list: the edge runs a trained digital
+    # twin now. Empty here because this fixture substituted nothing -- `[]` and
+    # NULL stay distinguishable ("a twin ran and substituted nothing" vs "no
+    # twin ran at all").
+    assert row["substituted_channels"] == []
 
 
 def test_get_thresholds_lazily_creates_defaults(client, seed):
@@ -535,7 +539,11 @@ def test_decisions_provenance_reports_the_producers_self_labelling(client, seed)
     assert body["execution_mode"] == "live"
     assert body["data_source"] == "edge_live_pipeline"
     assert body["model_status"] == "diagnostic_unvalidated"
-    assert "NullDetector" in body["note"]
+    # The note must describe the CURRENT producer. It named NullDetector until
+    # the real IsolationForestDetector was wired in (ba3682b), which made the
+    # published provenance understate what the live path actually computes.
+    assert "IsolationForestDetector" in body["note"]
+    assert "NullDetector" not in body["note"]
 
 
 def test_decisions_provenance_matches_the_schema_constant_exactly():

@@ -61,6 +61,13 @@ class DecisionDiagnosticMessage(_Strict):
     attribution: dict[Channel, ChannelAttribution]
     isolation_candidates: list[Channel]  # FR-RL4 stateless, THIS cycle only — not real isolation
     tracked_isolation_candidates: list[Channel]  # FR-RL4 persistent — not real isolation
+    # Channels the digital twin actually reconstructed this cycle (FR-H1/FR-H2).
+    # Unlike the two lists above, this IS a real executed action — but only on
+    # the reporting side: a substituted value is carried here, never written
+    # into the frozen telemetry frame's `sensors` block, so a consumer can
+    # never mistake a reconstruction for a measurement. Defaults to empty so a
+    # publisher without a trained twin stays schema-valid.
+    substituted_channels: list[Channel] = []
     execution_mode: Literal["live"] = "live"
     data_source: Literal["edge_live_pipeline"] = "edge_live_pipeline"
     model_status: Literal["diagnostic_unvalidated"] = "diagnostic_unvalidated"
@@ -75,8 +82,12 @@ DIAGNOSTIC_PROVENANCE: dict[str, str] = {
     "data_source": "edge_live_pipeline",
     "model_status": "diagnostic_unvalidated",
     "note": (
-        "Produced by the edge diagnostic pipeline. anomaly_flag comes from "
-        "NullDetector, which never flags by design: these rows prove the "
-        "pipeline executes end-to-end, and make no validated detection claim."
+        "Produced by the edge diagnostic pipeline. anomaly_flag comes from a "
+        "real IsolationForestDetector, fitted at startup on this device's own "
+        "clean windows, at a threshold carried over from a SWaT-domain sweep "
+        "rather than a bench calibration. substituted_channels carries real "
+        "digital-twin reconstructions, which are reported alongside telemetry "
+        "and never written into it. No detection, attribution or "
+        "reconstruction accuracy is validated for this bench."
     ),
 }

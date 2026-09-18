@@ -54,3 +54,53 @@
   align-items: center;
   font-size: 11px;
 }
+
+/* VIRTUAL: the channel was isolated and the digital twin is reconstructing it
+   (FR-H1/FR-H2, Doc04 §04.5). The reserved violet from aurora.css is used ONLY
+   here — a placeholder constant is a different claim and must never share it.
+
+   State is carried by the dashed border, the dot and the text as well as the
+   colour: §04.6 forbids encoding meaning by colour alone. */
+.sensor-card--virtual {
+  border-style: dashed;
+  border-color: var(--status-virtual);
+  box-shadow: 0 0 18px var(--status-virtual-glow);
+}
+
+.sensor-card__virtual {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
+  margin: 0.35rem 0 0;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  color: var(--status-virtual);
+}
+
+.sensor-card__virtual-dot {
+  flex: 0 0 auto;
+  width: 0.5rem;
+  height: 0.5rem;
+  margin-top: 0.3rem;
+  border-radius: 50%;
+  background: var(--status-virtual);
+  box-shadow: 0 0 8px var(--status-virtual-glow);
+}
+
+/* The pulse signals "live substitution in progress" rather than a static
+   label. Gated on reduced-motion: the data must read identically without it. */
+@media (prefers-reduced-motion: no-preference) {
+  .sensor-card__virtual-dot {
+    animation: sensor-card-virtual-pulse 2s ease-in-out infinite;
+  }
+}
+
+@keyframes sensor-card-virtual-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}

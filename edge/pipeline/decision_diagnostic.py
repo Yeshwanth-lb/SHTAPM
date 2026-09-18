@@ -22,11 +22,17 @@ NOT EVIDENCE OF ACTUATION: ``isolation_candidates``/
 classification / persistent tracking) — this module does not call
 ``process_isolated_channels``, ``SelfHealOrchestrator``, actuation, or
 ledger/GPIO/relay code, and imports none of them.
+
+``substituted_channels`` IS the result of a real executed action (the caller's
+self-heal runtime reconstructed those channels), but still not actuation: a
+substituted value is reported, never written into the telemetry frame, and no
+relay/GPIO path exists anywhere in it.
 """
 
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
 
 from app.schemas.contracts import CHANNELS, TrustScores
 from app.schemas.decision_diagnostic import ChannelAttribution, DecisionDiagnosticMessage
@@ -45,12 +51,19 @@ def build_decision_diagnostic_message(
     outcome: WindowOutcome,
     tracked: IsolationTrackerResult,
     raw: RawChannelValues,
+    substituted_channels: Sequence[str] = (),
 ) -> DecisionDiagnosticMessage:
     """Pure mapping, no I/O: the exact fields a ``WindowOutcome`` + the
     paired ``RawChannelValues`` + the current ``IsolationTrackerResult``
     already carry, reshaped into the wire payload. Invents no value —
     every field is read directly from an existing, already-computed
-    object."""
+    object.
+
+    ``substituted_channels`` names the channels a trained digital twin
+    actually reconstructed this cycle (supplied by the caller, which owns the
+    self-heal runtime). Empty when no twin is loaded. The reconstructed VALUES
+    are deliberately not carried here: this topic reports which channels were
+    substituted, never a substitute for the telemetry frame itself."""
     return DecisionDiagnosticMessage(
         device_id=device_id,
         ts=raw.ts,
@@ -69,6 +82,7 @@ def build_decision_diagnostic_message(
         },
         isolation_candidates=sorted(tracked.candidates_this_cycle),
         tracked_isolation_candidates=sorted(tracked.tracked_channels),
+        substituted_channels=sorted(substituted_channels),
     )
 
 

@@ -273,3 +273,39 @@ describe("SensorCard — UNVERIFIED", () => {
     expect(screen.getByTestId("sensor-card-gas")).not.toHaveTextContent("ppm");
   });
 });
+
+describe("VIRTUAL substitution state", () => {
+  const base = {
+    channel: "current",
+    value: 0.78,
+    meta: undefined,
+    updatedAt: "2026-09-18T12:00:00.000Z",
+    history: [],
+  };
+
+  it("shows no VIRTUAL marker by default", () => {
+    render(<SensorCard {...base} />);
+    expect(screen.queryByTestId("sensor-virtual-current")).toBeNull();
+  });
+
+  it("marks the channel VIRTUAL when the twin is reconstructing it", () => {
+    render(<SensorCard {...base} substituted />);
+    expect(screen.getByTestId("sensor-virtual-current")).toBeInTheDocument();
+  });
+
+  it("states that the displayed value is still the sensor's own reading", () => {
+    // The twin's reconstruction is reported alongside telemetry, never written
+    // into it. A VIRTUAL badge must not imply the number came from the twin.
+    render(<SensorCard {...base} substituted />);
+    expect(screen.getByTestId("sensor-virtual-current").textContent).toMatch(
+      /still the sensor/i,
+    );
+    expect(screen.getByTestId("sensor-value-current").textContent).toBe("0.780");
+  });
+
+  it("does not encode the state by colour alone", () => {
+    // Doc04 §04.6: shape/label must carry the meaning too.
+    render(<SensorCard {...base} substituted />);
+    expect(screen.getByTestId("sensor-virtual-current").textContent).toMatch(/VIRTUAL/);
+  });
+});

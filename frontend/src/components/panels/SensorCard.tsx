@@ -19,6 +19,14 @@ export interface SensorCardProps {
   /** ISO timestamp of the newest reading, or null. */
   updatedAt: string | null;
   history: SparklinePoint[];
+  /**
+   * True when the edge's digital twin reconstructed this channel because it was
+   * isolated (FR-H1/FR-H2). The displayed VALUE is still the sensor's own
+   * reading — the twin's reconstruction is reported alongside telemetry, never
+   * written into it — so this marks the channel as untrusted and reconstructed,
+   * it does not mean the number shown came from the twin.
+   */
+  substituted?: boolean;
 }
 
 /** Significant-figure formatting that never invents precision. */
@@ -42,7 +50,14 @@ export function formatAge(iso: string | null, now: number = Date.now()): string 
   return `${Math.floor(minutes / 60)}h ago`;
 }
 
-export function SensorCard({ channel, value, meta, updatedAt, history }: SensorCardProps) {
+export function SensorCard({
+  channel,
+  value,
+  meta,
+  updatedAt,
+  history,
+  substituted = false,
+}: SensorCardProps) {
   const unavailable = value === null;
   const age = formatAge(updatedAt);
   // `source` comes from the backend's reconciliation of the declaration with
@@ -51,13 +66,26 @@ export function SensorCard({ channel, value, meta, updatedAt, history }: SensorC
 
   return (
     <article
-      className={`sensor-card glass${unavailable ? " sensor-card--unavailable" : ""}`}
+      className={
+        `sensor-card glass${unavailable ? " sensor-card--unavailable" : ""}` +
+        (substituted ? " sensor-card--virtual" : "")
+      }
       data-testid={`sensor-card-${channel}`}
     >
       <header className="sensor-card__head">
         <h3 className="t-label">{channel}</h3>
         <ChannelProvenanceBadge source={source} />
       </header>
+
+      {substituted && (
+        /* Shape and text carry the meaning as well as colour — §04.6 forbids
+           encoding state by colour alone. */
+        <p className="sensor-card__virtual" data-testid={`sensor-virtual-${channel}`}>
+          <span className="sensor-card__virtual-dot" aria-hidden="true" />
+          VIRTUAL — isolated; digital twin is reconstructing this channel. The value shown is still
+          the sensor&apos;s own reading.
+        </p>
+      )}
 
       <p className="sensor-card__value tabular">
         <span className="t-metric" data-testid={`sensor-value-${channel}`}>

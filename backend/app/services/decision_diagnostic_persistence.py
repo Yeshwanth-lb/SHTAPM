@@ -9,8 +9,8 @@ Reuses the EXISTING ``decisions`` table (``app.models.decision.Decision``)
 and its already-nullable columns — no schema change, no new table. Persists
 ONLY the fields genuinely compatible with this diagnostic payload:
 ``anomaly_flag``, ``anomaly_severity``, and the six per-channel trust
-scores. ``health_state``, ``failure_eta``, ``rl_action``,
-``isolated_channels``, and ``substituted_channels`` are left ``NULL`` —
+scores. ``health_state``, ``failure_eta``, ``rl_action`` and
+``isolated_channels`` are left ``NULL`` —
 nothing in this diagnostic payload maps to them without inventing a value
 (see ``app/schemas/decision_diagnostic.py``'s own docstring for why those
 fields don't exist on the wire payload at all). ``attribution``/``reason``
@@ -60,6 +60,13 @@ class DecisionDiagnosticPersistence:
                     trust_humidity=message.trust.humidity,
                     trust_gas=message.trust.gas,
                     trust_current=message.trust.current,
+                    # Real executed substitutions (FR-H1/FR-H2). Unlike the
+                    # NULL columns above, this one now has a genuine producer:
+                    # the edge's trained digital twin. Written as [] rather
+                    # than NULL when nothing was substituted, so "no twin ran"
+                    # (NULL, older rows) stays distinguishable from "a twin ran
+                    # and substituted nothing".
+                    substituted_channels=list(message.substituted_channels),
                 )
             )
             try:

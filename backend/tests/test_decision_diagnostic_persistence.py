@@ -24,7 +24,12 @@ _NONE_ATTRIBUTION = {
 
 
 def _message(
-    device_id="pump-01", ts="2026-09-06T12:00:00.000Z", sample_seq=0, flag=False, severity=0.0
+    device_id="pump-01",
+    ts="2026-09-06T12:00:00.000Z",
+    sample_seq=0,
+    flag=False,
+    severity=0.0,
+    substituted_channels=(),
 ) -> DecisionDiagnosticMessage:
     return DecisionDiagnosticMessage(
         device_id=device_id,
@@ -40,6 +45,7 @@ def _message(
         attribution=_NONE_ATTRIBUTION,
         isolation_candidates=[],
         tracked_isolation_candidates=[],
+        substituted_channels=list(substituted_channels),
     )
 
 
@@ -79,11 +85,29 @@ def test_unsupported_fields_remain_null(persistence, session_factory):
         assert row.failure_eta is None
         assert row.rl_action is None
         assert row.isolated_channels is None
-        assert row.substituted_channels is None
         # Per-channel attribution has no single-value column to map into --
         # deliberately not persisted here (see module docstring).
         assert row.attribution is None
         assert row.reason is None
+
+
+def test_substituted_channels_are_persisted(persistence, session_factory):
+    """Unlike the NULL columns above, this one has a real producer now: the
+    edge's trained digital twin reconstructs an isolated channel and reports
+    which channels it served."""
+    persistence.persist(_message(substituted_channels=["current"]))
+
+    with session_factory() as db:
+        assert db.query(Decision).one().substituted_channels == ["current"]
+
+
+def test_no_substitution_persists_empty_not_null(persistence, session_factory):
+    """`[]` and NULL must stay distinguishable: NULL means no twin ran at all
+    (older rows), `[]` means a twin ran and substituted nothing."""
+    persistence.persist(_message())
+
+    with session_factory() as db:
+        assert db.query(Decision).one().substituted_channels == []
 
 
 def test_persist_reuses_device_across_messages(persistence, session_factory):

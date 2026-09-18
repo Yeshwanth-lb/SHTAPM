@@ -17,6 +17,7 @@ import { StateBlock } from "../components/aurora/StateBlock";
 import { SensorCard } from "../components/panels/SensorCard";
 import { useAuth } from "../features/auth/AuthContext";
 import { useChannels } from "../features/channels/useChannels";
+import { isSubstituted, useDecisions } from "../features/decisions/useDecisions";
 import { useDeviceTelemetry } from "../features/telemetry/useDeviceTelemetry";
 import { CHANNELS } from "../types/contracts";
 import "./device.css";
@@ -54,6 +55,11 @@ export function DevicePage() {
     error: channelsError,
   } = useChannels(DEVICE_ID, accessToken);
   const [rangePoints, setRangePoints] = useState<number>(RANGES[0].points);
+  // The most recent decision row tells us which channels the edge's digital
+  // twin is currently reconstructing. Failure here must not affect telemetry
+  // rendering, so nothing below branches on its error state.
+  const decisions = useDecisions(DEVICE_ID, accessToken, 1);
+  const latestDecision = decisions.data?.[0] ?? null;
   const {
     latest,
     history,
@@ -178,6 +184,7 @@ export function DevicePage() {
                   meta={meta}
                   updatedAt={updatedAt}
                   history={series}
+                  substituted={isSubstituted(latestDecision, channel)}
                 />
               );
             })}

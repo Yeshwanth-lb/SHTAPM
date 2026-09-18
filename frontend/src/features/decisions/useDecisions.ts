@@ -73,9 +73,21 @@ export const UNCOMPUTED_DECISION_FIELDS = [
   { field: "failure_eta", why: "no prognosis model exists (D017)" },
   { field: "rl_action", why: "no RL policy is wired (U06 open)" },
   { field: "isolated_channels", why: "no isolation is executed; the live path is observe-only" },
-  { field: "substituted_channels", why: "no self-healing substitution is executed" },
   { field: "attribution", why: "not published by the diagnostic path" },
 ] as const;
+
+/**
+ * True when a decision row reports a digital-twin reconstruction for `channel`.
+ *
+ * `substituted_channels` is no longer always null: the edge now runs a trained
+ * twin and reports which channels it reconstructed. Note the substituted VALUE
+ * is deliberately not on the wire — the telemetry frame keeps carrying what the
+ * sensor actually said, so a reconstruction can never be mistaken for a
+ * measurement. This marks the channel as VIRTUAL; it does not replace its value.
+ */
+export function isSubstituted(row: DecisionOut | null, channel: string): boolean {
+  return row?.substituted_channels?.includes(channel) ?? false;
+}
 
 export function useDecisions(
   deviceId: string,

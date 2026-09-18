@@ -250,9 +250,15 @@ def test_proxy_channels_explain_what_they_actually_measure():
 
 
 def test_decision_fields_nothing_computes_stay_null():
-    """The diagnostic producer writes anomaly + trust and nothing else. These
-    columns are UNIMPLEMENTED CAPABILITY, not missing data, and a UI must not
-    render them as an assessed 'healthy' or an absent fault."""
+    """Columns with no producer are UNIMPLEMENTED CAPABILITY, not missing data,
+    and a UI must not render them as an assessed 'healthy' or an absent fault.
+
+    `substituted_channels` was on this list until 2026-09-18 and has been
+    removed deliberately: the edge now runs a trained digital twin and reports
+    the channels it reconstructed, so the guard's own condition ("the UI's 'not
+    computed' labelling must be revisited before this passes") was satisfied —
+    see UNCOMPUTED_DECISION_FIELDS in frontend/src/features/decisions.
+    """
     from app.services.decision_diagnostic_persistence import DecisionDiagnosticPersistence
 
     source = inspect_source(DecisionDiagnosticPersistence.persist)
@@ -261,12 +267,20 @@ def test_decision_fields_nothing_computes_stay_null():
         "failure_eta",
         "rl_action",
         "isolated_channels",
-        "substituted_channels",
     ):
         assert never_written not in source, (
             f"{never_written} is now written by the diagnostic path; the UI's "
             "'not computed' labelling must be revisited before this passes"
         )
+
+
+def test_substituted_channels_are_written_and_labelled_as_real():
+    """The counterpart to the guard above: substitution IS executed now, so the
+    UI must no longer list it as uncomputed. If substitution is ever removed,
+    this fails and forces the labelling back."""
+    from app.services.decision_diagnostic_persistence import DecisionDiagnosticPersistence
+
+    assert "substituted_channels" in inspect_source(DecisionDiagnosticPersistence.persist)
 
 
 def test_no_confidence_field_exists_anywhere_in_the_decision_schema():
