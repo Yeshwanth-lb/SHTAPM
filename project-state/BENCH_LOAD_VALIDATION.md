@@ -163,3 +163,92 @@ Captures are gitignored (`*capture*.jsonl`, and the motor files) — they are
 evidence inputs, not source. Held on the bench Pi at `~/SHTAPM/` and on the dev
 machine. Regenerate with `edge/scripts/load_capture.py`; see §5 for the
 preconditions that make a capture valid.
+
+---
+
+## 7. Digital-twin training on this capture (2026-09-18)
+
+Ran `edge/eval/bench_twin_training.py` against `motor_load_full.jsonl` using the
+existing unmodified `LSTMTwinReconstructor` (D016 architecture) and D029's fixed
+clean-baseline scale. 686 of 986 rows were complete (300 dropped where the DHT22
+was unhealthy); enforcing genuine sample contiguity left 251 training and 120
+held-out windows. Holdout is the chronological tail, never a random split.
+
+Settings are fixtures, not project specifications: `hidden_size=32`, 40 epochs,
+Adam at lr=0.01, seed 0.
+
+### Result: `current` is reconstructable, `vibration` is not
+
+| target | model RMSE | predict-the-mean RMSE | skill |
+|---|---|---|---|
+| `current` | 0.0985 A | 0.1818 A | **45.8%** |
+| `vibration` | 0.4703 g | 0.4981 g | 5.6% |
+
+Skill = fraction of the mean-predictor's error removed. `current` is genuinely
+learnable from the other channels; `vibration` is not. The asymmetry is
+plausible and worth stating: vibration is high-frequency mechanical noise
+sampled at 1 Hz, so predicting it from a clean step-shaped current signal is a
+much harder problem than the reverse.
+
+**This makes `current` the substitutable channel on this rig.** No twin should
+be deployed to substitute `vibration` on this evidence.
+
+### A methodological warning worth recording
+
+Before sample contiguity was enforced, `current` scored **61.0%** skill. With it,
+**21.9%** at identical settings. The difference was entirely windows stitched
+across DHT22 dropout gaps, presenting samples minutes apart as a continuous 30 s
+history. The inflated number looked like the better result and was an artifact.
+Any future harness consuming a capture with unhealthy rows must check contiguity
+against original capture indices, not positions in the filtered list.
+
+## 8. U05 (`divergence_threshold`) — measured, and NOT resolved
+
+The threshold has been open since August as "data-gated: needs real
+reconstruction-error statistics". Those statistics now exist, and they do not
+support choosing a value.
+
+Method mirrors production exactly: `DivergenceScorer` fits the residual's
+mean/std on clean training windows, then z-scores held-out windows. Every
+held-out window is clean, so any window at or above a candidate threshold is a
+**false escalation** — a healthy sensor pushed toward Safe Pump-Stop.
+
+| threshold | false escalations (n=120) | rate |
+|---|---|---|
+| 2.0σ | 10 | 8.3% |
+| 3.0σ | 7 | 5.8% |
+| 4.0σ | 6 | 5.0% |
+| 6.0σ | 5 | 4.2% |
+
+**Maximum clean-data divergence observed: 68.4σ.**
+
+At 1 Hz, a 4.2% false-escalation rate is roughly one spurious Safe Pump-Stop
+every 24 windows. No threshold in this range is deployable, and raising it
+further only trades away the sensitivity the check exists for.
+
+### Why, as far as the evidence shows
+
+The residual distribution is heavy-tailed: the twin occasionally produces a
+wildly wrong reconstruction. Motor ON/OFF transitions account for some of it
+(windows ≥6σ span a mean current range of 0.557 A versus 0.030 A for the rest),
+but **not all** — the single worst window (47σ) is steady-state, with a current
+range of 0.0006 A. There is no single identified mechanism.
+
+### Conclusion
+
+**U05 remains OPEN.** The gate has changed rather than lifted: it was "no real
+data exists", and is now "the reconstruction is not yet accurate enough for any
+threshold to be responsible". Choosing 3.0σ here because it is a conventional
+number would mean adopting a measured 5.8% false-escalation rate, which is not
+a defensible basis for a safety escalation path.
+
+Plausible next steps, none yet attempted: substantially more training data
+(251 windows is very small); a capture with more ON/OFF cycles so transitions
+are better represented; suppressing the DHT22 EMI at source so ~30% of load
+samples stop being discarded; or revisiting whether divergence should be
+evaluated per-window at all rather than over a longer horizon.
+
+**Consequence for the self-healing loop:** substitution itself (twin replaces an
+isolated channel) is supported by the 45.8% skill result for `current`. The
+divergence *backstop* that escalates to Safe Pump-Stop is not. Wiring the loop
+with escalation enabled on this evidence would produce frequent spurious stops.
