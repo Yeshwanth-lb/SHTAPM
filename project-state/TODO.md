@@ -18,7 +18,7 @@ read this summary first. Full detail: `CURRENT_STATE.md`'s top section.
 | | criterion | status |
 |---|---|---|
 | AC1 | 6 channels live, <1% loss/10 min | 🟡 5 real channels; **gas is simulated** |
-| AC2 | Attack detected + attributed, trust <0.4 in ≤3 windows | ❌ D015 structural limitation |
+| AC2 | Attack detected + attributed, trust <0.4 in ≤3 windows | ❌ D015 structural limitation; D030 confirms it on real hardware |
 | AC3 | Isolation → virtual substitution, marked VIRTUAL | ✅ **live end-to-end** |
 | AC4 | Dry-run → autonomous Safe Pump-Stop | ❌ no dry-run detection; no actuation wired |
 | AC5 | Every decision hash-chained, tamper caught | ✅ decision events chained, edge-triggered |
@@ -30,18 +30,27 @@ read this summary first. Full detail: `CURRENT_STATE.md`'s top section.
 
 ### The next thing worth doing
 
-**A fault-injection bench session.** Physically disturb or unplug a sensor while
-capturing. It is the only route to a detection-rate figure, and it unblocks AC2
-and O2/O3/O10 together — the last major evidence gap. Everything else remaining
-is refinement.
+**A fault-injection bench session ran 2026-09-20** —
+`project-state/FAULT_INJECTION_VALIDATION.md`. Two of three inducible real
+faults (ADXL335 tap, motor/current-drop) were detected by the deployed
+detector; DHT22 dropout is confirmed architecturally invisible to P2; BMP280
+disturbance was inconclusive (no measurable effect produced). The session
+also empirically confirmed `TrendSignPhysicsRule` mislabels genuine physical
+actions as `attack` (D030) — real evidence for AC2, not a resolution of it.
+**Not yet done:** a capture with longer isolated quiet gaps between faults,
+which would let detection-latency and attribution-accuracy be reported as
+per-event percentages instead of only qualitatively.
 
 ### Blockers, with their real reasons
 
 - **U05** — OPEN, reason changed from "no data" to "measurement failed": 5.8%
   false-escalation at 3σ on clean data. Escalation is disabled (`+inf`) in the
   live wiring rather than set to a convenient number.
-- **U07** — DISCHARGED for false positives (0.1% on real bench data at the
-  deployed threshold). Detection rate still unmeasured.
+- **U07** — DISCHARGED for false positives (0.1% on real bench idle data,
+  10.4% during real power-on transient, both at the deployed threshold — see
+  `FAULT_INJECTION_VALIDATION.md` §3). Detection rate now measured
+  qualitatively on 2 real fault types (2026-09-20); a clean per-event
+  percentage is still not available (see above).
 - **U06** — OPEN. Blocks the entire RL pathway. A decision, not a data problem.
 - **U01**, **U14** — OPEN, unchanged.
 - **Live dashboard with the motor running** — blocked by DHT22 EMI; a 0.1 µF

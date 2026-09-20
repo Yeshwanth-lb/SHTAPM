@@ -72,7 +72,7 @@ persisted → dashboard renders VIRTUAL. **AC3 is met.**
 | item | status |
 |---|---|
 | **U05** `divergence_threshold` | **OPEN.** The gate changed from "no data" to "measurement failed": on clean held-out data the false-escalation rate is 5.8% at 3σ and 4.2% at 6σ, max 68.4σ. No responsible value exists. Escalation is therefore `+inf` (unreachable) in the live wiring. |
-| **U07** IF tuning | **DISCHARGED for false positives.** 0.1% FP on real bench data at the deployed 0.90 threshold. Detection rate remains unmeasured — no labelled faults on real hardware exist. |
+| **U07** IF tuning | **DISCHARGED for false positives.** 0.1% FP on real bench idle data, 10.4% during a real power-on transient, both at the deployed 0.90 threshold. Detection rate now measured qualitatively on real induced faults (2026-09-20, `FAULT_INJECTION_VALIDATION.md`) — a clean per-event percentage still requires a capture with longer isolated gaps between faults. |
 | **U06** RL reward shaping | OPEN. A policy decision, not a data problem. Blocks the whole RL pathway. |
 | **U01**, **U14** | OPEN, unchanged. |
 | Prognosis on pump data | No degradation source. PRONOSTIA is a methodology proxy only. |
@@ -87,9 +87,15 @@ capture's reliability is properly stated as "no inter-frame gap exceeded 5 s ove
 
 ## The single highest-value next step
 
-**A fault-injection bench session** — physically disturb or unplug a sensor while
-capturing. That one session unblocks detection rate, AC2, and O2/O3/O10, which is
-the last major evidence gap. Everything else remaining is refinement.
+**Done, partially: a fault-injection bench session ran 2026-09-20** — see
+`FAULT_INJECTION_VALIDATION.md` and `DECISIONS.md` D030. Detection rate is no
+longer entirely unmeasured (2 of 3 inducible real faults detected; DHT22
+dropout confirmed architecturally invisible; BMP280 inconclusive), and D030
+gives real-data confirmation of a previously-only-theoretical attribution
+limitation. AC2/O2/O3/O10 are **not** thereby satisfied — the remaining gap
+is a capture with longer isolated quiet gaps between deliberate faults, so
+detection latency and attribution accuracy can be reported per-event rather
+than only qualitatively.
 
 ## Still dormant (built, tested, never executed)
 

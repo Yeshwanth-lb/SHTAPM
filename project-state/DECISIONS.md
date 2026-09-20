@@ -2772,3 +2772,56 @@ does not authorize any wiring or actuation.
   taken against the channel's observed value in the twin's own space. That was a
   latent defect, never executed (P3 is not wired into `edge/main.py`), which
   would have produced meaningless divergence scores the moment it was.
+
+### D030 — `TrendSignPhysicsRule`'s attack/fault mislabelling confirmed on real physical faults; no code changed
+- **Date:** 2026-09-20
+- **Decision:** Following the first real-hardware fault-injection session
+  (`project-state/FAULT_INJECTION_VALIDATION.md`), **no code or parameter is
+  changed.** `TrendSignPhysicsRule` (D013) remains exactly as implemented:
+  current/vibration trend-sign disagreement, suspect broken by own-baseline
+  z-score, no new channel pair or tolerance.
+- **What the session found:** two genuinely manual, non-adversarial physical
+  actions — a hand tap on the ADXL335, and switching the motor on by hand —
+  were labelled `attack` (not `fault`) by the deployed `AttributionEngine` in
+  multiple real-data windows (`FAULT_INJECTION_VALIDATION.md` §5–§6). This is
+  the first *empirical* confirmation, on real hardware, of a risk D013 and
+  D014 already stated in words: the rule has no actual physics model, only a
+  trend-sign comparison, and comparing trend directions cannot distinguish
+  "a person touched the equipment" from "a value was injected."
+- **Why this is not a bug:** the rule did exactly what it was built to do —
+  D013's own module docstring already states it is *"NOT a validated physics
+  claim... provisional... unblocks AttributionEngine wiring only."* No
+  implementation defect was found; the finding is that the rule's documented
+  narrowness has a real, observable cost, not a newly discovered flaw in it.
+- **Why no fix is made now:** a real fix needs information this system does
+  not have — some signal distinguishing an authorized/manual physical action
+  from an unauthorized injected one (e.g. an operator-action log, a
+  maintenance-mode flag) — not a threshold or trend-window tweak. Adjusting
+  the existing heuristic to score this specific capture better would move the
+  boundary without addressing the underlying gap, and risks a new, untested
+  regression adopted under review-deadline time pressure. This also follows
+  the project's standing rule (CLAUDE.md, reaffirmed D009/D010/D013/D014/D015):
+  do not change trust/anomaly algorithms without explicit instruction, and a
+  same-day patch the night before a review is exactly the wrong moment to
+  invoke an exception to that.
+- **Affects:** `project-state/FAULT_INJECTION_VALIDATION.md` (new), `TODO.md`/
+  `CURRENT_STATE.md` AC2 status line (now cites this entry alongside D015).
+  No change to `edge/anomaly/physics_rule.py`, `edge/anomaly/attribution.py`,
+  or any other production code.
+- **Does NOT resolve:** AC2 ("attack detected + attributed... trust <0.4 in
+  ≤3 windows") — remains **NOT satisfied**. Does NOT resolve O3 (≥85%
+  attribution accuracy) — D014 already established this is structurally
+  unreachable for 4 of 6 channels; this entry adds that even for the two
+  channels the rule does cover, real physical events measurably degrade
+  accuracy further than D013's simulator-seed estimates (~50–60%) suggested.
+  Does NOT change D009, D010, D013, D014, or D015 — all remain exactly as
+  approved.
+- **What remains open for future work:** whether a ground-truth/authorization
+  signal (e.g. logging deliberate maintenance actions) could let attribution
+  distinguish physical human intervention from injection — not designed or
+  scoped here, and would need its own decision. Also open: whether a capture
+  with longer isolated quiet gaps between induced faults would let per-event
+  attribution accuracy be measured as a percentage rather than only
+  qualitatively (`FAULT_INJECTION_VALIDATION.md` §9).
+- **Status:** documentation-only; no implementation performed or authorized
+  by this entry.
