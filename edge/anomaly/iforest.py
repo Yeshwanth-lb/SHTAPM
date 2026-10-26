@@ -72,6 +72,12 @@ class IsolationForestDetector:
 
         self._model = IsolationForest(**kwargs)
         self._train_anom_sorted: np.ndarray | None = None
+        # One-entry memo: ``detect()`` asks for flag() and score() of the SAME
+        # window back to back, and each forest pass is the dominant per-window
+        # cost (measured ~17 ms on the dev laptop). Keyed on object identity;
+        # windows are immutable, so a hit is always the same input.
+        self._last_window: Window | None = None
+        self._last_score = 0.0
 
     @property
     def fitted(self) -> bool:
@@ -100,6 +106,7 @@ class IsolationForestDetector:
         x = self._matrix(windows)
         self._model.fit(x)
         self._train_anom_sorted = np.sort(self._anomaly_scores(x))
+        self._last_window = None
 
     def _require_fitted(self) -> np.ndarray:
         if self._train_anom_sorted is None:
@@ -110,10 +117,13 @@ class IsolationForestDetector:
         """Severity in [0, 1] = empirical-CDF / rank of this window's anomaly
         score within the clean-baseline distribution. Higher = more anomalous."""
         train = self._require_fitted()
+        if window is self._last_window:
+            return self._last_score
         a = float(self._anomaly_scores(self._features(window).reshape(1, -1))[0])
         # fraction of clean windows at most as anomalous as this one
         rank = int(np.searchsorted(train, a, side="right"))
-        return rank / len(train)
+        self._last_window, self._last_score = window, rank / len(train)
+        return self._last_score
 
     def flag(self, window: Window) -> bool:
         """Anomalous iff severity meets the explicit configured threshold."""
