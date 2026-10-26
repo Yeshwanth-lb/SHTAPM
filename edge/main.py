@@ -88,7 +88,8 @@ or crash publishing. See edge/pipeline/monitor.py's docstring for exactly
 which P2 components are used and why. The detector is now a real
 ``IsolationForestDetector`` (2026-09-13 — previously ``NullDetector``, which
 never flagged anything); it, ``SeverityThresholdFlagPolicy``, and
-``TrendSignPhysicsRule`` are all fit together (``LiveP2Monitor``'s
+``OperatingStateRule`` (D034; ``TrendSignPhysicsRule`` until then) are all
+fit together (``LiveP2Monitor``'s
 ``additional_fit_targets``) alongside ``ConsistencyProvider`` on
 ``P2_FIT_WINDOW_COUNT`` clean live windows — required, no default; a
 single-window bootstrap was found to collapse the consistency signal to a
@@ -159,7 +160,7 @@ from edge.acquisition.runtime import AcquisitionRuntime
 from edge.acquisition.sampler import Sampler
 from edge.anomaly.attribution import AttributionEngine
 from edge.anomaly.iforest import IsolationForestDetector
-from edge.anomaly.physics_rule import TrendSignPhysicsRule
+from edge.anomaly.operating_state_rule import OperatingStateRule
 from edge.anomaly.pipeline import P2Pipeline, WindowOutcome
 from edge.anomaly.policy import SeverityThresholdFlagPolicy
 from edge.anomaly.preprocess import Preprocessor
@@ -316,7 +317,9 @@ def _build_p2_monitor(
         flag_threshold=_P2_DETECTOR_FLAG_THRESHOLD, random_state=_P2_DETECTOR_RANDOM_STATE
     )
     flag_policy = SeverityThresholdFlagPolicy()
-    physics_rule = TrendSignPhysicsRule()
+    # D034: motor-state consistency between current and vibration replaces
+    # the trend-sign heuristic (D013), and a violation flags its suspect.
+    physics_rule = OperatingStateRule()
     pipeline = P2Pipeline(
         preprocessor=preprocessor,
         detector=detector,
@@ -328,6 +331,7 @@ def _build_p2_monitor(
         k_provider=CorrelationProvider(running_gate=BENCH_RUNNING_GATE),
         h_provider=HReliabilityProvider(),
         flag_policy=flag_policy,
+        physics_flags=True,
     )
     # One tracker per LiveP2Monitor instance (edge/pipeline/isolation_tracker.py)
     # -- persistent, cross-cycle isolation-candidate memory for THIS pipeline

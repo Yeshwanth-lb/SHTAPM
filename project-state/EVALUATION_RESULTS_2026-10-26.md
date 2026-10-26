@@ -98,3 +98,40 @@ detector is fit on:
 **Correction:** `BENCH_LOAD_VALIDATION.md` §9's 0.1% false-positive rate was
 measured after a 3.6 h fit and never described the deployed live system.
 Report the hold-out numbers of whichever baseline is actually deployed.
+
+---
+
+## 4. Attribution on real bench streams: TrendSign vs operating-state (D034)
+
+`PYTHONPATH="backend;." python -m edge.eval.attribution_bench_eval --idle-onsets 20 --cycling-onsets 4`
+
+Same live P2 composition, only the physics rule (and the physics-flags option)
+swapped. Injections into the real 7.2 h idle capture, 20 onsets x 2 channels
+(current, vibration) = 40 episodes per scenario. Settled attribution =
+majority label over the flagged windows of the episode.
+
+| Scenario (truth) | trend_sign (D013) | op_state | **op_state + physics flags** |
+|---|---|---|---|
+| spike, 2 samples (fault) | 19/19 | 19/19 | **19/19** |
+| stuck-at (fault) | 20/20 | 20/20 | **20/20** |
+| drift (fault) | 31/39 | 34/39 | 1/40 |
+| constant spoof, crosses motor state (attack) | 10/40 | 33/40 | **40/40** |
+| bias, crosses motor state (attack) | 10/40 | 26/40 | **40/40** |
+| ramp (attack) | 8/39 | 5/39 | **39/40** |
+| spoof / bias / stealth that stay in state (attack) | 17/96 | 0/96 | 0/96 |
+| false `attack` on 4,742 clean channel-windows | 0 | 0 | **0** |
+
+**Reading:**
+- Physics-consistency attribution with physics flags attributes every
+  state-crossing attack correctly with no false attacks on 7.2 h of clean
+  data, against 25% for the trend-sign rule. This is the paper's attribution
+  result.
+- The two failures are definitional, not tuning: drift and ramp are the same
+  waveform (a drift that makes the current sensor claim a running motor is
+  labelled attack), and an attack that keeps the reading physically plausible
+  is invisible to physics. Both are stated limits.
+- Detection rates are unchanged by the rule (the detector is the same): a
+  2-sample spike and stuck-at at idle are detected in about half the episodes.
+- Running-state coverage is too small for a claim (19-min cycling capture,
+  n = 2 per scenario: cross-state 3/5). A longer motor-on bench capture is
+  required before the paper states running-state numbers.

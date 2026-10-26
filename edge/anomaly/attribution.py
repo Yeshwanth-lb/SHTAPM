@@ -83,7 +83,27 @@ class AttributionEngine:
     def __init__(self, rule: PhysicsRule) -> None:
         self._rule = rule
 
-    def attribute(self, flags: Mapping[str, bool], window: Window) -> dict[str, AttributionResult]:
+    def observe_raw_window(self, frames) -> None:
+        """Forward a window's raw frames to a rule that needs absolute levels
+        (``OperatingStateRule``). Called every window, flagged or not, so a
+        stateful rule can follow the machine between anomalies. A rule without
+        the hook (``TrendSignPhysicsRule``) is unaffected."""
+        observe = getattr(self._rule, "observe_raw_window", None)
+        if observe is not None:
+            observe(frames)
+
+    def check_physics(self, window: Window) -> PhysicsCheck:
+        """Run the rule once for ``window`` regardless of flags. Pass the
+        result to ``attribute(check=...)``: a rule that consumes its raw frames
+        on ``check`` must not be asked twice for one window."""
+        return self._rule.check(window)
+
+    def attribute(
+        self,
+        flags: Mapping[str, bool],
+        window: Window,
+        check: PhysicsCheck | None = None,
+    ) -> dict[str, AttributionResult]:
         """Attribute each channel in ``flags``.
 
         ``flags`` maps channel -> anomaly flag (bool). The physics rule is
@@ -95,8 +115,7 @@ class AttributionEngine:
             if ch not in CHANNELS:
                 raise ValueError(f"unknown channel {ch!r}; must be one of {CHANNELS}")
 
-        check: PhysicsCheck | None = None
-        if any(flags.values()):
+        if check is None and any(flags.values()):
             check = self._rule.check(window)
 
         out: dict[str, AttributionResult] = {}

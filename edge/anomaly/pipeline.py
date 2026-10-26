@@ -71,7 +71,19 @@ class P2Pipeline:
         k_provider: SignalProvider,
         h_provider: SignalProvider,
         flag_policy: ChannelFlagPolicy,
+        physics_flags: bool = False,
     ) -> None:
+        """``physics_flags`` (default False = unchanged behaviour): a physics
+        violation that names a suspect channel also FLAGS that channel, before
+        the h/trust update, even when the statistical flag policy did not.
+
+        Why: windows are min-max normalised per window and the flag policy is
+        variance-based, so a sustained level shift (a spoof or bias held for a
+        minute) is only visible in the transition windows; inside it nothing is
+        flagged, trust recovers and attribution never runs. A physics rule that
+        reads raw levels (``OperatingStateRule``) sees the impossible state for
+        as long as it lasts, so its verdict is evidence on its own."""
+        self._physics_flags = physics_flags
         self._pre = preprocessor
         self._detector = detector
         self._trust = trust_engine
@@ -107,11 +119,22 @@ class P2Pipeline:
             # A provider that needs the raw (pre-normalisation) frames -- the
             # D033 running gate on k -- receives them first; the normalised
             # window alone cannot say whether the motor is running.
+            raw = frames[window.start_index : window.end_index]
             observe_raw = getattr(self._k, "observe_raw_window", None)
             if observe_raw is not None:
-                observe_raw(frames[window.start_index : window.end_index])
+                observe_raw(raw)
+            observe_attr = getattr(self._attribution, "observe_raw_window", None)
+            if observe_attr is not None:
+                observe_attr(raw)
             self._c.record_window(window)
             self._k.record_window(window)
+
+            # Physics evidence joins the statistical flags (see __init__).
+            physics = None
+            if self._physics_flags:
+                physics = self._attribution.check_physics(window)
+                if physics.violated and physics.suspect_channel is not None:
+                    flags[physics.suspect_channel] = True
 
             # Record channel outcomes for h provider: was_healthy iff not flagged
             for ch in CHANNELS:
@@ -122,7 +145,7 @@ class P2Pipeline:
             trust = self._trust.update_from_providers(self._c, self._k, self._h)
 
             # Attribute anomalies to channels
-            attribution = self._attribution.attribute(flags, window)
+            attribution = self._attribution.attribute(flags, window, check=physics)
 
             outcomes.append(
                 WindowOutcome(

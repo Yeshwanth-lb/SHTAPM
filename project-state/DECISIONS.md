@@ -2945,3 +2945,40 @@ does not authorize any wiring or actuation.
   attribution change is made here.
 - **Does NOT change:** D010's rule while running, c, h, weights, bands,
   attribution, the detector, or the frozen contract.
+
+### D034 — APPROVED: operating-state consistency attribution, with physics violations as flags (supersedes D013's rule in the live path)
+- **Date:** 2026-10-26
+- **Decision:** the live edge uses `OperatingStateRule`
+  (`edge/anomaly/operating_state_rule.py`) instead of `TrendSignPhysicsRule`,
+  and `P2Pipeline(physics_flags=True)`. Current and vibration each give an
+  independent estimate of the motor state (window MEDIAN against bench bands
+  with a hysteresis gap: current idle <= 0.05 A / running >= 0.3 A; vibration
+  idle <= 0.35 g / running >= 0.5 g). When they disagree the machine is in a
+  physically impossible state; the channel whose state changed most recently
+  is the suspect, attributed `attack`, and — new — FLAGGED, so it also feeds
+  h/trust even when the statistical flag policy is silent.
+- **Why the flag:** per-window min-max normalisation plus a variance-based
+  flag policy makes the statistical stack level-blind: a spoof or bias held
+  for a minute is visible only in its transition windows, after which nothing
+  is flagged and attribution never runs. Measured: the rule alone got 74% of
+  state-crossing attacks; with physics flags, 100%.
+- **Evidence (2026-10-26, `edge/eval/attribution_bench_eval.py`, real 7.2 h
+  idle capture, 40 episodes per scenario, settled attribution):**
+  state-crossing spoof/bias 80/80 attack (D013: 20/80); ramp 39/40 (D013:
+  8/39); spike + stuck-at 39/39 fault (unchanged); drift 1/40 fault (D013:
+  31/39); in-state spoof/bias/stealth 0/96 (D013: 17/96); false `attack` on
+  4,742 clean channel-windows: 0 for every rule. Cycling capture (19 min):
+  too few episodes (n = 2 per scenario) for a claim; clean false-attack rate
+  0.6% of channel-windows.
+- **Limits stated, not hidden:** drift and ramp injection are the same
+  waveform, so a drift that crosses a state boundary is attributed `attack`;
+  attacks that keep the falsified channel in its true state are physically
+  consistent and undetectable by this rule; only the coupled pair (current,
+  vibration) can ever be attributed `attack`. Running-state evidence needs a
+  longer motor-on bench capture.
+- **Also in this change:** `IsolationForestDetector` memoises its last
+  window, so `detect()` runs the forest once per window instead of twice
+  (measured 35 -> 17 ms/window on the dev laptop).
+- **Does NOT change:** the detector threshold, c/k/h, D033's gate, trust
+  weights or bands, the frozen contract. D013/D014/D030 remain as history;
+  their rule stays available for comparison.
