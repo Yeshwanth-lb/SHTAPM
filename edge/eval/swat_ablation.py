@@ -31,6 +31,12 @@ VARIANTS (all window-level, non-overlapping 30-row windows, same labels):
                    flagged if any channel's trust < 0.7 (TRUSTED_MIN), k
                    neutralised.
   if_or_trust      if_identity at 0.90 OR trust_only.
+  if_global_z      IF on windows of GLOBALLY standardised raw values (train-fit
+                   mean/std per channel) instead of per-window min-max: the
+                   level-aware IF. Per-window min-max hides a sustained level
+                   shift once a window lies wholly inside it (D034).
+  max_z_iflowpass  per window, the larger of the z-score and if_lowpass
+                   severities: z-score precision plus IF event coverage.
 
 Every score-based variant turns its raw score into the same empirical-CDF
 severity against its OWN Normal_v1 fit distribution, so one threshold means
@@ -261,6 +267,31 @@ def if_severities(
     )
 
 
+def _raw_matrix(frames: list[TelemetryMessage]) -> np.ndarray:
+    return np.array([[float(getattr(f.sensors, ch)) for ch in CHANNELS] for f in frames])
+
+
+def if_global_z_severities(
+    normal: list[TelemetryMessage], combined: list[TelemetryMessage], boundary: int
+) -> tuple[np.ndarray, list[int]]:
+    """IF over flattened 30x6 windows of train-standardised raw values,
+    batch-scored (same forest settings as the deployed detector)."""
+    from sklearn.ensemble import IsolationForest
+
+    fit_raw = _raw_matrix(normal)
+    mean, std = fit_raw.mean(axis=0), fit_raw.std(axis=0) + 1e-8
+    z = (_raw_matrix(combined) - mean) / std
+
+    def mats(lo: int, hi: int) -> tuple[np.ndarray, list[int]]:
+        starts = list(range(lo, hi - WINDOW_SIZE + 1, STEP))
+        return np.stack([z[s : s + WINDOW_SIZE].reshape(-1) for s in starts]), starts
+
+    fit_x, _ = mats(0, boundary)
+    eval_x, eval_starts = mats(boundary, len(combined))
+    model = IsolationForest(random_state=IF_RANDOM_STATE).fit(fit_x)
+    return ecdf_severity(-model.score_samples(fit_x), -model.score_samples(eval_x)), eval_starts
+
+
 class _NeutralK:
     """Constant k = 1.0 so the correlation signal cannot touch reported trust
     (D011-C). 1.0 is D010's own documented value for an unpaired channel."""
@@ -349,13 +380,31 @@ def run_ablation(data_dir: Path = DEFAULT_DATA_DIR, limit: int | None = None) ->
     n_eval_windows = len(z_starts)
     print(f"[ablation] zscore_baseline done ({n_eval_windows} eval windows)", file=sys.stderr)
 
+    z_by_start = dict(zip(z_starts, sev, strict=True))
+    if_lowpass_by_start: dict[int, float] = {}
     for name, (kernel, alpha) in IF_VARIANTS.items():
         sev, starts = if_severities(normal.frames, combined, boundary, kernel, alpha)
         sweeps[name] = {
             t: score_flags([bool(s >= t) for s in sev], starts, labels, boundary)
             for t in THRESHOLDS
         }
+        if name == "if_lowpass":
+            if_lowpass_by_start = dict(zip(starts, sev, strict=True))
         print(f"[ablation] {name} done", file=sys.stderr)
+
+    gz_sev, gz_starts = if_global_z_severities(normal.frames, combined, boundary)
+    sweeps["if_global_z"] = {
+        t: score_flags([bool(s >= t) for s in gz_sev], gz_starts, labels, boundary)
+        for t in THRESHOLDS
+    }
+    print("[ablation] if_global_z done", file=sys.stderr)
+
+    common = sorted(set(z_by_start) & set(if_lowpass_by_start))
+    combo = [max(z_by_start[s], if_lowpass_by_start[s]) for s in common]
+    sweeps["max_z_iflowpass"] = {
+        t: score_flags([bool(v >= t) for v in combo], common, labels, boundary) for t in THRESHOLDS
+    }
+    print(f"[ablation] max_z_iflowpass done ({len(common)} aligned windows)", file=sys.stderr)
 
     if_f, trust_f, starts, trust_stats = trust_flags(normal.frames, combined, boundary)
     fixed = {
@@ -404,6 +453,17 @@ def format_report(r: AblationResult) -> str:
         lines.append(_row(name, "0.90", sweep[PIPELINE_THRESHOLD]))
     for name, m in r.fixed.items():
         lines.append(_row(name, "0.90", m))
+    lines += [
+        "",
+        "-- fixed thresholds chosen from CLEAN data only (no attack labels used) --",
+        "   severity is each variant's empirical CDF on its own Normal_v1 fit, so 0.95 / 0.99",
+        "   are nominal 5% / 1% clean-flag rates (max_z_iflowpass, a max of two, runs higher)",
+        header,
+    ]
+    for t in (0.95, 0.99):
+        for name, sweep in r.sweeps.items():
+            if t in sweep:
+                lines.append(_row(name, f"{t:.2f}", sweep[t]))
     lines += ["", "-- best F1 per score-based variant (threshold chosen post hoc) --", header]
     for name, sweep in r.sweeps.items():
         t, m = max(sweep.items(), key=lambda kv: kv[1].f1)

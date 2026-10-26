@@ -145,3 +145,80 @@ attack; spike and stuck-at are 39/39 correct.
 - Majority-vote ("settled") attribution is lower on noisy running data
   (48/70) because every attack's onset windows are labelled fault while
   half-injected; the episode verdict is the operational quantity.
+
+**Deployed configuration (D034 + D035 + D036)**, same episodes: crossing-state
+attacks 120/120 idle, 12/12 cycling, 63/70 running; faults kept 39/79 idle
+(drift), 5/5, 36/42; false attack on clean channel-windows 0/4,742,
+1/928 (0.1%, was 7/928 with the D010/D033 k), 2/1,594 (0.1%).
+
+---
+
+## 5. Detection on SWaT with thresholds fixed from clean data (O10)
+
+`PYTHONPATH="backend;." python -m edge.eval.swat_ablation` — adds a level-aware
+IF (windows of globally standardised values) and the per-window max of the
+z-score and low-pass IF severities. Thresholds 0.95 / 0.99 are each variant's
+nominal 5% / 1% clean-flag rate from its own Normal_v1 fit: no attack labels
+are used to choose them.
+
+| Detector @ 0.95 | Precision | Recall | F1 | FPR | Events flagged / 35 | within 3 windows |
+|---|---|---|---|---|---|---|
+| IF, identity filters (deployed) | 0.418 | 0.332 | 0.370 | 0.065 | 32 | 15 |
+| IF + low-pass | 0.548 | 0.562 | 0.555 | 0.065 | 33 | 12 |
+| z-score baseline | 0.799 | 0.687 | **0.739** | **0.024** | 13 | 8 |
+| IF on globally standardised windows | 0.766 | 0.651 | 0.704 | 0.028 | 23 | 6 |
+| max(z-score, IF + low-pass) | 0.543 | **0.746** | 0.629 | 0.089 | **33** | **16** |
+
+At 0.99: z-score F1 0.731 (6/35 events), global-z IF F1 0.729 with precision
+0.997 but 2/35 events, max(z, IF+low-pass) F1 0.717 / FPR 0.025 / 24/35 events,
+deployed IF F1 0.204.
+
+**Reading:** window-level F1 and event coverage pull apart. The deployed
+detector is the weakest IF option; the combined detector nearly doubles its
+F1 at the same nominal threshold and flags the most attack events fastest; the
+z-score is the most precise but misses 22 of 35 attacks. The live detector is
+NOT changed yet: candidates must also be checked on bench data (next step).
+
+---
+
+## 6. Self-healing on real bench streams (O6, FR-H)
+
+`PYTHONPATH="backend;." python -m edge.eval.self_heal_eval` — live composition
+with the trained twin; crossing-state spoof and bias on `current`, truth known
+because injections are synthetic on real data. (Run on D034 code, before D035
+and D036; to be re-run.)
+
+| | idle 7.2 h (16 attacks) | running 25 min (14 attacks) |
+|---|---|---|
+| isolated | 16/16 | 14/14 |
+| time to isolate (median) | ~12 samples (~14 s) | 4-5 samples (~5 s) |
+| share of attack served by the twin | ~80% | ~93% |
+| error without healing | 0.6-0.8 A | 0.8 A |
+| twin error vs truth (median) | 0.017 A | 0.44 A |
+| released after the attack | not within 14 min (see D036 open item) | ~45 samples (~54 s) |
+
+The running-state twin error reflects distribution shift: the twin was
+trained on 2026-09-18 data.
+
+---
+
+## 7. Real physical events (guided session, 2026-10-26 23:07-23:21)
+
+Plan with timestamps: `edge/eval/labels/real_events_2026-10-26_plan.txt`.
+Capture via `edge/scripts/load_capture.py` (gitignored). The DHT22 was locked
+up throughout, so temperature/humidity were filled from the same evening's
+baseline capture; attribution reads only current and vibration. Deployed
+configuration, persisted same-evening baseline:
+
+| Real event | Attribution | Isolation |
+|---|---|---|
+| quiet idle | none / fault | none |
+| motor run, untouched | 2 attack windows at switch-on, rest fault/none | none |
+| tap ADXL, motor off | fault only | none |
+| tap ADXL, motor running | fault only | none |
+| ADXL power pulled, motor off (reads 8.18 g) | fault only | none |
+| ADXL power pulled, motor running | fault only | vibration isolated (broken sensor) |
+
+Before D036 the dead ADXL with the motor off was attributed attack in 22
+windows and the normal run produced a false isolation; before D034 taps were
+attributed attack (D030).

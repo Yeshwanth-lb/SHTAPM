@@ -1,0 +1,14 @@
+23:07:24  START - motor OFF, do nothing
+23:10:24  MOTOR ON - just let it run
+23:11:24  MOTOR OFF
+23:12:54  TAP the ADXL sensor 3 times (motor stays OFF)
+23:14:24  MOTOR ON
+23:14:54  TAP the ADXL sensor 3 times (motor running)
+23:15:24  MOTOR OFF
+23:16:54  UNPLUG the ADXL VCC wire (motor OFF)
+23:17:14  PLUG the ADXL VCC wire back in
+23:18:44  MOTOR ON
+23:19:14  UNPLUG the ADXL VCC wire (motor running)
+23:19:34  PLUG the ADXL VCC wire back in
+23:19:44  MOTOR OFF
+23:21:14  END - all done, do nothing

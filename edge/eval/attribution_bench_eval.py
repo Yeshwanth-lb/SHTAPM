@@ -63,6 +63,8 @@ from edge.anomaly.operating_state_rule import (
     BENCH_VIBRATION_BANDS,
     RUNNING,
     OperatingStateRule,
+    StateBands,
+    calibrate_vibration_bands,
 )
 from edge.anomaly.physics_rule import TrendSignPhysicsRule
 from edge.anomaly.pipeline import P2Pipeline
@@ -85,6 +87,7 @@ from edge.trust.c_consistency import ConsistencyProvider
 from edge.trust.engine import TrustEngine
 from edge.trust.h_reliability import HReliabilityProvider
 from edge.trust.k_correlation import BENCH_RUNNING_GATE, CorrelationProvider
+from edge.trust.k_operating_state import OperatingStateCorrelationProvider
 
 WINDOW = 30
 DETECTOR_THRESHOLD = 0.90  # edge/main.py's live value
@@ -94,12 +97,24 @@ DURATION = 60
 SPACING = 240
 CLEAN_CONTROL_FRAMES = 2400  # ~40 min at the bench's ~1 frame/s
 
+
 # name -> (rule factory, physics_flags). The third variant lets a physics
 # violation flag its suspect channel even when the statistical policy is silent.
-RULES: dict[str, tuple[Callable[[], object], bool]] = {
-    "trend_sign (D013)": (TrendSignPhysicsRule, False),
-    "op_state": (OperatingStateRule, False),
-    "op_state+physflags": (OperatingStateRule, True),
+@dataclass(frozen=True)
+class Variant:
+    rule: str  # "trend_sign" | "op_state"
+    physics_flags: bool
+    calibrated: bool = False  # D036: vibration bands learned from the fit data
+    operating_state_k: bool = False  # D035: k from motor-state consistency
+
+
+RULES: dict[str, Variant] = {
+    "trend_sign (D013)": Variant("trend_sign", physics_flags=False),
+    "op_state": Variant("op_state", physics_flags=False),
+    "op_state+physflags": Variant("op_state", physics_flags=True),
+    "deployed (D034-36)": Variant(
+        "op_state", physics_flags=True, calibrated=True, operating_state_k=True
+    ),
 }
 
 
@@ -163,6 +178,7 @@ class Fitted:
     policy: SeverityThresholdFlagPolicy
     c: ConsistencyProvider
     rules: dict[str, object] = field(default_factory=dict)
+    vibration_bands: StateBands = BENCH_VIBRATION_BANDS
 
 
 def fit(frames: list[TelemetryMessage]) -> Fitted:
@@ -173,12 +189,20 @@ def fit(frames: list[TelemetryMessage]) -> Fitted:
     c = ConsistencyProvider()
     for target in (c, detector, policy):
         target.fit(windows)
+    bands = calibrate_vibration_bands(
+        [([f.sensors.current for f in frames], [f.sensors.vibration for f in frames])], WINDOW
+    )
     rules = {}
-    for name, (factory, _) in RULES.items():
-        rule = factory()
+    for name, variant in RULES.items():
+        if variant.rule == "trend_sign":
+            rule = TrendSignPhysicsRule()
+        else:
+            rule = OperatingStateRule(
+                vibration_bands=bands if variant.calibrated else BENCH_VIBRATION_BANDS
+            )
         rule.fit(windows)
         rules[name] = rule
-    return Fitted(pre, detector, policy, c, rules)
+    return Fitted(pre, detector, policy, c, rules, bands)
 
 
 class BatchScoredDetector:
@@ -223,10 +247,16 @@ def run(fitted: Fitted, rule_name: str, frames: list[TelemetryMessage], detector
         trust_engine=TrustEngine(),
         attribution_engine=AttributionEngine(copy.deepcopy(fitted.rules[rule_name])),
         c_provider=copy.deepcopy(fitted.c),
-        k_provider=CorrelationProvider(running_gate=BENCH_RUNNING_GATE),
+        k_provider=(
+            OperatingStateCorrelationProvider(
+                OperatingStateRule(vibration_bands=fitted.vibration_bands)
+            )
+            if RULES[rule_name].operating_state_k
+            else CorrelationProvider(running_gate=BENCH_RUNNING_GATE)
+        ),
         h_provider=HReliabilityProvider(),
         flag_policy=fitted.policy,
-        physics_flags=RULES[rule_name][1],
+        physics_flags=RULES[rule_name].physics_flags,
     )
     return pipeline.process(frames)
 
