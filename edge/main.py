@@ -150,6 +150,7 @@ import os
 import signal
 import time
 from collections import deque
+from typing import TYPE_CHECKING
 
 from app.schemas.contracts import CHANNELS
 
@@ -170,13 +171,35 @@ from edge.pipeline.decision_diagnostic import (
 from edge.pipeline.isolation_fallback import decide_isolation
 from edge.pipeline.isolation_tracker import IsolationFallbackTracker, IsolationTrackerResult
 from edge.pipeline.monitor import LiveP2Monitor, RawChannelValues
-from edge.pipeline.self_heal_runtime import SelfHealRuntime, load_self_heal_runtime
 from edge.trust.c_consistency import ConsistencyProvider
 from edge.trust.engine import TrustEngine
 from edge.trust.h_reliability import HReliabilityProvider
 from edge.trust.k_correlation import CorrelationProvider
 
+if TYPE_CHECKING:
+    from edge.pipeline.self_heal_runtime import SelfHealRuntime
+
 log = logging.getLogger("shtapm.edge.main")
+
+
+def _load_self_heal(model_dir: str, window_size: int) -> SelfHealRuntime | None:
+    """Load the self-heal runtime, or None if its optional stack is unavailable.
+
+    self_heal_runtime imports torch (edge/requirements-p3.txt). Imported here
+    rather than at module top so a Pi without torch still runs telemetry, P2
+    and trust -- previously a missing torch crash-looped the whole service.
+    """
+    try:
+        from edge.pipeline.self_heal_runtime import load_self_heal_runtime
+    except ImportError as e:
+        log.warning(
+            "self-heal DISABLED: %s -- telemetry, detection and trust continue; "
+            "install edge/requirements-p3.txt to enable substitution",
+            e,
+        )
+        return None
+    return load_self_heal_runtime(model_dir, window_size)
+
 
 # Isolation Forest flag threshold: chosen from a real, full-dataset SWaT.A1
 # evaluation (2026-09-13, all 944,919 rows, 35 real labelled attacks) — the
@@ -437,7 +460,7 @@ def main() -> None:
     # frames so the self-heal runtime can build its own correctly-scaled window.
     window_size = int(os.environ.get("WINDOW_SIZE", "30"))
     recent_frames: deque = deque(maxlen=window_size)
-    self_heal = load_self_heal_runtime(os.environ.get("MODEL_DIR", "./models"), window_size)
+    self_heal = _load_self_heal(os.environ.get("MODEL_DIR", "./models"), window_size)
 
     p2_monitor = _build_p2_monitor(
         fit_window_count=p2_fit_window_count,
