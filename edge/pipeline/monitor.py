@@ -146,12 +146,22 @@ class LiveP2Monitor:
         preprocessor: Preprocessor,
         pipeline: P2Pipeline,
         c_provider: ConsistencyProvider,
-        fit_window_count: int,
+        fit_window_count: int | None = None,
         additional_fit_targets: Sequence[_Fittable] = (),
         on_outcome: Callable[[WindowOutcome], None] = lambda outcome: None,
         on_raw_values: Callable[[WindowOutcome, RawChannelValues], None] | None = None,
+        prefitted: bool = False,
     ) -> None:
-        if fit_window_count <= 0:
+        """``prefitted=True``: every component was already fit by the caller on
+        a persisted clean baseline (``edge/models/p2_baseline.py``, D031). No
+        warm-up runs and ``fit_window_count`` is ignored; scoring starts once
+        one full window of live frames exists. Raises if ``c_provider`` is not
+        actually fitted, so a wiring mistake fails at boot rather than as a
+        RuntimeError on the first window."""
+        if prefitted:
+            if not c_provider.fitted:
+                raise ValueError("prefitted=True but c_provider has not been fit")
+        elif fit_window_count is None or fit_window_count <= 0:
             raise ValueError(f"fit_window_count must be > 0, got {fit_window_count}")
         self._preprocessor = preprocessor
         self._pipeline = pipeline
@@ -159,22 +169,30 @@ class LiveP2Monitor:
         self._additional_fit_targets = additional_fit_targets
         self._on_outcome = on_outcome
         self._on_raw_values = on_raw_values
-        self._fit_buffer_size = (
-            preprocessor.window_size + (fit_window_count - 1) * preprocessor.step
-        )
         # Warm-up phase: plain list, accumulated up to exactly
         # _fit_buffer_size frames, never more (we transition out of this
         # phase the instant that size is reached). Normal phase: a
-        # window_size-capped deque, created only once warm-up completes.
+        # window_size-capped deque, created only once warm-up completes --
+        # or immediately, when the components arrive prefitted.
         self._warmup_buffer: list[TelemetryMessage] = []
         self._buffer: deque[TelemetryMessage] | None = None
+        if prefitted:
+            self._fit_buffer_size = 0
+            self._buffer = deque(maxlen=preprocessor.window_size)
+        else:
+            self._fit_buffer_size = (
+                preprocessor.window_size + (fit_window_count - 1) * preprocessor.step
+            )
 
     def on_frame(self, frame: TelemetryMessage) -> None:
         """Feed one healthy telemetry frame (monitoring-only: no isolation,
         no actuation, no publish)."""
         if self._buffer is not None:
             self._buffer.append(frame)
-            self._emit(list(self._buffer))
+            # Always full after warm-up; only a prefitted monitor's first
+            # window_size - 1 frames are short, and those emit nothing.
+            if len(self._buffer) == self._preprocessor.window_size:
+                self._emit(list(self._buffer))
             return
 
         self._warmup_buffer.append(frame)

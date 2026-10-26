@@ -164,6 +164,7 @@ from edge.anomaly.pipeline import P2Pipeline, WindowOutcome
 from edge.anomaly.policy import SeverityThresholdFlagPolicy
 from edge.anomaly.preprocess import Preprocessor
 from edge.drivers.registry import DriverSpec, build_drivers, resolve_channel_specs_from_env
+from edge.models.p2_baseline import RECOMMENDED_MIN_SECONDS, P2Baseline, load_baseline
 from edge.pipeline.decision_diagnostic import (
     DecisionDiagnosticPublisher,
     build_decision_diagnostic_message,
@@ -201,6 +202,39 @@ def _load_self_heal(model_dir: str, window_size: int) -> SelfHealRuntime | None:
     return load_self_heal_runtime(model_dir, window_size)
 
 
+def _load_p2_baseline(model_dir: str) -> P2Baseline | None:
+    """Load the persisted clean baseline (D031), logging what was found.
+
+    None means: no baseline, or an unusable one (load_baseline logs why). The
+    caller then falls back to live warm-up fitting on P2_FIT_WINDOW_COUNT
+    windows -- the pre-D031 behaviour, kept so a missing file degrades
+    calibration instead of stopping the service."""
+    baseline = load_baseline(model_dir)
+    if baseline is None:
+        log.warning(
+            "no P2 baseline in %s -- falling back to live warm-up fitting "
+            "(create one with edge/scripts/fit_p2_baseline.py)",
+            model_dir,
+        )
+        return None
+    log.info(
+        "P2 baseline loaded: %d frames, %d segments, %.1f min clean, source=%s, created=%s",
+        baseline.frame_count,
+        len(baseline.segments),
+        baseline.duration_s / 60.0,
+        baseline.source,
+        baseline.created_at,
+    )
+    if baseline.duration_s < RECOMMENDED_MIN_SECONDS:
+        log.warning(
+            "P2 baseline covers only %.1f min; the 2026-10-26 replay needed >= %d min "
+            "before false Malicious windows disappeared (D031)",
+            baseline.duration_s / 60.0,
+            RECOMMENDED_MIN_SECONDS // 60,
+        )
+    return baseline
+
+
 # Isolation Forest flag threshold: chosen from a real, full-dataset SWaT.A1
 # evaluation (2026-09-13, all 944,919 rows, 35 real labelled attacks) — the
 # best-by-F1 point of a full 0.80-0.99 threshold sweep (detection_rate=0.494,
@@ -212,10 +246,11 @@ def _load_self_heal(model_dir: str, window_size: int) -> SelfHealRuntime | None:
 # severity is a percentile within whatever IsolationForestDetector is fit on
 # (see edge/anomaly/iforest.py's own D-B design note), so this value travels
 # as a "flag the most unusual ~10%" POLICY choice — but the underlying fit
-# happens fresh, live, on THIS Pi's own clean windows every process start
-# (see LiveP2Monitor's additional_fit_targets below), never reused from the
-# SWaT-fitted model. Must be revisited once real bench clean/faulty/spoofed
-# data exists to validate this value directly (U07).
+# happens on THIS bench's own clean data at every process start, never reused
+# from the SWaT-fitted model: from the persisted baseline when one exists
+# (D031, edge/models/p2_baseline.py), otherwise from live warm-up windows (see
+# LiveP2Monitor's additional_fit_targets below). Must be revisited once real
+# bench clean/faulty/spoofed data exists to validate this value directly (U07).
 _P2_DETECTOR_FLAG_THRESHOLD = 0.90
 _P2_DETECTOR_RANDOM_STATE = 0  # determinism only, matches edge/eval/*.py convention
 
@@ -250,11 +285,12 @@ def _required_env_int(name: str) -> int:
 
 def _build_p2_monitor(
     *,
-    fit_window_count: int,
+    fit_window_count: int | None,
     device_id: str,
     decision_publisher: DecisionDiagnosticPublisher,
     self_heal: SelfHealRuntime | None = None,
     recent_frames: deque | None = None,
+    baseline: P2Baseline | None = None,
 ) -> LiveP2Monitor:
     """Compose the real (non-stub) P2 pipeline for observe-only live
     monitoring. The detector, flag policy, and physics rule are real, fitted
@@ -264,7 +300,12 @@ def _build_p2_monitor(
     but structurally unreachable (see that module's docstring history). See
     edge/pipeline/monitor.py's docstring for the ``fit_window_count``
     buffer-size derivation, and ``_P2_DETECTOR_FLAG_THRESHOLD`` above for the
-    detector threshold's provenance."""
+    detector threshold's provenance.
+
+    With ``baseline`` (D031) the four fitted components are fit here, once, on
+    the persisted clean windows, and the monitor starts prefitted -- no live
+    warm-up, and ``fit_window_count`` is unused. Without it, behaviour is
+    exactly the pre-D031 live warm-up on ``fit_window_count`` windows."""
     preprocessor = Preprocessor(median_kernel=1, low_pass_alpha=1.0)  # identity filters;
     # median_kernel/low_pass_alpha have no documented spec value (see
     # edge/anomaly/preprocess.py) — 1/1.0 are the module's own documented
@@ -316,14 +357,27 @@ def _build_p2_monitor(
             # never interrupt P2 monitoring or telemetry.
             log.debug("decision diagnostic build/publish failed (best-effort)", exc_info=False)
 
+    fit_targets = [detector, flag_policy, physics_rule]
+    if baseline is not None:
+        windows = baseline.windows(preprocessor)
+        c_provider.fit(windows)
+        for target in fit_targets:
+            target.fit(windows)
+        log.info(
+            "P2 monitor: fit ConsistencyProvider + %d component(s) on %d persisted "
+            "baseline windows (no live warm-up)",
+            len(fit_targets),
+            len(windows),
+        )
     return LiveP2Monitor(
         preprocessor=preprocessor,
         pipeline=pipeline,
         c_provider=c_provider,
-        additional_fit_targets=[detector, flag_policy, physics_rule],
+        additional_fit_targets=fit_targets,
         fit_window_count=fit_window_count,
         on_outcome=_on_outcome,
         on_raw_values=_on_raw_values,
+        prefitted=baseline is not None,
     )
 
 
@@ -439,7 +493,14 @@ def main() -> None:
     rate_hz = float(os.environ.get("SAMPLE_RATE_HZ", "1"))
     host = os.environ.get("EDGE_MQTT_HOST", "localhost")
     port = int(os.environ.get("EDGE_MQTT_PORT", "1883"))
-    p2_fit_window_count = _required_env_int("P2_FIT_WINDOW_COUNT")
+    model_dir = os.environ.get("MODEL_DIR", "./models")
+    # A persisted clean baseline (D031) replaces live warm-up fitting. Only
+    # without one is P2_FIT_WINDOW_COUNT needed -- and then still required,
+    # with the same named boot error as before.
+    p2_baseline = _load_p2_baseline(model_dir)
+    p2_fit_window_count = (
+        None if p2_baseline is not None else _required_env_int("P2_FIT_WINDOW_COUNT")
+    )
 
     # Resolve this run's per-channel driver selection (env overrides applied
     # on top of _DEFAULT_CHANNEL_SPECS; unset env = today's bench state,
@@ -460,7 +521,7 @@ def main() -> None:
     # frames so the self-heal runtime can build its own correctly-scaled window.
     window_size = int(os.environ.get("WINDOW_SIZE", "30"))
     recent_frames: deque = deque(maxlen=window_size)
-    self_heal = _load_self_heal(os.environ.get("MODEL_DIR", "./models"), window_size)
+    self_heal = _load_self_heal(model_dir, window_size)
 
     p2_monitor = _build_p2_monitor(
         fit_window_count=p2_fit_window_count,
@@ -468,6 +529,7 @@ def main() -> None:
         decision_publisher=decision_publisher,
         self_heal=self_heal,
         recent_frames=recent_frames,
+        baseline=p2_baseline,
     )
 
     def _on_healthy_frame(frame) -> None:

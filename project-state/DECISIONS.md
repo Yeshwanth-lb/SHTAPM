@@ -2825,3 +2825,44 @@ does not authorize any wiring or actuation.
   qualitatively (`FAULT_INJECTION_VALIDATION.md` §9).
 - **Status:** documentation-only; no implementation performed or authorized
   by this entry.
+
+### D031 — APPROVED: the live P2 monitor fits on a persisted clean baseline, not on a few warm-up windows
+- **Date:** 2026-10-26
+- **Decision:** `edge/main.py` loads `models/p2_baseline.npz` + `.json` at
+  startup and fits the four calibrated P2 components (`ConsistencyProvider`,
+  `IsolationForestDetector`, `SeverityThresholdFlagPolicy`,
+  `TrendSignPhysicsRule`) on it, once. `LiveP2Monitor` then starts prefitted:
+  no live warm-up. Without a baseline file the pre-D031 behaviour (warm-up on
+  `P2_FIT_WINDOW_COUNT` windows) is kept as a fallback, so a missing or bad
+  file degrades calibration but never stops telemetry.
+- **Why:** the bench Pi ran with `P2_FIT_WINDOW_COUNT=5` (about 2.5 min of
+  data). Replaying the real 7.18 h idle capture through the exact live
+  composition showed, on genuinely clean data: `current` Malicious in 25% of
+  windows, `vibration` 22%, 20% of windows anomaly-flagged, and four of six
+  channels tracked as isolated within 30 minutes — VIRTUAL with no attack.
+  Larger live fits were tried: 20 and 60 windows were worse (they capture only
+  the first minutes); 10 min reduced it; 30 min produced no Malicious
+  `current`/`vibration` window. With the new tool's hold-out check (fit on the
+  first 57 min of a 71 min slice, score the later 14 min): 0 Malicious windows
+  on every channel, no isolation, 4.6% anomaly-flagged.
+- **What is stored, and why not a pickle:** the clean frames themselves, per
+  contiguous segment (split at gaps > 5 s), in an `.npz` read with
+  `allow_pickle=False`. Components are REFIT from them at startup. This never
+  executes code on load (same stance as `twin_bundle.py`) and is independent
+  of the scikit-learn version (laptop 1.8, Pi 1.5); refits are deterministic
+  because the detector's `random_state` is fixed.
+- **Correction recorded:** `BENCH_LOAD_VALIDATION.md` §9's 0.1% false-positive
+  figure was measured after fitting on 3.6 h of data. It never described the
+  deployed live system, which fitted on 5 windows. Report the hold-out number
+  of whichever baseline is actually deployed.
+- **Implementation:** `edge/models/p2_baseline.py` (new),
+  `edge/scripts/fit_p2_baseline.py` (new, builds + hold-out check + saves),
+  `edge/pipeline/monitor.py` (`prefitted` mode), `edge/main.py` (loader and
+  wiring), `edge/pipeline/self_heal_runtime.py` (twin loader now skips
+  `p2_baseline*.json`, which would otherwise sort first and be mis-loaded as a
+  twin bundle). Tests: `edge/tests/test_p2_baseline.py`.
+- **Recording guidance:** record in the conditions the system is judged in.
+  For this bench that is pump cycling: 40 min alternating motor OFF/ON every
+  5 min, sensors untouched.
+- **Does NOT change:** the detector threshold (0.90), any trust/attribution
+  algorithm, D009/D010/D013–D015, U05, or the frozen contract.

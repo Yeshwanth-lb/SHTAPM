@@ -48,6 +48,7 @@ from app.schemas.contracts import CHANNELS, TelemetryMessage
 
 from edge.anomaly.pipeline import WindowOutcome
 from edge.anomaly.preprocess import Window
+from edge.models.p2_baseline import BASELINE_STEM
 from edge.models.twin_bundle import TwinBundle, load_bundle
 from edge.pipeline.cycle import process_isolated_channels
 from edge.pipeline.divergence import DivergenceScorer
@@ -214,7 +215,14 @@ def load_self_heal_runtime(model_dir: str | Path, window_size: int) -> SelfHealR
     isolation reporting all continue unchanged.
     """
     directory = Path(model_dir)
-    bundles = sorted(directory.glob("*.json")) if directory.is_dir() else []
+    # MODEL_DIR also holds the P2 baseline's metadata (D031). It sorts before
+    # any twin_* file, so without this exclusion the twin loader would try to
+    # load it as a twin bundle and silently disable substitution.
+    bundles = (
+        sorted(p for p in directory.glob("*.json") if not p.name.startswith(BASELINE_STEM))
+        if directory.is_dir()
+        else []
+    )
     if not bundles:
         log.info(
             "no twin bundle in %s -- self-healing substitution is UNAVAILABLE "
