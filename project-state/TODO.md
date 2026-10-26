@@ -7,6 +7,30 @@
 
 ---
 
+## ⚠️ STATUS AS OF 2026-10-26 — newest first
+
+| | criterion | status |
+|---|---|---|
+| AC1 | 6 channels live | 🟡 5 real (rebuilt 2026-10-26); gas PLACEHOLDER (MQ-135 out of ADC range) |
+| AC2 | Attack detected + attributed, trust <0.4 in <=3 windows | ❌ attribution 40% (EVALUATION_RESULTS_2026-10-26.md); inject path now exists to demonstrate detection |
+| AC3 | VIRTUAL substitution | ✅ live; now releases on recovery (D018 pt.2) |
+| AC4 | Dry-run safe-stop | 🟡 software demo (`edge/scripts/dry_run_safe_stop.py`); no actuation wired |
+| AC5 | Ledger + tamper | ✅ + `recover`, `scenario_inject`, `scenario_cancel` events |
+| AC6 | <2 s sensor->UI | 🟡 edge->backend + browser leg measured separately |
+| AC7 | Auth + RBAC + audit | ✅ incl. inject endpoints |
+| AC8 | Demo twice incl. fallback | ❌ not rehearsed |
+| AC9 | SWaT + ablations + confusion matrix | 🟡 ablation + synthetic confusion matrix produced; bench n=2 |
+| AC10 | Happy/Edge/Sad everywhere | ❌ audit: 17/77 covered |
+
+Done 2026-10-26: [x] save uncommitted work · [x] D031 persisted baseline ·
+[x] isolation recovery · [x] D032 scenario injection (U14) · [x] confusion
+matrix + SWaT ablation run.
+Open: [ ] record + build the bench baseline on the Pi · [ ] rehearse demo
+(AC8) · [ ] attribution method (O3/AC2) · [ ] Mosquitto auth (D032
+limitation) · [ ] MQ-135 level shifting + driver.
+
+---
+
 ## ⚠️ STATUS AS OF 2026-09-18 — read before trusting a checkbox below
 
 Sections further down were last revised on 2026-09-07 and **46 commits have

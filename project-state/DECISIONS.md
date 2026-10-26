@@ -1525,7 +1525,7 @@
 - U11 — Dashboard branding (logo/palette) beyond Aurora defaults (P5).
 - U12 — Primary graded artifact: live demo vs paper (shifts P6/P7 weighting).
 - U13 — White-box adaptive-adversary evaluation in submission scope or future (P7).
-- U14 — `…/command` (scenario-inject) message payload is UNSPECIFIED in all docs (TRD §02.3 names the topic only). Blocks P4 injection (FR-A4/FR-D7). Not part of the M2 telemetry/decision/ledger freeze; do not invent.
+- U14 — **RESOLVED by D032 (2026-10-26).** Was: `…/command` (scenario-inject) message payload UNSPECIFIED in all docs (TRD §02.3 names the topic only); blocked FR-A4/FR-D7.
 
 ---
 
@@ -2866,3 +2866,45 @@ does not authorize any wiring or actuation.
   5 min, sensors untouched.
 - **Does NOT change:** the detector threshold (0.90), any trust/attribution
   algorithm, D009/D010/D013–D015, U05, or the frozen contract.
+
+### D032 — APPROVED: scenario-injection command contract and live injection path (resolves U14)
+- **Date:** 2026-10-26
+- **Decision:** `backend/app/schemas/command.py` is the payload for TRD §02.3's
+  `shtapm/{device_id}/command` topic (QoS 1, backend -> edge). Two messages,
+  discriminated by `action`:
+  - `inject`: `command_id, device_id, scenario, channel, duration_s, params,
+    issued_by, issued_at`. `scenario` is one of the eight `edge.injection`
+    types. `params` are REQUIRED per scenario and operator-supplied
+    (drift `rate`/s, spike `amplitude`, stuck_at optional `held_value`,
+    bias_fdi `bias`, ramp_fdi `slope`/s, replay `lookback_s` >= duration,
+    constant_spoof `value`, adaptive_stealth_fdi `rate`/s + `residual_cap` > 0).
+    No scenario has a built-in magnitude, matching `edge.injection`'s rule.
+  - `cancel`: `command_id` (or `*` for whatever is running).
+- **Policy value introduced:** `MAX_DURATION_S = 600`. Not a spec number: a
+  demo-safety cap so an injection left running by mistake ends on its own.
+  Change it here if the demo needs longer.
+- **Edge path:** `CommandListener` (own MQTT client) -> `LiveInjector` ->
+  `AcquisitionRuntime(frame_transform=...)`. The injected frame is what P2
+  scores, what is published and what the dashboard draws — the full
+  observable effect of a spoofed or failing sensor. It never reaches drivers,
+  the relay, the watchdog or any actuation. The live injector reuses the
+  unmodified injection classes, so the demo and the offline evaluation run the
+  same transform code. Rates are converted per second -> per sample.
+- **Backend path:** `POST /api/devices/{id}/inject` and `/inject/cancel`
+  (analyst, admin; Doc05 §05.6), `GET /api/devices/{id}/inject` (any scoped
+  user). Every attempt is written to `audit_log` with `sent: true|false`; every
+  command actually handed to the broker is chained into the ledger
+  (`scenario_inject` / `scenario_cancel`). Broker down -> 503, never reported
+  as sent.
+- **Dashboard:** `ScenarioInjectPanel` on the Device page. Role from the JWT
+  claim decides visibility only; the backend re-checks on every request.
+- **Known limitation:** the bench broker is unauthenticated (Mosquitto auth is
+  an open TODO), so anyone on the same network can publish to the command
+  topic directly, bypassing RBAC and audit. Acceptable for a closed demo
+  network; must be fixed before any networked deployment.
+- **Evidence (2026-10-26, laptop E2E against a real Mosquitto):** constant
+  spoof of `current` to 7.5 A for 6 s -> first spoofed frame 0.9 s after the
+  REST call, exactly 6 spoofed frames, then the live value; one
+  `scenario_inject` ledger block, chain verifies; invalid params -> 422.
+- **Does NOT change:** the frozen telemetry/decision/ledger contracts, any
+  detection/trust/attribution algorithm, or actuation scope.

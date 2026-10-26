@@ -128,6 +128,44 @@ connected here."*
 
 ---
 
+## Before the demo: build the P2 clean baseline (D031)
+
+Without it the Pi learns "normal" from 2.5 minutes at startup and raises
+false alarms; channels go VIRTUAL with no attack. Do this once on the demo
+bench, in demo conditions. On the Pi, with `shtapm` running:
+
+1. Record 40 minutes of clean data while cycling the motor (OFF 0-5 min, ON
+   5-10, OFF 10-15 ... ON 35-40). Do not touch the sensors.
+   ```
+   cd ~/SHTAPM
+   timeout 2400 mosquitto_sub -h localhost -t 'shtapm/pump-01/telemetry' > baseline_capture.jsonl &
+   ```
+2. Build it. The tool prints a hold-out check: every Malicious count should
+   be 0 and "channels isolated at the end" should be "none".
+   ```
+   PYTHONPATH=backend:. .venv/bin/python edge/scripts/fit_p2_baseline.py baseline_capture.jsonl --model-dir models
+   sudo systemctl restart shtapm
+   ```
+3. Confirm it loaded: `journalctl -u shtapm -n 50 --no-pager | grep "P2 baseline"`.
+
+## During the demo: inject an attack from the dashboard (D032)
+
+Log in as admin, open **Device**, then use the **Scenario injection** panel:
+
+1. Pick **Constant spoof**, channel **current** (or vibration — the two
+   channels the attribution rule covers; D014), duration about 60 s.
+2. Click **Use current reading** so the spoof is plausible, then **Inject attack**.
+3. Watch the channel's value flatten; trust drops; the twin takes over
+   (VIRTUAL) when trust reaches Malicious; the ledger records
+   `scenario_inject`, `trust_drop`, `isolate`, then `recover` after the
+   injection ends and trust returns to Trusted.
+4. **Stop** ends it early. Every command is audited and chained in the ledger.
+
+If the panel says "Not sent: MQTT broker unavailable", the backend has lost
+the broker (T6). Nothing was injected.
+
+---
+
 ## First-time login
 
 Log in with the seeded admin account. If the login fails on a fresh database, run:

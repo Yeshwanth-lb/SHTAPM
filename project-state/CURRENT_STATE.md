@@ -6,6 +6,44 @@
 
 ---
 
+# ⚠️ CURRENT STATE — 2026-10-26 (read this section first)
+
+The 2026-09-18 section below is still accurate except where this one updates it.
+
+## Bench
+Hardware rebuilt and re-verified on 2026-10-26: DHT22, BMP280, INA219 (+ motor
+in series), ADXL335 via MCP3008 — all PASS in `hw_diagnostic.py`. Motor EMI no
+longer knocks out the DHT22 with the current wiring (20/20 clean reads with the
+motor running). MQ-135 tried: its analog output exceeded the ADC's 3.3 V range
+and the divider wiring did not work; disconnected. `gas` stays PLACEHOLDER.
+
+## Landed 2026-10-26 (all pushed)
+- Previously uncommitted work saved: torch-optional edge start, vendored Geist
+  fonts, browser-leg latency (AC6), hardware-free dry-run safe-stop demo (AC4),
+  attribution confusion matrix (O3), SWaT ablation (O10), AC10 audit, demo runbook.
+- **D031 persisted P2 baseline.** The live monitor fitted on 5 windows and
+  falsely isolated channels on clean data (current Malicious 25% of windows).
+  Now fits on `models/p2_baseline.*` built by `edge/scripts/fit_p2_baseline.py`.
+  Hold-out on real idle data: 0 Malicious windows, no isolation.
+- **Recovery (D018 pt.2).** Isolated channels are released when trust returns
+  to TRUSTED_MIN; ledger chains `recover`, and `isolate` once per episode.
+- **D032 scenario injection (U14 resolved).** Dashboard panel -> REST (analyst/
+  admin, audited, ledger-chained) -> MQTT command -> edge LiveInjector ->
+  telemetry. Verified end to end on the laptop against a real broker.
+
+## Measured 2026-10-26 (see EVALUATION_RESULTS_2026-10-26.md)
+- Attribution: 40% episode accuracy on simulated injections (target 85%);
+  attacks are labelled `fault` 83-93% of the time.
+- SWaT: z-score baseline F1 0.739 vs deployed IF 0.418 (window level), but the
+  IF flags 34/35 attack events against 13/35.
+
+## Next
+1. Record the 40-minute baseline on the Pi and build it (runbook).
+2. Rehearse the inject -> trust drop -> VIRTUAL -> recover sequence live.
+3. Research: a real attribution method (the paper's core claim).
+
+---
+
 # ⚠️ CURRENT STATE — 2026-09-18 (read this section first)
 
 **Everything below the horizontal rule after this section is HISTORICAL.** It
