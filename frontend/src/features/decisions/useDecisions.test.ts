@@ -123,3 +123,32 @@ describe("isSubstituted", () => {
     expect(isSubstituted(null, "current")).toBe(false);
   });
 });
+
+describe("useDecisions polling", () => {
+  it("re-fetches on the live interval so a mid-session VIRTUAL shows up", async () => {
+    const { renderHook, waitFor } = await import("@testing-library/react");
+    const { vi } = await import("vitest");
+    const api = await import("../../lib/api");
+    const { useDecisions, LIVE_DECISION_POLL_MS } = await import("./useDecisions");
+
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const spy = vi
+      .spyOn(api, "apiGet")
+      .mockResolvedValueOnce([row()] as never)
+      .mockResolvedValue([row({ substituted_channels: ["current"] })] as never);
+    try {
+      const { result } = renderHook(() =>
+        useDecisions("pump-01", "token", 1, LIVE_DECISION_POLL_MS),
+      );
+      await waitFor(() => expect(result.current.data).not.toBeNull());
+      expect(isSubstituted(result.current.data![0], "current")).toBe(false);
+
+      await vi.advanceTimersByTimeAsync(LIVE_DECISION_POLL_MS + 50);
+      await waitFor(() => expect(isSubstituted(result.current.data![0], "current")).toBe(true));
+      expect(spy.mock.calls.length).toBeGreaterThanOrEqual(2);
+    } finally {
+      spy.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+});

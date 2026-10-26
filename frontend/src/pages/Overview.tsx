@@ -10,7 +10,7 @@ import { StateBlock, StatusPill } from "../components/aurora/StateBlock";
 import { navigate } from "../app/router";
 import { useAuth } from "../features/auth/AuthContext";
 import { useChannels } from "../features/channels/useChannels";
-import { trustBand, useDecisions } from "../features/decisions/useDecisions";
+import { LIVE_DECISION_POLL_MS, trustBand, useDecisions } from "../features/decisions/useDecisions";
 import { apiGet, getHealthz, type AlertOut, type DeviceOut, type HealthzOut } from "../lib/api";
 import { useApiResource } from "../lib/useApiResource";
 import { CHANNELS } from "../types/contracts";
@@ -46,7 +46,7 @@ export function Overview() {
   );
   const { channels } = useChannels(DEVICE_ID, accessToken);
   // Only the newest row is needed for an at-a-glance state.
-  const decisions = useDecisions(DEVICE_ID, accessToken, 1);
+  const decisions = useDecisions(DEVICE_ID, accessToken, 1, LIVE_DECISION_POLL_MS);
 
   const h = health.data;
   const latestDecision = decisions.data?.[decisions.data.length - 1] ?? null;

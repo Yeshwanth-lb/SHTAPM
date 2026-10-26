@@ -89,10 +89,17 @@ export function isSubstituted(row: DecisionOut | null, channel: string): boolean
   return row?.substituted_channels?.includes(channel) ?? false;
 }
 
+/**
+ * `pollMs` re-fetches on an interval. Pages that show live decision state
+ * (VIRTUAL badges, trust) must poll: decisions have no WebSocket frame yet, so
+ * without it the badge reflects only the moment the page was opened and a
+ * channel the twin takes over mid-session never shows as VIRTUAL.
+ */
 export function useDecisions(
   deviceId: string,
   accessToken: string | null,
   limit = 120,
+  pollMs?: number,
 ): ApiResource<DecisionOut[]> {
   return useApiResource<DecisionOut[]>(
     () =>
@@ -101,9 +108,12 @@ export function useDecisions(
         accessToken!,
       ),
     [deviceId, accessToken, limit],
-    { enabled: accessToken !== null },
+    { enabled: accessToken !== null, pollMs },
   );
 }
+
+/** How often live pages refresh decision state. The edge emits one per second. */
+export const LIVE_DECISION_POLL_MS = 2_000;
 
 export function useDecisionProvenance(
   deviceId: string,
