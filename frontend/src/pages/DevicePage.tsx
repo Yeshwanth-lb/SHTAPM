@@ -18,6 +18,7 @@ import { SensorCard } from "../components/panels/SensorCard";
 import { useAuth } from "../features/auth/AuthContext";
 import { useChannels } from "../features/channels/useChannels";
 import { isSubstituted, useDecisions } from "../features/decisions/useDecisions";
+import { ScenarioInjectPanel } from "../features/inject/ScenarioInjectPanel";
 import { useDeviceTelemetry } from "../features/telemetry/useDeviceTelemetry";
 import { CHANNELS } from "../types/contracts";
 import "./device.css";
@@ -191,6 +192,13 @@ export function DevicePage() {
           </div>
         )}
       </GlassTile>
+
+      <ScenarioInjectPanel
+        deviceId={DEVICE_ID}
+        accessToken={accessToken}
+        liveValues={latest ? { ...latest.sensors } : null}
+        channels={channels}
+      />
 
       <GlassTile title="Session">
         <div className="device__meta t-muted mono">

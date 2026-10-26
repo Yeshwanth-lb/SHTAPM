@@ -70,13 +70,20 @@ class AcquisitionRuntime:
         publisher: ResilientTelemetryPublisher,
         rate_hz: float,
         on_healthy_frame: Callable[[TelemetryMessage], None] | None = None,
+        frame_transform: Callable[[TelemetryMessage], TelemetryMessage] | None = None,
     ) -> None:
+        """``frame_transform`` (optional, default None = byte-identical
+        behaviour) rewrites each healthy frame BEFORE monitoring and
+        publishing -- the scenario-injection seam (``edge.injection.live``,
+        D032). A transform that raises is logged and the clean frame is used:
+        injection must never break telemetry."""
         if not (MIN_RATE_HZ <= rate_hz <= MAX_RATE_HZ):
             raise ValueError(f"rate_hz must be in [{MIN_RATE_HZ}, {MAX_RATE_HZ}], got {rate_hz}")
         self._sampler = sampler
         self._publisher = publisher
         self._period = 1.0 / rate_hz
         self._on_healthy_frame = on_healthy_frame
+        self._frame_transform = frame_transform
 
     def tick(self) -> SampleResult:
         """One sample tick: sample, and publish only if a frame was produced.
@@ -84,12 +91,19 @@ class AcquisitionRuntime:
         a WARNING naming the unhealthy channel(s) — see module docstring."""
         result = self._sampler.sample_once()
         if result.frame is not None:
+            frame = result.frame
+            if self._frame_transform is not None:
+                try:
+                    frame = self._frame_transform(frame)
+                except Exception:  # injection must never break telemetry publishing
+                    log.warning("frame_transform raised; publishing the clean frame", exc_info=True)
+                    frame = result.frame
             if self._on_healthy_frame is not None:
                 try:
-                    self._on_healthy_frame(result.frame)
+                    self._on_healthy_frame(frame)
                 except Exception:  # monitoring must never break telemetry publishing
                     log.warning("on_healthy_frame hook raised; continuing", exc_info=True)
-            self._publisher.publish(result.frame)
+            self._publisher.publish(frame)
         else:
             unhealthy = sorted(ch for ch, r in result.readings.items() if not r.healthy)
             log.warning(

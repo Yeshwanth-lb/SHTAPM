@@ -48,12 +48,15 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from app.api.alerts import router as alerts_router
 from app.api.auth import router as auth_router
 from app.api.devices import router as devices_router
+from app.api.inject import InjectionRegistry
+from app.api.inject import router as inject_router
 from app.api.ledger import router as ledger_router
 from app.api.system import router as system_router
 from app.api.users import router as users_router
 from app.core.config import AuthSettings, CorsSettings, DatabaseSettings, MqttSettings
 from app.core.db import make_engine, make_session_factory
 from app.models import Base
+from app.mqtt.command_publisher import CommandPublisher
 from app.mqtt.consumer import TelemetryConsumer
 from app.mqtt.decision_diagnostic_consumer import DecisionDiagnosticConsumer
 from app.mqtt.status_consumer import StatusConsumer
@@ -115,12 +118,20 @@ async def lifespan(app: FastAPI):
     status_consumer.add_sink(StatusPersistence(session_factory).persist)
     status_consumer.start(settings.host, settings.port)
     app.state.status_consumer = status_consumer
+
+    # Backend -> edge scenario-injection commands (D032): its own client, so a
+    # publish problem cannot disturb any consumer above.
+    command_publisher = CommandPublisher()
+    command_publisher.start(settings.host, settings.port)
+    app.state.command_publisher = command_publisher
+    app.state.injection_registry = InjectionRegistry()
     try:
         yield
     finally:
         consumer.stop()
         decision_diagnostic_consumer.stop()
         status_consumer.stop()
+        command_publisher.stop()
         engine.dispose()
 
 
@@ -186,6 +197,7 @@ configure_cors(app)
 app.include_router(ws_router)
 app.include_router(auth_router)
 app.include_router(devices_router)
+app.include_router(inject_router)
 app.include_router(alerts_router)
 app.include_router(users_router)
 app.include_router(system_router)

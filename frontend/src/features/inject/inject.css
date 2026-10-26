@@ -1,0 +1,169 @@
+.inject {
+  display: grid;
+  gap: 16px;
+}
+
+.inject__form {
+  display: grid;
+  gap: 14px;
+}
+
+.inject__scenarios {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.inject__group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.inject__kind {
+  min-width: 64px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.inject__kind--attack {
+  color: var(--status-critical);
+}
+
+.inject__kind--fault {
+  color: var(--status-warning);
+}
+
+.inject__description {
+  margin: 0;
+  font-size: 13px;
+}
+
+.inject__fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px;
+}
+
+.inject__field {
+  display: grid;
+  gap: 6px;
+}
+
+.inject__field input,
+.inject__field select {
+  font: inherit;
+  font-size: 13px;
+  color: var(--text-primary);
+  background: var(--glass-inset);
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+  padding: 7px 10px;
+}
+
+.inject__field input:focus-visible,
+.inject__field select:focus-visible {
+  outline: 2px solid var(--status-info);
+  outline-offset: 1px;
+}
+
+.inject__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.inject__submit {
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 16px;
+  border-radius: 999px;
+  cursor: pointer;
+  color: var(--text-hero);
+  border: 1px solid var(--glass-border-strong);
+  background: var(--glass-2);
+  transition: box-shadow var(--motion-fast) var(--ease-out);
+}
+
+.inject__submit--attack {
+  border-color: var(--status-critical);
+  box-shadow: 0 0 0 1px var(--status-critical-glow);
+}
+
+.inject__submit--fault {
+  border-color: var(--status-warning);
+  box-shadow: 0 0 0 1px var(--status-warning-glow);
+}
+
+.inject__submit:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.inject__note {
+  font-size: 12px;
+}
+
+.inject__error {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 13px;
+  color: var(--status-critical);
+  background: rgba(255, 92, 122, 0.08);
+  border: 1px solid rgba(255, 92, 122, 0.28);
+}
+
+.inject__active {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  font-size: 13px;
+  background: var(--glass-inset);
+  border: 1px solid var(--glass-border);
+}
+
+.inject__active--attack {
+  border-color: var(--status-critical);
+}
+
+.inject__active--fault {
+  border-color: var(--status-warning);
+}
+
+.inject__meta {
+  margin-top: 4px;
+  font-size: 12px;
+}
+
+.inject__badge {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+}
+
+.inject__badge--attack {
+  color: var(--status-critical);
+}
+
+.inject__badge--fault {
+  color: var(--status-warning);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .inject__submit {
+    transition: none;
+  }
+}

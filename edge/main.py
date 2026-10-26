@@ -108,14 +108,12 @@ or MQTT/decision publishing.
 FR-RL4 FOLLOW-UP — PERSISTENT TRACKING (still decision-only, still
 observe-only): a single ``IsolationFallbackTracker`` (edge/pipeline/
 isolation_tracker.py) wraps the stateless decision above with cross-cycle
-memory — a channel seen Malicious once stays reported as a persistent
-isolation candidate in later cycles even if its trust recovers, since no
-real ``SelfHealOutcome`` recovery confirmation is wired into the live path
-(no digital-twin reconstruction or divergence threshold exists yet — see
-the tracker module's own docstring). This NEVER claims recovery occurred,
-adds no threshold/cooldown/cap, and — like everything else in this
-section — never calls process_isolated_channels/SelfHealOrchestrator/
-actuation/ledger/MQTT/dashboard code.
+memory — a channel judged Malicious stays isolated while its trust is only
+Suspicious, and is released once trust is back at ``TRUSTED_MIN`` (D018
+pt.2, the same rule ``SelfHealOrchestrator`` uses to end substitution). It
+adds no new threshold/cooldown/cap; the tracker itself never calls
+process_isolated_channels/SelfHealOrchestrator/actuation/ledger/MQTT/
+dashboard code.
 
 RAW-VALUE PLUMBING (integration-readiness prep, still observe-only): each
 outcome is also paired with the exact raw per-channel values for that same
@@ -152,8 +150,10 @@ import time
 from collections import deque
 from typing import TYPE_CHECKING
 
+from app.schemas.command import MAX_DURATION_S
 from app.schemas.contracts import CHANNELS
 
+from edge.acquisition.command_listener import CommandListener
 from edge.acquisition.mqtt_publisher import ResilientTelemetryPublisher
 from edge.acquisition.runtime import AcquisitionRuntime
 from edge.acquisition.sampler import Sampler
@@ -164,6 +164,7 @@ from edge.anomaly.pipeline import P2Pipeline, WindowOutcome
 from edge.anomaly.policy import SeverityThresholdFlagPolicy
 from edge.anomaly.preprocess import Preprocessor
 from edge.drivers.registry import DriverSpec, build_drivers, resolve_channel_specs_from_env
+from edge.injection.live import LiveInjector
 from edge.models.p2_baseline import RECOMMENDED_MIN_SECONDS, P2Baseline, load_baseline
 from edge.pipeline.decision_diagnostic import (
     DecisionDiagnosticPublisher,
@@ -536,11 +537,22 @@ def main() -> None:
         recent_frames.append(frame)
         p2_monitor.on_frame(frame)
 
+    # Scenario injection (FR-A4/FR-D7, D032): backend commands arrive on
+    # shtapm/{device_id}/command and rewrite frames before P2 and publishing,
+    # for a bounded time. History covers the longest replay a command can ask
+    # for (lookback >= duration, duration <= MAX_DURATION_S).
+    injector = LiveInjector(
+        device_id=device_id, rate_hz=rate_hz, history_seconds=2 * MAX_DURATION_S
+    )
+    command_listener = CommandListener(device_id=device_id, injector=injector)
+    command_listener.start(host, port)
+
     runtime = AcquisitionRuntime(
         sampler=sampler,
         publisher=publisher,
         rate_hz=rate_hz,
         on_healthy_frame=_on_healthy_frame,
+        frame_transform=injector.transform,
     )
 
     running = {"go": True}
@@ -556,7 +568,7 @@ def main() -> None:
     fake_channels = sorted(ch for ch in CHANNELS if channel_specs[ch].kind == "fake")
     print(
         f"[edge] driver config: real={real_channels or 'none'} "
-        f"alternate={alternates or 'none'} fake={fake_channels or 'none'} → "
+        f"alternate={alternates or 'none'} fake={fake_channels or 'none'} -> "
         f"{publisher.telemetry_topic} at {rate_hz} Hz (Ctrl-C to stop) "
         f"[P2 monitoring: observe-only, no isolation/actuation/publish]"
     )
@@ -574,6 +586,7 @@ def main() -> None:
         runtime.run(should_continue=lambda: running["go"], sleep=time.sleep)
     finally:
         runtime.stop()
+        command_listener.stop()
         decision_publisher.stop()
         print("[edge] stopped (status offline)")
 

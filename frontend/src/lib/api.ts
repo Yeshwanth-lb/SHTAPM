@@ -164,6 +164,85 @@ export function apiGet<T>(path: string, accessToken: string): Promise<T> {
   return request<T>(path, { method: "GET" }, accessToken);
 }
 
+export function apiPost<T>(path: string, body: unknown, accessToken: string): Promise<T> {
+  return request<T>(
+    path,
+    { method: "POST", body: body === undefined ? undefined : JSON.stringify(body) },
+    accessToken,
+  );
+}
+
+// ---- Scenario injection (FR-D7, D032) — mirrors backend app/api/inject.py ----
+
+export type InjectionScenario =
+  | "drift"
+  | "spike"
+  | "stuck_at"
+  | "bias_fdi"
+  | "ramp_fdi"
+  | "replay"
+  | "constant_spoof"
+  | "adaptive_stealth_fdi";
+
+/** Mirrors backend app/schemas/command.py MAX_DURATION_S. */
+export const MAX_INJECTION_DURATION_S = 600;
+
+export interface InjectRequest {
+  scenario: InjectionScenario;
+  channel: string;
+  duration_s: number;
+  params: Record<string, number>;
+}
+
+export interface InjectionOut {
+  command_id: string;
+  device_id: string;
+  scenario: InjectionScenario;
+  kind: "fault" | "attack";
+  channel: string;
+  duration_s: number;
+  params: Record<string, number>;
+  issued_by: string;
+  issued_at: string;
+  expires_at: string;
+  active: boolean;
+}
+
+export interface CancelOut {
+  command_id: string;
+  cancelled: boolean;
+}
+
+export function injectScenario(
+  deviceId: string,
+  body: InjectRequest,
+  accessToken: string,
+): Promise<InjectionOut> {
+  return apiPost<InjectionOut>(
+    `/api/devices/${encodeURIComponent(deviceId)}/inject`,
+    body,
+    accessToken,
+  );
+}
+
+export function cancelScenario(deviceId: string, accessToken: string): Promise<CancelOut> {
+  return apiPost<CancelOut>(
+    `/api/devices/${encodeURIComponent(deviceId)}/inject/cancel`,
+    undefined,
+    accessToken,
+  );
+}
+
+export function getActiveInjection(
+  deviceId: string,
+  accessToken: string,
+): Promise<InjectionOut | null> {
+  return apiGet<InjectionOut | null>(
+    `/api/devices/${encodeURIComponent(deviceId)}/inject`,
+    accessToken,
+  );
+}
+
 /** Mirrors backend AlertOut (api/alerts.py). */
 export interface AlertOut {
   id: string;
