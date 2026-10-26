@@ -103,35 +103,45 @@ Report the hold-out numbers of whichever baseline is actually deployed.
 
 ## 4. Attribution on real bench streams: TrendSign vs operating-state (D034)
 
-`PYTHONPATH="backend;." python -m edge.eval.attribution_bench_eval --idle-onsets 20 --cycling-onsets 4`
+`PYTHONPATH="backend;." python -m edge.eval.attribution_bench_eval --idle-onsets 20 --cycling-onsets 4 --running-onsets 10`
 
 Same live P2 composition, only the physics rule (and the physics-flags option)
-swapped. Injections into the real 7.2 h idle capture, 20 onsets x 2 channels
-(current, vibration) = 40 episodes per scenario. Settled attribution =
-majority label over the flagged windows of the episode.
+swapped. Injections into three real bench captures: the 7.2 h idle capture
+(20 onsets x 2 channels), the 19-min ON/OFF cycling capture, and the
+2026-10-26 motor-running capture (64% of rows with the motor on; DHT22
+dropouts carried forward, attribution reads only current and vibration).
 
-| Scenario (truth) | trend_sign (D013) | op_state | **op_state + physics flags** |
-|---|---|---|---|
-| spike, 2 samples (fault) | 19/19 | 19/19 | **19/19** |
-| stuck-at (fault) | 20/20 | 20/20 | **20/20** |
-| drift (fault) | 31/39 | 34/39 | 1/40 |
-| constant spoof, crosses motor state (attack) | 10/40 | 33/40 | **40/40** |
-| bias, crosses motor state (attack) | 10/40 | 26/40 | **40/40** |
-| ramp (attack) | 8/39 | 5/39 | **39/40** |
-| spoof / bias / stealth that stay in state (attack) | 17/96 | 0/96 | 0/96 |
-| false `attack` on 4,742 clean channel-windows | 0 | 0 | **0** |
+Attacks are grouped by MEASUREMENT, per episode: does the injected reading
+ever put the channel in the opposite motor state (a full window whose median
+lands in the other determinate band)? That is the physically impossible case.
+"Episode" verdict = attack if any flagged window in the episode was
+attributed attack (scored on faults too, so false accusations count).
+
+| Stream | Rule | Attacks crossing state -> attack | Attacks staying in state -> attack | Faults -> fault | False attack, clean channel-windows |
+|---|---|---|---|---|---|
+| idle 7.2 h | trend_sign (D013) | 55/119 (46%) | 38/96 (40%) | 63/78 (81%) | 0/4,742 (0.0%) |
+| idle 7.2 h | **op_state + physics flags** | **120/120 (100%)** | 0/96 (0%) | 39/79 (49%)* | **0/4,742 (0.0%)** |
+| cycling 19 min | trend_sign (D013) | 7/10 (70%) | 4/4 | 1/5 (20%) | 6/928 (0.6%) |
+| cycling 19 min | **op_state + physics flags** | **12/12 (100%)** | 2/6 | **5/5 (100%)** | 7/928 (0.8%) |
+| running 25 min | trend_sign (D013) | 57/68 (84%) | 35/59 (59%) | 16/41 (39%) | 35/1,594 (2.2%) |
+| running 25 min | **op_state + physics flags** | **64/70 (91%)** | 2/59 (3%) | **36/42 (86%)** | **1/1,594 (0.1%)** |
+
+\* All idle fault errors are drift, which is the same waveform as a ramp
+attack; spike and stuck-at are 39/39 correct.
 
 **Reading:**
-- Physics-consistency attribution with physics flags attributes every
-  state-crossing attack correctly with no false attacks on 7.2 h of clean
-  data, against 25% for the trend-sign rule. This is the paper's attribution
-  result.
-- The two failures are definitional, not tuning: drift and ramp are the same
-  waveform (a drift that makes the current sensor claim a running motor is
-  labelled attack), and an attack that keeps the reading physically plausible
-  is invisible to physics. Both are stated limits.
-- Detection rates are unchanged by the rule (the detector is the same): a
-  2-sample spike and stuck-at at idle are detected in about half the episodes.
-- Running-state coverage is too small for a claim (19-min cycling capture,
-  n = 2 per scenario: cross-state 3/5). A longer motor-on bench capture is
-  required before the paper states running-state numbers.
+- Operating-state attribution with physics flags identifies 91-100% of
+  physically impossible falsifications, keeps genuine faults as faults
+  (86-100% outside drift), and almost never accuses a clean sensor
+  (0-0.8% of clean channel-windows).
+- The trend-sign rule's apparent recall while running is false alarm: it
+  labels 59% of in-state attacks and 61% of faults as attacks and raises
+  2.2% false attacks on clean running data (D030 at scale). At idle it misses
+  most attacks.
+- Stated limits: drift == ramp; attacks that keep a reading in its true
+  physical state (in-state spoof, small bias, stealth FDI, same-state replay)
+  are physically consistent and not attributable by this rule; only the
+  current/vibration pair can be attributed attack on this bench.
+- Majority-vote ("settled") attribution is lower on noisy running data
+  (48/70) because every attack's onset windows are labelled fault while
+  half-injected; the episode verdict is the operational quantity.

@@ -60,6 +60,7 @@ from edge.anomaly.attribution import AttributionEngine
 from edge.anomaly.iforest import IsolationForestDetector
 from edge.anomaly.operating_state_rule import (
     BENCH_CURRENT_BANDS,
+    BENCH_VIBRATION_BANDS,
     RUNNING,
     OperatingStateRule,
 )
@@ -117,23 +118,32 @@ def load_stream(path: Path) -> list[TelemetryMessage]:
         return [m for seg in split_segments(parsed.messages) for m in seg]
     gas = _gas_source()
     frames: list[TelemetryMessage] = []
+    last_dht: tuple[float, float] | None = None
     for i, line in enumerate(path.open(encoding="utf-8")):
         try:
             row = json.loads(line)
         except json.JSONDecodeError:
             continue
-        keys = ("current", "vibration", "pressure", "temperature", "humidity")
-        if not all(row.get(f"{k}_healthy") for k in keys):
+        if not all(row.get(f"{k}_healthy") for k in ("current", "vibration", "pressure")):
+            continue
+        # The DHT22 drops out under motor EMI (BENCH_LOAD_VALIDATION.md §4).
+        # Attribution here reads only current and vibration, so a dropped
+        # temperature/humidity sample carries the last healthy reading forward
+        # instead of discarding the whole row -- otherwise most motor-running
+        # rows would be lost. Rows before the first healthy DHT22 read are skipped.
+        if row.get("temperature_healthy") and row.get("humidity_healthy"):
+            last_dht = (row["temperature_c"], row["humidity_pct"])
+        if last_dht is None:
             continue
         frames.append(
             build_telemetry(
                 "pump-01",
                 row["ts"],
                 {
-                    "temperature": row["temperature_c"],
+                    "temperature": last_dht[0],
                     "vibration": row["vibration_g_driver"],
                     "pressure": row["pressure_hpa"],
-                    "humidity": row["humidity_pct"],
+                    "humidity": last_dht[1],
                     "gas": gas(),
                     "current": row["current_a"],
                 },
@@ -233,11 +243,11 @@ def scenarios(channel: str, state: str) -> list[tuple[str, str, str, Callable[[i
     running = state == RUNNING
     if channel == "current":
         other_state_value = 0.0 if running else 0.8
-        cross_bias = -0.6 if running else 0.6
+        cross_bias = -0.8 if running else 0.6  # lands in the other state's band
         spike, drift, small_bias, cap = 0.6, 0.01, 0.02, 0.02
     else:
         other_state_value = 0.15 if running else 0.7
-        cross_bias = -0.5 if running else 0.5
+        cross_bias = -0.55 if running else 0.5
         spike, drift, small_bias, cap = 3.0, 0.01, 0.03, 0.03
 
     def ch(cls, **kw):
@@ -296,6 +306,26 @@ def build_injection(name, factory, channel, frames, onset) -> Injection | None:
 # ---- evaluation -------------------------------------------------------------------
 
 
+_BANDS = {"current": BENCH_CURRENT_BANDS, "vibration": BENCH_VIBRATION_BANDS}
+
+
+def crosses_state(stream, channel, onset_local, duration) -> bool:
+    """Measured, not assumed: does the injected reading ever claim the OTHER
+    motor state (a full window inside the injection whose median lands in the
+    opposite determinate band)? That is what makes an attack physically
+    impossible; a reading that stays in its true state is physically
+    plausible whatever its shape."""
+    bands = _BANDS[channel]
+    before = bands.classify(_median(stream[onset_local - WINDOW : onset_local], channel))
+    if before == "unclear":
+        return False
+    for start in range(onset_local, onset_local + duration - WINDOW + 1):
+        state = bands.classify(_median(stream[start : start + WINDOW], channel))
+        if state not in ("unclear", before):
+            return True
+    return False
+
+
 def score(outcomes, channel, onset, duration, offset):
     span = [
         o
@@ -304,17 +334,23 @@ def score(outcomes, channel, onset, duration, offset):
     ]
     flagged = [o for o in span if o.channel_flags[channel]]
     if not flagged:
-        return False, "missed", "missed"
+        return False, "missed", "missed", "missed"
     labels = [o.attribution[channel].attribution.value for o in flagged]
     first = labels[0]
     settled = Counter(labels).most_common(1)[0][0]
-    return True, first, settled
+    # Episode verdict: a physics violation is decisive evidence, so an episode
+    # in which ANY window was attributed attack is an attack episode. Scored on
+    # faults too, so it cannot hide false accusations.
+    episode = "attack" if "attack" in labels else "fault"
+    return True, first, settled, episode
 
 
-def evaluate_stream(name, frames, fit_fraction, max_onsets, out):
+def evaluate_stream(name, frames, fit_fraction, max_onsets, out, spacing=SPACING):
     split = int(len(frames) * fit_fraction)
     fitted = fit(frames[:split])
-    onsets = list(range(split + WARMUP, len(frames) - DURATION - TAIL, SPACING))[:max_onsets]
+    # Each episode runs on its own copy, so onsets closer than an episode's
+    # length do not interact; spacing only limits correlation between them.
+    onsets = list(range(split + WARMUP, len(frames) - DURATION - TAIL, spacing))[:max_onsets]
     results = out.setdefault(name, defaultdict(list))
 
     # clean control on (up to) the first CLEAN_CONTROL_FRAMES of the eval segment
@@ -335,7 +371,7 @@ def evaluate_stream(name, frames, fit_fraction, max_onsets, out):
             else "idle"
         )
         for channel in ("current", "vibration"):
-            for sc_name, truth, family, factory in scenarios(channel, state):
+            for sc_name, truth, _family, factory in scenarios(channel, state):
                 injection = build_injection(sc_name, factory, channel, frames, onset)
                 if injection is None:
                     continue
@@ -352,18 +388,25 @@ def evaluate_stream(name, frames, fit_fraction, max_onsets, out):
                 episode_detector = scored(fitted, stream)
                 for rule_name in RULES:
                     outcomes = run(fitted, rule_name, stream, episode_detector)
-                    detected, first, settled = score(
+                    detected, first, settled, episode = score(
                         outcomes, channel, onset, injection.duration, start
                     )
+                    if truth == "fault":
+                        measured = "fault"
+                    elif crosses_state(stream, channel, onset - start, injection.duration):
+                        measured = "attack: crosses state"
+                    else:
+                        measured = "attack: stays in state"
                     results[(sc_name, rule_name)].append(
                         dict(
                             channel=channel,
                             state=state,
                             truth=truth,
-                            family=family,
+                            family=measured,
                             detected=detected,
                             first=first,
                             settled=settled,
+                            episode=episode,
                         )
                     )
 
@@ -402,20 +445,23 @@ def report(out) -> None:
                 settled_ok = sum(r["settled"] == r["truth"] for r in rows)
                 cells.append(f"{'':16s} {det:>3d}  {first_ok:>8d}  {settled_ok:>10d}")
             print(f"  {sc:30s} {truth:6s} {n:>3d} | " + " | ".join(cells))
-        print("\n  summary (settled attribution, detected episodes only):")
-        for rule_name in RULES:
-            fam = defaultdict(lambda: [0, 0])
-            for (sc, rn), rows in results.items():
-                if rn != rule_name or sc == "__clean__":
-                    continue
-                for r in rows:
-                    if r["detected"]:
-                        fam[r["family"]][1] += 1
-                        fam[r["family"]][0] += r["settled"] == r["truth"]
-            parts = [
-                f"{f}: {ok}/{tot} ({ok / tot:.0%})" for f, (ok, tot) in sorted(fam.items()) if tot
-            ]
-            print(f"    {rule_name:18s} " + "  ".join(parts))
+        for metric in ("settled", "episode"):
+            print(f"\n  summary ({metric} attribution, detected episodes only):")
+            for rule_name in RULES:
+                fam = defaultdict(lambda: [0, 0])
+                for (sc, rn), rows in results.items():
+                    if rn != rule_name or sc == "__clean__":
+                        continue
+                    for r in rows:
+                        if r["detected"]:
+                            fam[r["family"]][1] += 1
+                            fam[r["family"]][0] += r[metric] == r["truth"]
+                parts = [
+                    f"{f}: {ok}/{tot} ({ok / tot:.0%})"
+                    for f, (ok, tot) in sorted(fam.items())
+                    if tot
+                ]
+                print(f"    {rule_name:18s} " + "  ".join(parts))
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -426,6 +472,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--cycling", type=Path, default=Path("motor_load_full.jsonl"))
     parser.add_argument("--idle-onsets", type=int, default=12)
     parser.add_argument("--cycling-onsets", type=int, default=4)
+    parser.add_argument("--running", type=Path, default=Path("motor_run_capture.jsonl"))
+    parser.add_argument("--running-onsets", type=int, default=10)
     args = parser.parse_args(argv)
 
     out: dict = {}
@@ -434,6 +482,15 @@ def main(argv: list[str] | None = None) -> int:
     if args.cycling.is_file():
         evaluate_stream(
             "cycling (motor ON/OFF)", load_stream(args.cycling), 0.5, args.cycling_onsets, out
+        )
+    if args.running.is_file():
+        evaluate_stream(
+            "running (2026-10-26 capture)",
+            load_stream(args.running),
+            0.35,
+            args.running_onsets,
+            out,
+            spacing=60,
         )
     if not out:
         print("no capture files found", file=sys.stderr)
