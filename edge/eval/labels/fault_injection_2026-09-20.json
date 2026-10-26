@@ -1,0 +1,17 @@
+{
+  "capture": "fault_injection_session.jsonl",
+  "source": "project-state/FAULT_INJECTION_VALIDATION.md section 1 (times in seconds from the first capture row)",
+  "notes": [
+    "Only the two physical faults with a measurable effect are scored.",
+    "The DHT22 disconnect produces no frames at all (all-six-healthy contract), so it cannot be scored.",
+    "The BMP280 disturbance produced no measurable effect, so it is not labelled.",
+    "Motor ON is a normal operating change, not a fault: it is marked 'ignore' so it is neither scored nor counted as a clean-control window.",
+    "The DHT22 reconnect settling period is also 'ignore' for the same reason."
+  ],
+  "events": [
+    {"name": "DHT22 reconnect settling", "t_start": 184, "t_end": 267, "channel": null, "class": "ignore"},
+    {"name": "ADXL335 tap", "t_start": 268, "t_end": 327, "channel": "vibration", "class": "fault"},
+    {"name": "Motor ON (normal operation)", "t_start": 520, "t_end": 657, "channel": null, "class": "ignore"},
+    {"name": "Abrupt current disconnect", "t_start": 657, "t_end": 660, "channel": "current", "class": "fault"}
+  ]
+}
