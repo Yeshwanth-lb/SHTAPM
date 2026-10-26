@@ -2908,3 +2908,40 @@ does not authorize any wiring or actuation.
   `scenario_inject` ledger block, chain verifies; invalid params -> 422.
 - **Does NOT change:** the frozen telemetry/decision/ledger contracts, any
   detection/trust/attribution algorithm, or actuation scope.
+
+### D033 — APPROVED: the current<->vibration `k` rule applies only while the motor runs
+- **Date:** 2026-10-26
+- **Decision:** `CorrelationProvider` takes an optional `RunningGate`. The live
+  service (`edge/main.py`) uses `BENCH_RUNNING_GATE` (current window mean
+  >= 0.1 A OR vibration window mean >= 0.5 g). While the motor runs, D010's
+  trend-sign rule is applied unchanged; at idle, current and vibration both get
+  k = 1.0, like the four channels the rule never covers. The pipeline passes
+  each window's raw frames to the provider (`observe_raw_window`), because
+  per-window min-max hides absolute level. Without a gate (the default, used by
+  every offline evaluation and SWaT harness) behaviour is unchanged.
+- **Why:** D010's own evidence says the coupling exists only under load
+  (r = 0.76 loaded, R^2 = 0.019 idle). On the 2026-10-26 40-minute idle
+  baseline the rule compared two unrelated noise floors, disagreed about half
+  the time, and its k = 0.0 drove current and vibration to Malicious in 10-12%
+  of clean held-out windows. Neutralising k removed all of them; nothing else
+  did. With the gate: 0 Malicious windows on every channel.
+- **Why OR, not current alone:** a spoof pinning one channel to an idle-looking
+  value while the other shows the motor running keeps the rule active, so the
+  cross-check cannot be switched off by spoofing a single channel. A gate with
+  no raw frames observed (a wiring fault) applies the rule — fails towards
+  detection.
+- **Thresholds (bench calibration, not spec):** 30-sample window means on
+  2026-10-26 — idle current <= 0.0001 A, vibration <= 0.347 g (7.2 h + 40 min);
+  running current >= 0.31 A, vibration median 0.684 g. Re-measure if the
+  motor, supply or ADXL335 mounting changes.
+- **Effect on detection (offline rehearsal, real idle data + LiveInjector):**
+  current constant spoof / bias / spike flagged in 2 s, Malicious (VIRTUAL) in
+  9 s; current ramp Malicious in 22 s; vibration attacks mostly never reach
+  Malicious at idle. Attribution still reads `fault` for these attacks
+  (EVALUATION_RESULTS_2026-10-26.md §1) — unchanged by this decision.
+- **Observed, not acted on:** "current says running while vibration says idle"
+  is a physically impossible state and a candidate attribution signal
+  (operating-state consistency). Recorded as a research direction for O3; no
+  attribution change is made here.
+- **Does NOT change:** D010's rule while running, c, h, weights, bands,
+  attribution, the detector, or the frozen contract.

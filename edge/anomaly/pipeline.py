@@ -103,7 +103,13 @@ class P2Pipeline:
             anomaly = detect(self._detector, window)
             flags = dict(self._flag_policy.flags(window, anomaly))
 
-            # Record window state for c and k providers before trust update
+            # Record window state for c and k providers before trust update.
+            # A provider that needs the raw (pre-normalisation) frames -- the
+            # D033 running gate on k -- receives them first; the normalised
+            # window alone cannot say whether the motor is running.
+            observe_raw = getattr(self._k, "observe_raw_window", None)
+            if observe_raw is not None:
+                observe_raw(frames[window.start_index : window.end_index])
             self._c.record_window(window)
             self._k.record_window(window)
 

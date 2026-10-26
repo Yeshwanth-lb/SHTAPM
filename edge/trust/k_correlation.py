@@ -57,10 +57,52 @@ Known limitations (provisional heuristic, not validated physics):
 from __future__ import annotations
 
 import statistics
+from collections.abc import Sequence
+from dataclasses import dataclass
 
-from app.schemas.contracts import CHANNELS
+from app.schemas.contracts import CHANNELS, TelemetryMessage
 
 from edge.anomaly.preprocess import Window
+
+
+@dataclass(frozen=True)
+class RunningGate:
+    """When the current<->vibration rule applies (D033).
+
+    D010's own bench evidence: the two channels are coupled only while the
+    motor runs (r = 0.76 under load, R^2 = 0.019 at idle). At idle the rule
+    compares the trend signs of two unrelated noise floors, disagrees about half
+    the time, and the k = 0.0 it then assigns drives both channels' trust into
+    the Malicious band on perfectly clean data.
+
+    The motor counts as running when the RAW window mean of ``current`` OR of
+    ``vibration`` reaches its threshold. Either channel suffices on purpose: a
+    spoof that pins one channel to an idle-looking value while the other still
+    shows the motor running keeps the rule active, so the cross-check cannot be
+    switched off by spoofing a single channel.
+    """
+
+    current_min: float
+    vibration_min: float
+
+    def __post_init__(self) -> None:
+        if self.current_min <= 0 or self.vibration_min <= 0:
+            raise ValueError("RunningGate thresholds must be > 0")
+
+    def is_running(self, frames: Sequence[TelemetryMessage]) -> bool:
+        if not frames:
+            return False
+        current = statistics.mean(f.sensors.current for f in frames)
+        vibration = statistics.mean(f.sensors.vibration for f in frames)
+        return current >= self.current_min or vibration >= self.vibration_min
+
+
+# Bench calibration for D033, measured on 2026-10-26 from 30-sample window
+# means: idle (7.2 h + 40 min captures) current <= 0.0001 A, vibration <= 0.347 g;
+# motor running (motor_load_full.jsonl) current >= 0.31 A, vibration median
+# 0.684 g. Both thresholds sit in the gap. Re-measure if the motor, its supply
+# or the ADXL335 mounting changes.
+BENCH_RUNNING_GATE = RunningGate(current_min=0.1, vibration_min=0.5)
 
 
 def _sign(x: float) -> int:
@@ -91,11 +133,35 @@ class CorrelationProvider:
         engine.update_from_providers(c_provider, k_provider, h_provider)
 
     State is per-window only (no training phase like c_provider.fit()).
+
+    RUNNING GATE (D033, optional): with ``running_gate`` set, the caller passes
+    each window's raw frames to ``observe_raw_window`` before ``record_window``,
+    and the rule is applied only while the motor runs; at idle both channels get
+    k = 1.0, exactly like the channels the rule never covers. Without a gate
+    (the default, used by every offline evaluation) behaviour is unchanged.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, running_gate: RunningGate | None = None) -> None:
         """Initialize with neutral k=0.5 for all channels (no evidence yet)."""
         self._k: dict[str, float] = {ch: 0.5 for ch in CHANNELS}
+        self._gate = running_gate
+        self._running: bool | None = None  # verdict for the window being recorded
+        self._last_running: bool | None = None  # verdict for the last recorded one
+
+    @property
+    def running(self) -> bool | None:
+        """The gate's verdict for the last recorded window (None: no gate, or
+        no raw frames observed for it)."""
+        return self._last_running
+
+    def observe_raw_window(self, frames: Sequence[TelemetryMessage]) -> None:
+        """Raw (pre-normalisation) frames for the window about to be recorded.
+
+        Needed because the normalised window cannot say whether the motor runs:
+        per-window min-max rescales a 0.0002 A noise floor and a 0.8 A load to
+        the same [0, 1] range. No-op without a gate."""
+        if self._gate is not None:
+            self._running = self._gate.is_running(frames)
 
     # ------------------------------------------------------------------
     # Per-window state update
@@ -128,8 +194,16 @@ class CorrelationProvider:
                 f"got {len(current_samples)} and {len(vibration_samples)}"
             )
 
-        # Compute the trend-sign heuristic
-        pair_k = self._compute_pair_k(current_samples, vibration_samples)
+        # D033: at idle the two channels are physically unrelated, so the rule
+        # does not apply. A gate with no raw frames observed for this window
+        # (a wiring fault) keeps applying the rule -- failing towards detection.
+        if self._gate is not None and self._running is False:
+            pair_k = 1.0
+        else:
+            pair_k = self._compute_pair_k(current_samples, vibration_samples)
+        if self._gate is not None:
+            self._last_running = self._running
+            self._running = None  # consumed: each window must be observed anew
 
         # Assign k values per channel
         self._k["current"] = pair_k

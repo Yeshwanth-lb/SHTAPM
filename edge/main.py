@@ -176,7 +176,7 @@ from edge.pipeline.monitor import LiveP2Monitor, RawChannelValues
 from edge.trust.c_consistency import ConsistencyProvider
 from edge.trust.engine import TrustEngine
 from edge.trust.h_reliability import HReliabilityProvider
-from edge.trust.k_correlation import CorrelationProvider
+from edge.trust.k_correlation import BENCH_RUNNING_GATE, CorrelationProvider
 
 if TYPE_CHECKING:
     from edge.pipeline.self_heal_runtime import SelfHealRuntime
@@ -323,7 +323,9 @@ def _build_p2_monitor(
         trust_engine=TrustEngine(),
         attribution_engine=AttributionEngine(physics_rule),
         c_provider=c_provider,
-        k_provider=CorrelationProvider(),
+        # D033: the current<->vibration rule applies only while the motor
+        # runs; at idle the two channels are physically unrelated.
+        k_provider=CorrelationProvider(running_gate=BENCH_RUNNING_GATE),
         h_provider=HReliabilityProvider(),
         flag_policy=flag_policy,
     )

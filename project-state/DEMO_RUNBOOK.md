@@ -152,9 +152,14 @@ bench, in demo conditions. On the Pi, with `shtapm` running:
 
 Log in as admin, open **Device**, then use the **Scenario injection** panel:
 
-1. Pick **Constant spoof**, channel **current** (or vibration — the two
-   channels the attribution rule covers; D014), duration about 60 s.
-2. Click **Use current reading** so the spoof is plausible, then **Inject attack**.
+1. Pick **Constant spoof**, channel **current**, duration about 60 s.
+   Use current: it is the channel the twin reconstructs (VIRTUAL), and the
+   offline rehearsal caught current attacks in 2 s and reached Malicious in
+   9 s. Vibration attacks mostly never reach Malicious at idle (D033).
+2. Type **0.8** (amps — a plausible running-motor value) as the spoofed value,
+   then **Inject attack**. With the motor off the real reading is ~0 A, so
+   "Use current reading" would spoof 0 A and change nothing. **Bias injection**
+   with offset 0.5 behaves the same way.
 3. Watch the channel's value flatten; trust drops; the twin takes over
    (VIRTUAL) when trust reaches Malicious; the ledger records
    `scenario_inject`, `trust_drop`, `isolate`, then `recover` after the
