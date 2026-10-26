@@ -14,12 +14,13 @@ assets/fonts/
 └── geist-mono/GeistMono-Variable.woff2
 ```
 
-## P0 status — foundation only
+## Status — vendored 2026-09-24
 
-- The `@font-face` contract (`styles/fonts.css`) is fixed now.
-- The **woff2 binaries are NOT yet vendored.** They are added when frontend
-  dependencies are installed in P5 — either via an `@fontsource/*` package
-  (pinned then, once the exact name/version is verifiable) or by committing the
-  OFL woff2 directly here. Both are self-hosted; neither uses a CDN.
-- Reason for deferral: the `@fontsource` package name/version could not be
-  verified against the npm registry during P0 and must not be guessed.
+The woff2 binaries are committed at the paths above. They were copied from
+Vercel's official `geist` npm package, version **1.7.2** (`npm pack geist`,
+files `dist/fonts/geist-sans/Geist-Variable.woff2` and
+`dist/fonts/geist-mono/GeistMono-Variable.woff2`). The package's OFL licence
+text is alongside as `OFL.txt`, as the OFL requires. No npm dependency was
+added. Before this, every `@font-face` URL returned 404 and the dashboard
+silently fell back to the system font. The AC10 audit found that, and
+`edge/tests/test_ac10_repo_offline.py` now checks for it.
