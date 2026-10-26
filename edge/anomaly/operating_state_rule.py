@@ -95,6 +95,60 @@ class StateBands:
 BENCH_CURRENT_BANDS = StateBands(idle_max=0.05, running_min=0.3)
 BENCH_VIBRATION_BANDS = StateBands(idle_max=0.35, running_min=0.5)
 
+# TRANSDUCER RANGE (D036). A reading the sensor cannot physically produce is a
+# hardware failure, never a plausible spoof. ADXL335: >= +/-3.6 g full scale
+# per axis, so the 3-axis deviation magnitude cannot exceed sqrt(3) * 3.6 =
+# 6.24 g (a disconnected ADXL rails to 0 counts and reads 8.18 g; the hardest
+# real tap on 2026-10-26 peaked at 4.17 g). INA219 with the bench's 0.1 ohm
+# shunt: 320 mV / 0.1 ohm = 3.2 A.
+TRANSDUCER_LIMITS = {"current": 3.2, "vibration": 6.24}
+
+# PER-INSTALLATION CALIBRATION (D036). Vibration level depends on how the
+# accelerometer is mounted: idle window medians were up to 0.35 g with the
+# September mounting and <= 0.11 g after re-taping on 2026-10-26, so no fixed
+# band fits both. Current is mounting-independent (0 A vs >= 0.3 A) and is the
+# reference: vibration's idle band is learned from baseline windows where
+# current says idle, and its running band from windows where current says
+# running when the baseline has enough of them.
+IDLE_MARGIN = 1.5  # idle_max = margin x the idle medians' 99.9th percentile
+RUNNING_FACTOR = 3.0  # running_min without running data = factor x that percentile
+MIN_RUNNING_WINDOWS = 60
+GAP_FACTOR = 1.2  # running_min is always at least this x idle_max
+
+
+def _percentile(values: Sequence[float], q: float) -> float:
+    ordered = sorted(values)
+    return ordered[min(len(ordered) - 1, int(q * len(ordered)))]
+
+
+def calibrate_vibration_bands(
+    segments: Sequence[tuple[Sequence[float], Sequence[float]]],
+    window: int,
+    current_bands: StateBands = BENCH_CURRENT_BANDS,
+) -> StateBands:
+    """Learn vibration bands from clean baseline (current, vibration) series.
+
+    Returns the bench defaults if the baseline holds no current-idle window."""
+    idle_medians: list[float] = []
+    running_medians: list[float] = []
+    for current, vibration in segments:
+        for end in range(window, len(current) + 1):
+            state = current_bands.classify(statistics.median(current[end - window : end]))
+            vib = statistics.median(vibration[end - window : end])
+            if state == IDLE:
+                idle_medians.append(vib)
+            elif state == RUNNING:
+                running_medians.append(vib)
+    if not idle_medians:
+        return BENCH_VIBRATION_BANDS
+    idle_p999 = _percentile(idle_medians, 0.999)
+    idle_max = IDLE_MARGIN * idle_p999
+    if len(running_medians) >= MIN_RUNNING_WINDOWS:
+        running_min = _percentile(running_medians, 0.05)
+    else:
+        running_min = RUNNING_FACTOR * idle_p999
+    return StateBands(idle_max=idle_max, running_min=max(running_min, GAP_FACTOR * idle_max))
+
 
 class OperatingStateRule:
     """``PhysicsRule`` judging current<->vibration motor-state consistency."""
@@ -150,6 +204,15 @@ class OperatingStateRule:
             for ch, bands in self._bands.items()
         }
         if UNCLEAR in states.values() or states["current"] == states["vibration"]:
+            return PhysicsCheck(violated=False, suspect_channel=None, reason="")
+        # A channel reading beyond its transducer's physical range is a broken
+        # sensor (D036): the disagreement is explained by hardware, not intent.
+        broken = {
+            ch
+            for ch in self._bands
+            if any(abs(getattr(f.sensors, ch)) > TRANSDUCER_LIMITS[ch] for f in raw)
+        }
+        if broken:
             return PhysicsCheck(violated=False, suspect_channel=None, reason="")
         # Disagreement: the channel that changed state most recently is the
         # suspect. A tie (both entered their states in the same window) cannot

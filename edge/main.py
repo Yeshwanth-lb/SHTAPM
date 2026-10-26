@@ -160,7 +160,12 @@ from edge.acquisition.runtime import AcquisitionRuntime
 from edge.acquisition.sampler import Sampler
 from edge.anomaly.attribution import AttributionEngine
 from edge.anomaly.iforest import IsolationForestDetector
-from edge.anomaly.operating_state_rule import OperatingStateRule
+from edge.anomaly.operating_state_rule import (
+    BENCH_VIBRATION_BANDS,
+    OperatingStateRule,
+    StateBands,
+    calibrate_vibration_bands,
+)
 from edge.anomaly.pipeline import P2Pipeline, WindowOutcome
 from edge.anomaly.policy import SeverityThresholdFlagPolicy
 from edge.anomaly.preprocess import Preprocessor
@@ -177,7 +182,7 @@ from edge.pipeline.monitor import LiveP2Monitor, RawChannelValues
 from edge.trust.c_consistency import ConsistencyProvider
 from edge.trust.engine import TrustEngine
 from edge.trust.h_reliability import HReliabilityProvider
-from edge.trust.k_correlation import BENCH_RUNNING_GATE, CorrelationProvider
+from edge.trust.k_operating_state import OperatingStateCorrelationProvider
 
 if TYPE_CHECKING:
     from edge.pipeline.self_heal_runtime import SelfHealRuntime
@@ -285,6 +290,23 @@ def _required_env_int(name: str) -> int:
     return int(value)
 
 
+def _vibration_bands(baseline: P2Baseline | None, window: int) -> StateBands:
+    """Vibration motor-state bands for THIS installation (D036): learned from
+    the persisted baseline when there is one, otherwise the bench defaults."""
+    if baseline is None:
+        return BENCH_VIBRATION_BANDS
+    cur, vib = CHANNELS.index("current"), CHANNELS.index("vibration")
+    bands = calibrate_vibration_bands(
+        [(seg[:, cur].tolist(), seg[:, vib].tolist()) for seg in baseline.segments], window
+    )
+    log.info(
+        "vibration motor-state bands from baseline: idle <= %.3f g, running >= %.3f g",
+        bands.idle_max,
+        bands.running_min,
+    )
+    return bands
+
+
 def _build_p2_monitor(
     *,
     fit_window_count: int | None,
@@ -319,16 +341,20 @@ def _build_p2_monitor(
     flag_policy = SeverityThresholdFlagPolicy()
     # D034: motor-state consistency between current and vibration replaces
     # the trend-sign heuristic (D013), and a violation flags its suspect.
-    physics_rule = OperatingStateRule()
+    vibration_bands = _vibration_bands(baseline, preprocessor.window_size)
+    physics_rule = OperatingStateRule(vibration_bands=vibration_bands)
     pipeline = P2Pipeline(
         preprocessor=preprocessor,
         detector=detector,
         trust_engine=TrustEngine(),
         attribution_engine=AttributionEngine(physics_rule),
         c_provider=c_provider,
-        # D033: the current<->vibration rule applies only while the motor
-        # runs; at idle the two channels are physically unrelated.
-        k_provider=CorrelationProvider(running_gate=BENCH_RUNNING_GATE),
+        # D035: k objects only to a physically impossible motor state, using
+        # the same model as attribution (D034). The trend-sign k (D010/D033)
+        # punished both channels for noise during steady operation.
+        k_provider=OperatingStateCorrelationProvider(
+            OperatingStateRule(vibration_bands=vibration_bands)
+        ),
         h_provider=HReliabilityProvider(),
         flag_policy=flag_policy,
         physics_flags=True,

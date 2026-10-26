@@ -201,3 +201,109 @@ def test_without_physics_flags_behaviour_is_unchanged():
     outcomes = _pipeline(physics_flags=False).process(_sustained_spoof_stream())
     assert not any(o.channel_flags["current"] for o in outcomes)  # NullDetector, no physics flags
     assert all(o.attribution["current"].attribution is Attribution.none for o in outcomes)
+
+
+# --- D036: transducer range and per-installation calibration ------------------
+
+
+def test_a_reading_beyond_the_transducer_range_is_a_fault_not_an_attack():
+    """A disconnected ADXL335 rails to 0 counts and reads 8.18 g: impossible
+    for the sensor, so the state disagreement is hardware, not intent."""
+    from edge.anomaly.operating_state_rule import TRANSDUCER_LIMITS
+
+    rule = _rule()
+    _step(rule, IDLE_F)
+    dead = _step(rule, _frames(0.0002, 8.18))
+    assert dead.violated is False
+    assert 4.17 < TRANSDUCER_LIMITS["vibration"] < 8.18  # hardest real tap < limit < railed
+    plausible = _step(rule, _frames(0.0002, 0.7))  # the same claim, physically possible
+    assert plausible.violated is True and plausible.suspect_channel == "vibration"
+
+
+def test_calibration_learns_vibration_bands_from_current_idle_windows():
+    from edge.anomaly.operating_state_rule import calibrate_vibration_bands
+
+    idle_cur = [0.0001] * 200
+    idle_vib = [0.09 + 0.01 * ((i % 5) / 4) for i in range(200)]  # quiet mounting
+    bands = calibrate_vibration_bands([(idle_cur, idle_vib)], window=N)
+    assert 0.1 < bands.idle_max < 0.2  # 1.5 x the idle medians' p99.9
+    assert bands.running_min >= 1.2 * bands.idle_max
+    assert bands.classify(0.66) == RUNNING  # tonight's running median
+    assert bands.classify(0.09) == IDLE
+
+
+def test_calibration_uses_running_windows_when_the_baseline_has_them():
+    from edge.anomaly.operating_state_rule import MIN_RUNNING_WINDOWS, calibrate_vibration_bands
+
+    n_run = MIN_RUNNING_WINDOWS + N + 10
+    cur = [0.0001] * 100 + [0.8] * n_run
+    vib = [0.1] * 100 + [0.6] * n_run
+    bands = calibrate_vibration_bands([(cur, vib)], window=N)
+    assert bands.running_min == pytest.approx(0.6)
+
+
+def test_calibration_without_idle_data_falls_back_to_bench_bands():
+    from edge.anomaly.operating_state_rule import calibrate_vibration_bands
+
+    bands = calibrate_vibration_bands([([0.8] * 100, [0.6] * 100)], window=N)
+    assert bands == BENCH_VIBRATION_BANDS
+
+
+# --- D035: k from motor-state consistency --------------------------------------
+
+
+def test_operating_state_k_objects_only_to_an_impossible_state():
+    from edge.trust.k_operating_state import OperatingStateCorrelationProvider
+
+    k = OperatingStateCorrelationProvider()
+    for frames in (IDLE_F, RUN_F):  # consistent states, and a consistent start
+        k.observe_raw_window(frames)
+        k.record_window(WINDOW)
+        assert all(k.evaluate(ch) == 1.0 for ch in CHANNELS)
+    k.observe_raw_window(_frames(0.8, 0.15))  # vibration alone drops to idle
+    k.record_window(WINDOW)
+    assert k.evaluate("vibration") == 0.0
+    assert k.evaluate("current") == 1.0
+    assert k.evaluate("temperature") == 1.0
+
+
+def test_operating_state_k_penalises_both_when_no_suspect_can_be_named():
+    from edge.trust.k_operating_state import OperatingStateCorrelationProvider
+
+    k = OperatingStateCorrelationProvider()
+    k.observe_raw_window(_frames(0.8, 0.18))  # first window, already contradictory
+    k.record_window(WINDOW)
+    assert k.evaluate("current") == 0.0 and k.evaluate("vibration") == 0.0
+
+
+def test_operating_state_k_ignores_noise_the_trend_rule_punished():
+    """Steady running with trends that disagree inside the window: the D010
+    trend-sign k gives 0.0, the motor-state k stays 1.0."""
+    from edge.trust.k_correlation import CorrelationProvider
+    from edge.trust.k_operating_state import OperatingStateCorrelationProvider
+
+    rising = [0.80 + i * 0.001 for i in range(N)]
+    falling = [0.70 - i * 0.001 for i in range(N)]
+    window = Window(
+        start_index=0,
+        end_index=N,
+        features={
+            **{ch: (0.5,) * N for ch in CHANNELS},
+            "current": tuple(i / (N - 1) for i in range(N)),
+            "vibration": tuple(1 - i / (N - 1) for i in range(N)),
+        },
+    )
+    trend = CorrelationProvider()
+    trend.record_window(window)
+    assert trend.evaluate("current") == 0.0
+    physics = OperatingStateCorrelationProvider()
+    physics.observe_raw_window(_frames(rising, falling))
+    physics.record_window(window)
+    assert physics.evaluate("current") == 1.0
+
+
+def test_operating_state_k_rejects_unknown_channels():
+    from edge.trust.k_operating_state import OperatingStateCorrelationProvider
+
+    with pytest.raises(ValueError):
+        OperatingStateCorrelationProvider().evaluate("flow")

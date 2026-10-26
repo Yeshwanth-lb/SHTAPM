@@ -2982,3 +2982,51 @@ does not authorize any wiring or actuation.
 - **Does NOT change:** the detector threshold, c/k/h, D033's gate, trust
   weights or bands, the frozen contract. D013/D014/D030 remain as history;
   their rule stays available for comparison.
+
+### D035 — APPROVED: trust's cross-sensor term `k` comes from motor-state consistency (supersedes D010/D033 in the live path)
+- **Date:** 2026-10-26
+- **Decision:** the live trust engine uses `OperatingStateCorrelationProvider`
+  (`edge/trust/k_operating_state.py`): k = 1.0 unless current and vibration
+  describe a physically impossible motor state, in which case the suspect
+  (or both, if no suspect can be named) gets k = 0.0. Trust and attribution
+  now use one physical model (D034) instead of two.
+- **Why:** the trend-sign k (D010) gives both channels k = 0.0 whenever their
+  in-window trends disagree. During steady operation both trends are noise:
+  D033 gated it off at idle, and on the 2026-10-26 running capture it was the
+  main source of false isolation (clean running data: 7 false isolation
+  episodes with D010/D033 k, 2 with k neutral; the remaining two were a
+  vibration disturbance at idle and an artefact of the harness carrying a
+  dropped DHT22 reading forward).
+- **Also tried and removed:** suppressing statistical flags during a
+  consistent motor start/stop ("physics-explained transients") — measured no
+  effect on the same data, so it was reverted rather than kept unproven.
+- **Does NOT change:** c, h, weights (0.4/0.3/0.3), bands, λ.
+
+### D036 — APPROVED: transducer-range plausibility and per-installation vibration bands for the motor-state rule
+- **Date:** 2026-10-26
+- **Decision:** (1) a channel whose window contains a reading beyond its
+  transducer's physical range (ADXL335 |magnitude| > 6.24 g, INA219 > 3.2 A
+  with the bench's 0.1 ohm shunt) cannot be named as an attack suspect — the
+  disagreement is a hardware failure. (2) With a persisted baseline, the
+  vibration idle band is learned from baseline windows where current says the
+  motor is idle (idle_max = 1.5 x the 99.9th percentile of those window
+  medians) and the running band from current-running windows when the
+  baseline has >= 60 of them (5th percentile), else 3 x that percentile;
+  running_min >= 1.2 x idle_max always. Current keeps fixed bands: it is
+  mounting-independent (0 A vs >= 0.3 A).
+- **Why (real bench events, 2026-10-26 23:07-23:21, guided session):**
+  pulling the ADXL's power rails it to 0 counts = 8.18 g, which the rule
+  called an attack in 22 windows; the hardest real tap peaked at 4.17 g.
+  Re-taping the ADXL halved transmitted vibration (running median 0.47-0.67 g
+  vs 0.68 g in September; idle medians <= 0.11 g vs up to 0.35 g), so fixed
+  bands produced false attacks and a false isolation during a normal motor
+  run. After both changes, on the same real events: taps -> fault (motor off
+  and running), dead ADXL -> fault (isolated as a broken sensor while
+  running), normal motor run -> no isolation (2 attack windows at the
+  switch-on transient), quiet idle -> clean.
+- **Open (not solved here):** after an attack at idle on the September
+  capture, `current` is never released: its clean steady-state trust sits at
+  0.64 (< TRUSTED_MIN) because the consistency signal handles the INA219's
+  quantised near-constant idle reading poorly. Tonight's capture releases
+  normally (trust 0.52-0.88). Fix candidates: release relative to the
+  channel's own clean trust level, or a quantisation-aware c.
