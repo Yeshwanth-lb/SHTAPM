@@ -63,3 +63,6 @@ frontend/certs/*
 # in project-state/; the capture itself does not.
 *capture*.jsonl
 motor_load*.jsonl
+
+# Real fault-injection session capture (evidence, not source)
+fault_injection_session*.jsonl
