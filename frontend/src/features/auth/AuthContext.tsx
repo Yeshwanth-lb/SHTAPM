@@ -7,16 +7,24 @@
 // (api/auth.py returns tokens in the body today), so it is not something this
 // layer can decide alone — flagged rather than silently accepted.
 //
-// Silent refresh-on-expiry is NOT implemented in this foundation slice. The
-// backend rotates refresh tokens with reuse-detection (auth_service.py), so
-// getting it wrong revokes every token a user holds. A 401 currently signs the
-// user out cleanly rather than risking that.
+// SILENT REFRESH. The access token is short-lived (TRD §02.4: 15 min), so the
+// provider renews it shortly before it expires. The backend rotates refresh
+// tokens with reuse detection (auth_service.py): presenting a refresh token a
+// second time revokes EVERY session the user has. So renewal must happen
+// exactly once per refresh token:
+//   * single-flight inside a tab: concurrent triggers share one request;
+//   * across tabs: before refreshing, re-read storage -- if another tab has
+//     already rotated the pair, adopt its tokens instead of reusing the old
+//     refresh token; and the `storage` event keeps every tab in step;
+//   * a 401 from /refresh means the session is genuinely over -> sign out
+//     locally. A network error is not proof of that -> retry later.
 import {
   createContext,
   useCallback,
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -24,6 +32,26 @@ import {
 import * as api from "../../lib/api";
 
 const STORAGE_KEY = "shtapm.auth";
+
+/** Renew this long before the access token's `exp`. */
+export const REFRESH_LEAD_MS = 60_000;
+/** Retry delay after a refresh that failed for a reason other than a 401. */
+export const REFRESH_RETRY_MS = 30_000;
+
+/** The access token's expiry (ms since epoch), or null if unreadable. Read
+ * for scheduling only -- the backend verifies the signature. */
+export function accessTokenExpiry(token: string): number | null {
+  const parts = token.split(".");
+  if (parts.length !== 3) return null;
+  try {
+    const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const padded = base64 + "=".repeat((4 - (base64.length % 4)) % 4);
+    const claims = JSON.parse(atob(padded)) as { exp?: unknown };
+    return typeof claims.exp === "number" ? claims.exp * 1000 : null;
+  } catch {
+    return null;
+  }
+}
 
 export interface AuthTokens {
   accessToken: string;
@@ -68,28 +96,106 @@ function writeStored(tokens: AuthTokens | null): void {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [tokens, setTokens] = useState<AuthTokens | null>(null);
   const [isRestoring, setIsRestoring] = useState(true);
+  const tokensRef = useRef<AuthTokens | null>(null);
+  const inFlight = useRef<Promise<void> | null>(null);
+  const [retryNonce, setRetryNonce] = useState(0);
 
-  useEffect(() => {
-    setTokens(readStored());
-    setIsRestoring(false);
-  }, []);
-
-  const signIn = useCallback(async (email: string, password: string) => {
-    const response = await api.login(email, password);
-    const next: AuthTokens = {
-      accessToken: response.access_token,
-      refreshToken: response.refresh_token,
-    };
-    writeStored(next);
+  const adopt = useCallback((next: AuthTokens | null) => {
+    tokensRef.current = next;
     setTokens(next);
   }, []);
 
+  useEffect(() => {
+    adopt(readStored());
+    setIsRestoring(false);
+  }, [adopt]);
+
+  // Another tab signed in, refreshed, or signed out: follow it.
+  useEffect(() => {
+    const onStorage = (event: StorageEvent) => {
+      if (event.key !== STORAGE_KEY) return;
+      const stored = readStored();
+      if (stored?.refreshToken !== tokensRef.current?.refreshToken) adopt(stored);
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, [adopt]);
+
+  const refreshSession = useCallback((): Promise<void> => {
+    if (inFlight.current) return inFlight.current;
+    const run = (async () => {
+      const current = tokensRef.current;
+      if (!current) return;
+      const stored = readStored();
+      if (stored && stored.refreshToken !== current.refreshToken) {
+        adopt(stored); // another tab already rotated the pair
+        return;
+      }
+      try {
+        const response = await api.refresh(current.refreshToken);
+        const next: AuthTokens = {
+          accessToken: response.access_token,
+          refreshToken: response.refresh_token,
+        };
+        if (tokensRef.current?.refreshToken !== current.refreshToken) return; // signed out meanwhile
+        writeStored(next);
+        adopt(next);
+      } catch (err) {
+        if (api.isApiError(err) && err.status === 401) {
+          writeStored(null);
+          adopt(null);
+        } else {
+          window.setTimeout(() => setRetryNonce((n) => n + 1), REFRESH_RETRY_MS);
+        }
+      }
+    })().finally(() => {
+      inFlight.current = null;
+    });
+    inFlight.current = run;
+    return run;
+  }, [adopt]);
+
+  // Schedule the next renewal from the current access token's expiry.
+  useEffect(() => {
+    if (!tokens) return;
+    const expiry = accessTokenExpiry(tokens.accessToken);
+    if (expiry === null) return;
+    const delay = Math.max(0, expiry - REFRESH_LEAD_MS - Date.now());
+    const timer = window.setTimeout(() => void refreshSession(), delay);
+    return () => window.clearTimeout(timer);
+  }, [tokens, retryNonce, refreshSession]);
+
+  // A laptop waking from sleep may hold an already-expired token: check on return.
+  useEffect(() => {
+    const onVisible = () => {
+      const current = tokensRef.current;
+      if (document.visibilityState !== "visible" || !current) return;
+      const expiry = accessTokenExpiry(current.accessToken);
+      if (expiry !== null && expiry - REFRESH_LEAD_MS <= Date.now()) void refreshSession();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [refreshSession]);
+
+  const signIn = useCallback(
+    async (email: string, password: string) => {
+      const response = await api.login(email, password);
+      const next: AuthTokens = {
+        accessToken: response.access_token,
+        refreshToken: response.refresh_token,
+      };
+      writeStored(next);
+      adopt(next);
+    },
+    [adopt],
+  );
+
   const signOut = useCallback(async () => {
-    const current = tokens;
+    const current = tokensRef.current;
     // Clear locally FIRST: the user is signed out of this browser even if the
     // server call fails, and a failed revoke must never trap them in the app.
     writeStored(null);
-    setTokens(null);
+    adopt(null);
     if (current) {
       try {
         await api.logout(current.refreshToken, current.accessToken);
@@ -97,7 +203,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         /* already-revoked or unreachable backend — local sign-out stands */
       }
     }
-  }, [tokens]);
+  }, [adopt]);
 
   const value = useMemo<AuthState>(
     () => ({

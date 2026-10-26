@@ -107,8 +107,26 @@ export function useDeviceTelemetry(
   const [liveFrameCount, setLiveFrameCount] = useState(0);
   const [sessionExpired, setSessionExpired] = useState(false);
 
-  // ---- historical window (REST, once per device/token) --------------------
+  // The token is read through a ref so a silent refresh (AuthContext) does not
+  // tear down the socket or re-seed the history: an open WebSocket stays
+  // authorised after its connect-time token expires, and reconnects pick up
+  // the newest token. Effects key on WHETHER a session exists, not its value.
+  const tokenRef = useRef(accessToken);
+  tokenRef.current = accessToken;
+  const hasToken = accessToken !== null;
+  const [reconnectNonce, setReconnectNonce] = useState(0);
+  const sessionExpiredRef = useRef(false);
+  sessionExpiredRef.current = sessionExpired;
+
+  // A rejected socket stops retrying (terminal close); a NEW token -- a fresh
+  // sign-in or a refresh -- deserves one more attempt.
   useEffect(() => {
+    if (accessToken && sessionExpiredRef.current) setReconnectNonce((n) => n + 1);
+  }, [accessToken]);
+
+  // ---- historical window (REST, once per device/session) ------------------
+  useEffect(() => {
+    const accessToken = tokenRef.current;
     if (!accessToken) return;
     let cancelled = false;
     setHistoryStatus("loading");
@@ -150,26 +168,27 @@ export function useDeviceTelemetry(
     return () => {
       cancelled = true;
     };
-  }, [deviceId, accessToken, windowSize]);
+  }, [deviceId, hasToken, windowSize]);
 
   // ---- live frames (WebSocket) -------------------------------------------
   const disposedRef = useRef(false);
   useEffect(() => {
-    if (!accessToken) return;
+    if (!tokenRef.current) return;
     disposedRef.current = false;
     setSessionExpired(false); // a new token deserves a fresh attempt
     let socket: WebSocket | null = null;
     let retry = 0;
     let timer: ReturnType<typeof setTimeout> | null = null;
 
-    // authedWsUrl already carries ?token=&device_id= — this must NOT be
-    // concatenated with another query string.
-    const target = authedWsUrl(accessToken, deviceId);
-
     function connect() {
       if (disposedRef.current) return;
+      const token = tokenRef.current;
+      if (!token) return;
       setConnection("connecting");
-      socket = new WebSocket(target);
+      // authedWsUrl already carries ?token=&device_id= — this must NOT be
+      // concatenated with another query string. Built per attempt so a
+      // reconnect after a silent refresh uses the newest token.
+      socket = new WebSocket(authedWsUrl(token, deviceId));
 
       socket.onopen = () => {
         retry = 0;
@@ -195,11 +214,18 @@ export function useDeviceTelemetry(
         setLiveFrameCount((n) => n + 1);
         setHistory((prev) => appendFrame(prev, message, windowSize));
       };
+      const usedToken = token;
       socket.onclose = (event: CloseEvent) => {
         if (disposedRef.current) return;
         // Terminal auth rejection: STOP. Reconnecting with the same dead token
         // can only ever fail, and doing so every 10s indefinitely is both a
         // resource leak and a self-inflicted load on a rejecting endpoint.
+        // If the token has been renewed since this attempt, it is not the
+        // same dead token: try again with the new one.
+        if (isTerminalCloseCode(event.code) && tokenRef.current !== usedToken) {
+          timer = setTimeout(connect, 0);
+          return;
+        }
         if (isTerminalCloseCode(event.code)) {
           setConnection("unauthorized");
           setSessionExpired(true);
@@ -218,7 +244,7 @@ export function useDeviceTelemetry(
       if (timer) clearTimeout(timer);
       socket?.close();
     };
-  }, [deviceId, accessToken, windowSize]);
+  }, [deviceId, hasToken, windowSize, reconnectNonce]);
 
   return useMemo(
     () => ({
