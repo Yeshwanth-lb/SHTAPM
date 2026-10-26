@@ -195,7 +195,12 @@ export interface SystemHealthOut {
   db_connected: boolean;
   ws_clients: number;
   telemetry_count: number;
+  /** Edge publish -> backend receipt, p50. Excludes the browser leg. */
   e2e_latency_ms: number | null;
+  e2e_latency_p95_ms: number | null;
+  e2e_latency_samples: number;
+  e2e_latency_note: string;
+  clock_skew_suspected: boolean;
 }
 
 /** Mirrors the unauthenticated /healthz payload (app/main.py). */

@@ -5,14 +5,21 @@
 // even when a token has expired and reports the database error class;
 // /api/system/health is the Doc05 §05.7 endpoint and adds e2e_latency_ms.
 // Where a diagnostic genuinely does not exist, this page says so rather than
-// printing a zero — `e2e_latency_ms` is null because nothing in the running
-// backend measures sensor-to-client latency.
+// printing a zero.
+//
+// Latency is shown as two legs, never merged into one flattering number:
+//   * edge -> backend: measured by the backend (e2e_latency_ms), browser excluded.
+//   * sensor -> browser: measured HERE at WebSocket receipt against the frame's
+//     own `ts` (lib/latency.ts). This is the figure NFR-P1/AC6 asks about. It
+//     compares the Pi's clock with this machine's, so both must run NTP.
 import { GlassTile } from "../components/aurora/GlassTile";
 import { StateBlock, StatusPill } from "../components/aurora/StateBlock";
 import { useAuth } from "../features/auth/AuthContext";
 import { useChannels } from "../features/channels/useChannels";
 import { ChannelProvenanceBadge } from "../components/panels/ChannelProvenanceBadge";
+import { useBrowserLatency } from "../features/telemetry/useBrowserLatency";
 import { apiGet, getHealthz, type HealthzOut, type SystemHealthOut } from "../lib/api";
+import type { LatencySnapshot } from "../lib/latency";
 import { useApiResource } from "../lib/useApiResource";
 import "./pages.css";
 
@@ -31,6 +38,7 @@ export function SystemPage() {
   );
 
   const { channels, loading: channelsLoading } = useChannels(DEVICE_ID, accessToken);
+  const browserLatency = useBrowserLatency(DEVICE_ID, accessToken);
 
   const h = health.data;
   const adminOnly = system.error?.startsWith("HTTP 403") ?? false;
@@ -112,12 +120,14 @@ export function SystemPage() {
         ) : system.data ? (
           <div className="kv">
             <div className="kv__item">
-              <span className="kv__label">End-to-end latency</span>
-              <span className="kv__value" data-testid="e2e-latency">
+              <span className="kv__label">Edge → backend latency (p50 / p95)</span>
+              <span className="kv__value tabular" data-testid="e2e-latency">
                 {system.data.e2e_latency_ms === null ? (
-                  <span className="t-muted">not measured</span>
+                  <span className="t-muted">
+                    {system.data.clock_skew_suspected ? "clocks not synced" : "not measured"}
+                  </span>
                 ) : (
-                  `${system.data.e2e_latency_ms} ms`
+                  `${formatMs(system.data.e2e_latency_ms)} / ${formatMs(system.data.e2e_latency_p95_ms)}`
                 )}
               </span>
             </div>
@@ -125,15 +135,32 @@ export function SystemPage() {
               <span className="kv__label">Telemetry count</span>
               <span className="kv__value tabular">{system.data.telemetry_count}</span>
             </div>
+            {system.data.e2e_latency_note && (
+              <div className="kv__item">
+                <span className="kv__label">Backend note</span>
+                <span className="kv__value t-muted" data-testid="e2e-latency-note">
+                  {system.data.e2e_latency_note}
+                </span>
+              </div>
+            )}
           </div>
         ) : (
           <StateBlock kind="loading" />
         )}
+      </GlassTile>
 
+      <GlassTile title="Sensor → browser latency">
+        <BrowserLatencyPanel
+          snapshot={browserLatency.snapshot}
+          connection={browserLatency.connection}
+          signedIn={accessToken !== null}
+        />
         <p className="page__footnote t-muted">
-          <strong>End-to-end latency is null, not zero.</strong> Nothing in the running backend
-          measures sensor-to-client latency; the only measurement ever taken was a one-off probe
-          script. Reporting a number here would be fabricating it.
+          Measured in this browser at WebSocket receipt, from the timestamp the Pi stamped on each
+          frame. It covers sampling, MQTT, backend and the socket to this screen. It compares the
+          Pi&apos;s clock with this computer&apos;s, so both need NTP time sync; frames that appear
+          to arrive before they were sent, or more than a minute late, are counted and excluded,
+          never rounded into a plausible number.
         </p>
       </GlassTile>
 
@@ -199,6 +226,85 @@ export function SystemPage() {
           are not exposed over the API.
         </p>
       </GlassTile>
+    </div>
+  );
+}
+
+// PRD NFR-P1 / AC6: sensor -> UI under 2 s.
+const AC6_BUDGET_MS = 2000;
+
+export function formatMs(ms: number | null): string {
+  if (ms === null) return "—";
+  return ms < 1000 ? `${Math.round(ms)} ms` : `${(ms / 1000).toFixed(2)} s`;
+}
+
+export function BrowserLatencyPanel({
+  snapshot,
+  connection,
+  signedIn,
+}: {
+  snapshot: LatencySnapshot;
+  connection: string;
+  signedIn: boolean;
+}) {
+  if (!signedIn) {
+    return <StateBlock kind="notice" title="Sign in to measure" />;
+  }
+  if (snapshot.clockSkewSuspected && snapshot.p50Ms === null) {
+    return (
+      <StateBlock kind="notice" title="Clocks not synced">
+        <span data-testid="browser-latency-skew">
+          {snapshot.negativeSamples > 0
+            ? `${snapshot.negativeSamples} frame(s) appeared to arrive before the Pi sent them.`
+            : `${snapshot.implausibleSamples} frame(s) arrived more than a minute after their timestamp.`}{" "}
+          No latency is reported until the Pi and this computer agree on the time.
+        </span>
+      </StateBlock>
+    );
+  }
+  if (snapshot.p50Ms === null) {
+    return (
+      <StateBlock kind="notice" title="No frames yet">
+        <span data-testid="browser-latency-waiting">
+          Waiting for live telemetry (socket {connection}).
+        </span>
+      </StateBlock>
+    );
+  }
+  const withinBudget = snapshot.p95Ms !== null && snapshot.p95Ms < AC6_BUDGET_MS;
+  return (
+    <div className="kv">
+      <div className="kv__item">
+        <span className="kv__label">p50 / p95</span>
+        <span className="kv__value tabular" data-testid="browser-latency">
+          {formatMs(snapshot.p50Ms)} / {formatMs(snapshot.p95Ms)}
+        </span>
+      </div>
+      <div className="kv__item">
+        <span className="kv__label">Max in window</span>
+        <span className="kv__value tabular">{formatMs(snapshot.maxMs)}</span>
+      </div>
+      <div className="kv__item">
+        <span className="kv__label">Frames measured</span>
+        <span className="kv__value tabular">{snapshot.samples}</span>
+      </div>
+      <div className="kv__item">
+        <span className="kv__label">Target (p95 &lt; 2 s)</span>
+        <span className="kv__value">
+          <StatusPill tone={withinBudget ? "healthy" : "critical"}>
+            {withinBudget ? "met" : "missed"}
+          </StatusPill>
+        </span>
+      </div>
+      {snapshot.implausibleSamples > 0 && (
+        <div className="kv__item">
+          <span className="kv__label">Excluded</span>
+          <span className="kv__value t-muted" data-testid="browser-latency-excluded">
+            {snapshot.implausibleSamples} frame(s) over a minute late (clock skew or buffered
+            replay)
+          </span>
+        </div>
+      )}
     </div>
   );
 }
