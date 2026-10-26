@@ -26,6 +26,14 @@ Events chained, both from Doc05's own ``event_type`` example list:
                   point at which the system ACTS on isolation rather than
                   merely observing it.
 
+  ``recover``     the edge releases a channel from isolation because its trust
+                  is back at TRUSTED_MIN (D018 pt.2). Read from the edge's own
+                  ``tracked_isolation_candidates`` shrinking -- NOT from
+                  substitution stopping, which also happens for one cycle when
+                  a 60 s substitution episode expires and restarts. FR-L1 asks
+                  for every heal to be chained; this closes each episode so an
+                  auditor sees trust_drop -> isolate -> recover.
+
 ``safe_stop`` is deliberately absent: no actuation is wired in this build, so
 there is no such event to chain. Adding it speculatively would put an event in
 an audit record that cannot occur.
@@ -52,6 +60,7 @@ log = logging.getLogger("shtapm.decision_ledger")
 
 EVENT_TRUST_DROP = "trust_drop"
 EVENT_ISOLATE = "isolate"
+EVENT_RECOVER = "recover"
 
 
 def _channel_name(channel: object) -> str:
@@ -68,7 +77,15 @@ class DecisionLedgerRecorder:
         # device_id -> channels currently in each state, so a block is written
         # on entry only.
         self._trust_dropped: dict[str, set[str]] = {}
-        self._substituted: dict[str, set[str]] = {}
+        # Channels the edge currently tracks as isolated; a channel leaving
+        # this set is a recovery.
+        self._tracked: dict[str, set[str]] = {}
+        # Channels whose `isolate` block has been written for the CURRENT
+        # isolation episode. Substitution drops out for one cycle whenever a
+        # 60 s episode expires and restarts; keying on the episode rather than
+        # on raw substitution stops that from re-chaining `isolate` every
+        # minute. Cleared for a channel when it recovers.
+        self._isolate_chained: dict[str, set[str]] = {}
 
     def record(self, message: DecisionDiagnosticMessage) -> None:
         """Sink signature matches ``DecisionDiagnosticConsumer``'s sink.
@@ -89,17 +106,21 @@ class DecisionLedgerRecorder:
         # persistence layers use.
         candidates = {_channel_name(c) for c in message.isolation_candidates}
         substituted = {_channel_name(c) for c in message.substituted_channels}
+        tracked = {_channel_name(c) for c in message.tracked_isolation_candidates}
 
         newly_dropped = candidates - self._trust_dropped.get(device_id, set())
-        newly_substituted = substituted - self._substituted.get(device_id, set())
+        recovered = self._tracked.get(device_id, set()) - tracked
+        chained = self._isolate_chained.get(device_id, set()) - recovered
+        newly_substituted = substituted - chained
 
         # A channel that recovers must be able to trigger a NEW block if it
         # degrades again, so state tracks the CURRENT set rather than
         # accumulating every channel ever seen.
         self._trust_dropped[device_id] = candidates
-        self._substituted[device_id] = substituted
+        self._tracked[device_id] = tracked
+        self._isolate_chained[device_id] = chained | substituted
 
-        if not newly_dropped and not newly_substituted:
+        if not newly_dropped and not newly_substituted and not recovered:
             return
 
         with self._session_factory() as db:
@@ -131,6 +152,19 @@ class DecisionLedgerRecorder:
                         # The substituted VALUE is deliberately absent: it is not
                         # on this wire payload, and the ledger records that an
                         # action occurred, not the reconstruction itself.
+                    },
+                )
+            for channel in sorted(recovered):
+                self._append(
+                    db,
+                    device_uuid,
+                    EVENT_RECOVER,
+                    {
+                        "channel": channel,
+                        "action": "released_from_isolation",
+                        "trust": getattr(message.trust, channel, None),
+                        "ts": message.ts,
+                        "sample_seq": message.sample_seq,
                     },
                 )
             db.commit()

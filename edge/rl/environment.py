@@ -195,11 +195,11 @@ defensible model, deliberately not a hardware simulation:
 HELD-VALUE BOOKKEEPING: ``self._held_values`` captures, once, the raw
 value a channel had (from ``self._latest_raw``, the same already-existing
 raw-value plumbing ``edge/pipeline/monitor.py`` built) at the exact moment
-it FIRST appears in the tracker's ``tracked_channels`` -- never updated
-again afterward (the tracker's own ``tracked_channels`` is itself
-monotonically non-shrinking, per ``edge/pipeline/isolation_tracker.py``'s
-documented "no confirmed recovery" stance, so a channel needs exactly one
-freeze point for the rest of the episode).
+it enters the tracker's ``tracked_channels`` -- never updated while it
+stays tracked. The tracker releases a channel when its trust recovers to
+``TRUSTED_MIN`` (D018 pt.2, ``edge/pipeline/isolation_tracker.py``); the
+held value is dropped then, so each isolation episode has exactly one
+freeze point.
 
 HEALTH AND PROGNOSIS ARE UNCHANGED BY ISOLATION: ``_build_state()``'s
 ``health`` still comes only from the generator's own ground truth
@@ -355,9 +355,13 @@ class SHTAPMSimulationEnvironment:
         self._latest_raw = raw
 
     def _update_held_values(self, tracked_channels: frozenset[str]) -> None:
-        """Freeze each newly-tracked channel's raw value, ONCE, at the
-        moment it first appears in the tracker's own persistent set -- see
-        module docstring's HELD-VALUE BOOKKEEPING section."""
+        """Freeze each newly-tracked channel's raw value, ONCE per isolation
+        episode, at the moment it enters the tracker's persistent set -- see
+        module docstring's HELD-VALUE BOOKKEEPING section. A channel the
+        tracker released on recovery (D018 pt.2) drops its held value, so a
+        later re-isolation freezes a fresh one instead of a stale one."""
+        for channel in self._held_values.keys() - tracked_channels:
+            del self._held_values[channel]
         if self._latest_raw is None:
             return
         newly_tracked = tracked_channels - self._held_values.keys()

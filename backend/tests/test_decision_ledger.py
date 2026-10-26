@@ -20,6 +20,7 @@ from app.schemas.decision_diagnostic import (  # noqa: E402
 from app.services import ledger as ledger_service  # noqa: E402
 from app.services.decision_ledger import (  # noqa: E402
     EVENT_ISOLATE,
+    EVENT_RECOVER,
     EVENT_TRUST_DROP,
     DecisionLedgerRecorder,
 )
@@ -32,7 +33,17 @@ _NONE_ATTRIBUTION = {
 }
 
 
-def _message(*, candidates=(), substituted=(), seq=0, ts="2026-09-18T12:00:00.000Z", trust=0.9):
+def _message(
+    *,
+    candidates=(),
+    substituted=(),
+    tracked=None,
+    seq=0,
+    ts="2026-09-18T12:00:00.000Z",
+    trust=0.9,
+):
+    """``tracked`` defaults to ``candidates``; pass it separately to model a
+    channel that is no longer Malicious but not yet recovered."""
     return DecisionDiagnosticMessage(
         device_id="pump-01",
         ts=ts,
@@ -51,7 +62,7 @@ def _message(*, candidates=(), substituted=(), seq=0, ts="2026-09-18T12:00:00.00
         ),
         attribution=_NONE_ATTRIBUTION,
         isolation_candidates=list(candidates),
-        tracked_isolation_candidates=list(candidates),
+        tracked_isolation_candidates=list(candidates if tracked is None else tracked),
         substituted_channels=list(substituted),
     )
 
@@ -108,8 +119,56 @@ def test_recovery_then_relapse_chains_again(recorder, session_factory):
     recorder.record(_message(candidates=["current"], trust=0.2, seq=3))
 
     blocks = _blocks(session_factory)
-    assert len(blocks) == 2
-    assert [b.event_type for b in blocks] == [EVENT_TRUST_DROP, EVENT_TRUST_DROP]
+    assert [b.event_type for b in blocks] == [EVENT_TRUST_DROP, EVENT_RECOVER, EVENT_TRUST_DROP]
+
+
+def test_recovery_is_chained_once_with_the_trust_that_released_it(recorder, session_factory):
+    recorder.record(_message(candidates=["current"], substituted=["current"], trust=0.2, seq=1))
+    recorder.record(_message(tracked=["current"], substituted=["current"], trust=0.55, seq=2))
+    recorder.record(_message(trust=0.75, seq=3))  # back at TRUSTED_MIN -> released
+    recorder.record(_message(trust=0.8, seq=4))
+
+    blocks = _blocks(session_factory)
+    assert [b.event_type for b in blocks] == [EVENT_TRUST_DROP, EVENT_ISOLATE, EVENT_RECOVER]
+    assert blocks[2].payload["channel"] == "current"
+    assert blocks[2].payload["trust"] == 0.75
+    assert blocks[2].payload["action"] == "released_from_isolation"
+
+
+def test_substitution_restart_inside_one_episode_does_not_rechain_isolate(
+    recorder, session_factory
+):
+    """A 60 s substitution episode expiring drops substitution for one cycle
+    while the channel stays isolated; that is not a new isolation."""
+    recorder.record(_message(candidates=["current"], substituted=["current"], trust=0.2, seq=1))
+    recorder.record(_message(tracked=["current"], substituted=[], trust=0.3, seq=2))  # expiry
+    recorder.record(_message(tracked=["current"], substituted=["current"], trust=0.3, seq=3))
+
+    events = [b.event_type for b in _blocks(session_factory)]
+    assert events == [EVENT_TRUST_DROP, EVENT_ISOLATE]
+
+
+def test_isolate_is_chained_again_for_a_new_episode_after_recovery(recorder, session_factory):
+    recorder.record(_message(candidates=["current"], substituted=["current"], trust=0.2, seq=1))
+    recorder.record(_message(trust=0.8, seq=2))  # recovered
+    recorder.record(_message(candidates=["current"], substituted=["current"], trust=0.2, seq=3))
+
+    events = [b.event_type for b in _blocks(session_factory)]
+    assert events == [
+        EVENT_TRUST_DROP,
+        EVENT_ISOLATE,
+        EVENT_RECOVER,
+        EVENT_TRUST_DROP,
+        EVENT_ISOLATE,
+    ]
+
+
+def test_backend_restart_never_invents_a_recovery(session_factory):
+    """A fresh recorder has no prior state, so its first healthy message must
+    not be read as a channel leaving isolation."""
+    recorder = DecisionLedgerRecorder(session_factory)
+    recorder.record(_message(trust=0.9, seq=1))
+    assert _blocks(session_factory) == []
 
 
 def test_substitution_is_chained_as_isolate(recorder, session_factory):

@@ -95,30 +95,65 @@ def test_channel_remains_tracked_across_repeated_malicious_cycles():
 
 
 # ---------------------------------------------------------------------------
-# Recovered trust does not silently remove tracking
+# Recovery (D018 pt.2): release at TRUSTED_MIN, hold through Suspicious
 # ---------------------------------------------------------------------------
 
+_SUSPICIOUS = 0.55  # between MALICIOUS_MAX (0.4) and TRUSTED_MIN (0.7)
 
-def test_recovered_trust_does_not_remove_tracked_channel():
+
+def test_trust_back_at_trusted_min_releases_the_channel():
     tracker = IsolationFallbackTracker()
     tracker.update(_window_outcome({"temperature": 0.1}))  # Malicious -> tracked
 
-    recovered = tracker.update(_window_outcome({"temperature": TRUSTED_MIN}))  # now Trusted
-    assert recovered.candidates_this_cycle == frozenset()  # not malicious THIS cycle
-    assert recovered.tracked_channels == frozenset({"temperature"})  # still tracked
-    reason = recovered.reasons["temperature"]
-    assert "confirmed SelfHealOutcome recovery" in reason  # explains WHY it's not dropped
+    recovered = tracker.update(_window_outcome({"temperature": TRUSTED_MIN}))  # exact boundary
+    assert recovered.candidates_this_cycle == frozenset()
+    assert recovered.tracked_channels == frozenset()
+    assert recovered.released_this_cycle == frozenset({"temperature"})
+    assert "recovered this cycle" in recovered.reasons["temperature"]
 
 
-def test_reason_never_asserts_recovery_occurred():
-    """Stronger, explicit check: the reason text for a still-tracked-but-
-    currently-not-malicious channel must not claim recovery is confirmed."""
+def test_suspicious_trust_keeps_the_channel_isolated():
+    """Hysteresis: leaving the Malicious band is not recovery."""
     tracker = IsolationFallbackTracker()
     tracker.update(_window_outcome({"temperature": 0.1}))
-    result = tracker.update(_window_outcome({"temperature": TRUSTED_MIN}))
-    reason = result.reasons["temperature"]
-    assert "recovery tracking not implemented" in reason
-    assert "confirmed" in reason
+    result = tracker.update(_window_outcome({"temperature": _SUSPICIOUS}))
+    assert result.tracked_channels == frozenset({"temperature"})
+    assert result.released_this_cycle == frozenset()
+    assert "has not reached TRUSTED_MIN" in result.reasons["temperature"]
+
+
+def test_just_below_trusted_min_is_not_recovery():
+    tracker = IsolationFallbackTracker()
+    tracker.update(_window_outcome({"temperature": 0.1}))
+    result = tracker.update(_window_outcome({"temperature": TRUSTED_MIN - 1e-9}))
+    assert result.tracked_channels == frozenset({"temperature"})
+
+
+def test_released_channel_is_reported_only_on_the_cycle_it_recovers():
+    tracker = IsolationFallbackTracker()
+    tracker.update(_window_outcome({"temperature": 0.1}))
+    tracker.update(_window_outcome({}))  # recovers here
+    later = tracker.update(_window_outcome({}))
+    assert later.released_this_cycle == frozenset()
+    assert later.reasons == {}
+
+
+def test_a_recovered_channel_can_be_isolated_again():
+    tracker = IsolationFallbackTracker()
+    tracker.update(_window_outcome({"temperature": 0.1}))
+    tracker.update(_window_outcome({}))  # recovered
+    again = tracker.update(_window_outcome({"temperature": 0.2}))
+    assert again.tracked_channels == frozenset({"temperature"})
+    assert "newly isolated this cycle" in again.reasons["temperature"]
+
+
+def test_no_flicker_while_trust_oscillates_inside_the_suspicious_band():
+    tracker = IsolationFallbackTracker()
+    tracker.update(_window_outcome({"temperature": 0.1}))
+    for value in (0.45, 0.65, 0.41, 0.69, 0.5):
+        assert tracker.update(_window_outcome({"temperature": value})).tracked_channels == (
+            frozenset({"temperature"})
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -141,14 +176,12 @@ def test_multiple_channels_tracked_independently():
 
 
 def test_channel_no_longer_malicious_this_cycle_but_still_tracked():
-    """Companion to the above: when a previously-tracked channel is simply
-    left out of `trust_overrides` (defaulting to Trusted) rather than
-    explicitly recovered, it must still be reported as tracked, with the
-    'not malicious this cycle, but remains tracked' reason -- not silently
-    dropped and not mislabeled as 'still malicious'."""
+    """A previously-tracked channel whose trust is only Suspicious this cycle
+    stays tracked with the 'not malicious this cycle, still isolated' reason
+    -- not silently dropped and not mislabeled as 'still malicious'."""
     tracker = IsolationFallbackTracker()
     tracker.update(_window_outcome({"temperature": 0.1}))
-    result = tracker.update(_window_outcome({"vibration": 0.05}))  # temperature defaults to Trusted
+    result = tracker.update(_window_outcome({"temperature": _SUSPICIOUS, "vibration": 0.05}))
 
     assert result.tracked_channels == frozenset({"temperature", "vibration"})
     assert result.candidates_this_cycle == frozenset({"vibration"})
@@ -177,7 +210,9 @@ def test_no_cross_contamination_between_tracker_instances():
     result_b = tracker_b.update(_window_outcome({}))  # independent, all Trusted
 
     assert result_b.tracked_channels == frozenset()
-    assert tracker_a.update(_window_outcome({})).tracked_channels == frozenset({"temperature"})
+    assert tracker_a.update(_window_outcome({"temperature": _SUSPICIOUS})).tracked_channels == (
+        frozenset({"temperature"})
+    )
 
 
 # ---------------------------------------------------------------------------
