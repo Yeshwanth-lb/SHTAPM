@@ -19,6 +19,7 @@ import logging
 import threading
 from typing import Any
 
+from app.schemas.actuation import RelayCommand, relay_command_topic
 from app.schemas.command import CancelCommand, InjectCommand, command_topic
 
 log = logging.getLogger("shtapm.mqtt.command")
@@ -66,14 +67,19 @@ class CommandPublisher:
         except Exception:
             return False
 
-    def publish(self, command: InjectCommand | CancelCommand) -> bool:
+    def publish(self, command: InjectCommand | CancelCommand | RelayCommand) -> bool:
         """Publish at QoS 1. Returns False -- never raises -- when the command
-        could not be handed to the broker."""
+        could not be handed to the broker. Relay commands go to their own
+        topic (D041), never the advisory injection topic (D032)."""
         client = self._client
         if client is None or not self.connected:
             log.warning("command %s not sent: broker not connected", command.command_id)
             return False
-        topic = command_topic(command.device_id)
+        topic = (
+            relay_command_topic(command.device_id)
+            if isinstance(command, RelayCommand)
+            else command_topic(command.device_id)
+        )
         try:
             with self._lock:
                 info = client.publish(topic, command.model_dump_json(), qos=1)

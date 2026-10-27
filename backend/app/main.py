@@ -51,15 +51,18 @@ from app.api.devices import router as devices_router
 from app.api.inject import InjectionRegistry
 from app.api.inject import router as inject_router
 from app.api.ledger import router as ledger_router
+from app.api.relay import router as relay_router
 from app.api.system import router as system_router
 from app.api.users import router as users_router
 from app.core.config import AuthSettings, CorsSettings, DatabaseSettings, MqttSettings
 from app.core.db import make_engine, make_session_factory
 from app.models import Base
+from app.mqtt.actuation_consumer import ActuationConsumer
 from app.mqtt.command_publisher import CommandPublisher
 from app.mqtt.consumer import TelemetryConsumer
 from app.mqtt.decision_diagnostic_consumer import DecisionDiagnosticConsumer
 from app.mqtt.status_consumer import StatusConsumer
+from app.services.actuation import ActuationLedgerRecorder, ActuationRegistry
 from app.services.decision_diagnostic_persistence import DecisionDiagnosticPersistence
 from app.services.decision_ledger import DecisionLedgerRecorder
 from app.services.latency_tracker import LatencyTracker
@@ -125,6 +128,16 @@ async def lifespan(app: FastAPI):
     command_publisher.start(settings.host, settings.port)
     app.state.command_publisher = command_publisher
     app.state.injection_registry = InjectionRegistry()
+
+    # Edge relay status (D041): retained, so a restarted backend learns the
+    # pump's current state immediately; every transition is ledger-chained.
+    actuation_registry = ActuationRegistry()
+    actuation_consumer = ActuationConsumer()
+    actuation_consumer.add_sink(actuation_registry.update)
+    actuation_consumer.add_sink(ActuationLedgerRecorder(session_factory).record)
+    actuation_consumer.start(settings.host, settings.port)
+    app.state.actuation_registry = actuation_registry
+    app.state.actuation_consumer = actuation_consumer
     try:
         yield
     finally:
@@ -132,6 +145,7 @@ async def lifespan(app: FastAPI):
         decision_diagnostic_consumer.stop()
         status_consumer.stop()
         command_publisher.stop()
+        actuation_consumer.stop()
         engine.dispose()
 
 
@@ -198,6 +212,7 @@ app.include_router(ws_router)
 app.include_router(auth_router)
 app.include_router(devices_router)
 app.include_router(inject_router)
+app.include_router(relay_router)
 app.include_router(alerts_router)
 app.include_router(users_router)
 app.include_router(system_router)
