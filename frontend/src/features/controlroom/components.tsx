@@ -8,6 +8,7 @@ import {
   type ChannelState,
   type LogLine,
   type Severity,
+  formatEventTime,
   trustTone,
 } from "./model";
 
@@ -176,7 +177,7 @@ export function EventLog({ lines }: { lines: LogLine[] }) {
     <ol className="eventlog" data-testid="eventlog">
       {lines.map((line) => (
         <li key={line.key} className="eventlog__row" data-testid="eventlog-row">
-          <span className="mono t-muted">{new Date(line.ts).toLocaleTimeString()}</span>
+          <span className="mono t-muted">{formatEventTime(line.ts)}</span>
           <span
             className={`eventlog__mark${line.severity === "normal" ? "" : ` eventlog__mark--${line.severity}`}`}
             aria-hidden="true"

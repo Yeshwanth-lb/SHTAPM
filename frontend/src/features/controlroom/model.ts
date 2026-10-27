@@ -235,3 +235,18 @@ export function describeEvent(event: LedgerEvent): LogLine {
       return { ...base, severity: "normal", text: event.event_type };
   }
 }
+
+/** Parse a backend timestamp. Ledger times are stored in UTC; a value without
+ * an explicit zone is therefore UTC, never the browser's local time. */
+export function parseServerTime(ts: string): Date {
+  return new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(ts) ? ts : `${ts}Z`);
+}
+
+/** "20:30:33" for today, "26 Oct 20:44:26" for anything older. */
+export function formatEventTime(ts: string, now: Date = new Date()): string {
+  const at = parseServerTime(ts);
+  const time = at.toLocaleTimeString();
+  return at.toDateString() === now.toDateString()
+    ? time
+    : `${at.toLocaleDateString(undefined, { day: "numeric", month: "short" })} ${time}`;
+}

@@ -8,6 +8,8 @@ import {
   channelsInReason,
   channelState,
   describeEvent,
+  formatEventTime,
+  parseServerTime,
   trustTone,
 } from "./model";
 
@@ -149,5 +151,21 @@ describe("event log", () => {
       "Pump start requested by admin@x",
     );
     expect(describeEvent(block("something_new", {})).text).toBe("something_new");
+  });
+});
+
+describe("event times", () => {
+  it("reads a zone-less ledger time as UTC, not local", () => {
+    expect(parseServerTime("2026-10-27T15:00:33").toISOString()).toBe("2026-10-27T15:00:33.000Z");
+    expect(parseServerTime("2026-10-27T15:00:33Z").toISOString()).toBe("2026-10-27T15:00:33.000Z");
+    expect(parseServerTime("2026-10-27T20:30:33+05:30").toISOString()).toBe(
+      "2026-10-27T15:00:33.000Z",
+    );
+  });
+
+  it("adds the date to events that are not from today", () => {
+    const now = new Date("2026-10-27T15:05:00Z");
+    expect(formatEventTime("2026-10-27T15:00:33", now)).not.toMatch(/Oct/);
+    expect(formatEventTime("2026-10-25T15:14:26", now)).toMatch(/Oct/);
   });
 });

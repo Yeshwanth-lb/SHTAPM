@@ -408,7 +408,7 @@ body {
 
 .eventlog__row {
   display: grid;
-  grid-template-columns: 74px 16px 1fr;
+  grid-template-columns: 128px 16px 1fr;
   gap: 8px;
   align-items: baseline;
   padding: 5px 6px;
