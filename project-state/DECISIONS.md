@@ -3173,3 +3173,54 @@ does not authorize any wiring or actuation.
   idle data, heals running current only from ~0.6 A to ~0.43 A error on this
   capture -- retraining it on cycling data is the next self-heal step;
   (c) the DHT22 needs a fix and, after it, a new baseline.
+
+### D039 — APPROVED: the current twin reads only current and vibration; retrained on three bench captures
+- **Date:** 2026-10-27
+- **Decision:** the deployed self-heal twin (``models/twin_current.*``, D029
+  architecture unchanged) is trained with ``--inputs current vibration``:
+  only those two channels are fitted in its scale, so the live runtime feeds
+  temperature, humidity, pressure and gas as 0.0 ("no information", the
+  existing gas mechanism -- no runtime code change). Trained on
+  ``motor_load_full.jsonl`` + ``motor_run_capture.jsonl`` +
+  ``cycling_capture_2026-10-27.jsonl`` (holdout: the last 15%).
+  ``edge/eval/bench_twin_training.py`` gains ``--inputs``, multiple captures
+  (never a window across files or time gaps), the edge's telemetry JSONL
+  format, ``--test-capture`` for cross-day evaluation, and keeps rows whose
+  only dropout is a channel the twin does not read.
+- **Why (measured 2026-10-27):** the previous bundle read all five measured
+  channels, z-scored with its training capture's tiny ambient spreads
+  (temperature std 0.063 degC, humidity 0.27 %RH, pressure 0.079 hPa). On any
+  other day ambient sat dozens of those spreads away (|z(temperature)| 24 on
+  2026-10-26, 49 on 2026-10-27 with the simulated DHT channels), and the
+  twin did WORSE than predicting the mean: skill +0.66 on its own capture,
+  -0.38 on 2026-10-26, -0.13 on 2026-10-27; with ambient neutralised the same
+  network scored +0.52 / +0.48. Ambient carries no information about current
+  on this rig (R^2 < 0.006, BENCH_LOAD_VALIDATION.md). Leave-one-capture-out
+  (train on two captures, test on the third day):
+
+  | test capture | current+vibration | all five inputs |
+  |---|---|---|
+  | 2026-10-27 cycling (70 min) | +38.5% | -122.7% |
+  | 2026-10-26 running | +51.3% | +47.7% |
+  | motor_load_full | +64.6% | -61.2% |
+
+  (DHT-dropout rows were dropped in this comparison so both input sets saw
+  identical data; keeping them raises the 2026-10-27 figure to +45.9%.)
+- **End to end (``self_heal_eval``, isolated-current substitution error):**
+  out of sample -- twin trained WITHOUT the 2026-10-27 capture, evaluated on
+  it: bias 0.43 -> 0.0025 A median, constant spoof 0.43 -> 0.047 A (sensor
+  error without healing 0.58-0.6 A); 0 false isolations. Final twin (in
+  sample for these captures): 2026-10-26 running bias 0.41 -> 0.067 A, spoof
+  0.44 -> 0.060 A. Idle 7.2 h capture (not in training): 0.017 -> 0.051 A
+  median (true current 0 A; the new twin predicts ~0.05 A at rest) -- a small
+  regression, recorded. Holdout skill of the final twin: +47.3%
+  (0.188 A vs 0.357 A).
+- **Divergence:** the clean residual spread is now honest (0.377 scaled vs
+  0.034 for an in-sample-fit bundle); escalation stays disabled
+  (``divergence_threshold`` = +inf, ``self_heal_runtime.py``), so no
+  behaviour change. Clean held-out false escalations would be 4.5% at 3.0
+  sigma, 1.0% at 3.5 -- evidence for U05 when escalation is enabled.
+- **Deployment:** ``models/`` is gitignored; the bundle is copied to the Pi
+  (previous bundle kept in ``models/prev/``, outside the loader's top-level
+  ``*.json`` glob). The twin depends on vibration being trustworthy when
+  current is isolated -- the same coupling the physics rule relies on.
