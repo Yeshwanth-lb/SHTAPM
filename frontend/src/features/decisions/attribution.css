@@ -1,0 +1,27 @@
+.attribution {
+  display: grid;
+  gap: 4px;
+  padding: 12px 16px;
+  border-radius: 14px;
+  background: var(--glass-inset);
+  border: 1px solid var(--glass-border);
+}
+
+.attribution--attack {
+  border-color: var(--status-critical);
+  box-shadow: 0 0 0 1px var(--status-critical-glow);
+}
+
+.attribution--fault {
+  border-color: var(--status-warning);
+}
+
+.attribution--isolated {
+  border-color: var(--status-virtual);
+}
+
+.attribution__reason,
+.attribution__isolated {
+  font-size: 13px;
+  color: var(--text-secondary);
+}

@@ -77,10 +77,12 @@ describe("UNCOMPUTED_DECISION_FIELDS", () => {
     expect(fields).toContain("health_state");
     expect(fields).toContain("failure_eta");
     expect(fields).toContain("rl_action");
-    expect(fields).toContain("isolated_channels");
     // substituted_channels is deliberately NOT here any more: the edge now
-    // runs a trained digital twin and reports what it reconstructed.
+    // runs a trained digital twin and reports what it reconstructed. Since
+    // D042 the same holds for the isolation set and the attribution.
     expect(fields).not.toContain("substituted_channels");
+    expect(fields).not.toContain("isolated_channels");
+    expect(fields).not.toContain("attribution");
     expect(UNCOMPUTED_DECISION_FIELDS.every((f) => f.why.length > 0)).toBe(true);
   });
 

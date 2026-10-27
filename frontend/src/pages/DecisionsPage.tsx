@@ -14,6 +14,7 @@ import { TrustConstellation } from "../components/panels/TrustConstellation";
 import { useAuth } from "../features/auth/AuthContext";
 import { useChannels } from "../features/channels/useChannels";
 import {
+  LIVE_DECISION_POLL_MS,
   UNCOMPUTED_DECISION_FIELDS,
   trustScores,
   useDecisionProvenance,
@@ -27,7 +28,8 @@ export function DecisionsPage() {
   const { tokens } = useAuth();
   const accessToken = tokens?.accessToken ?? null;
 
-  const decisions = useDecisions(DEVICE_ID, accessToken);
+  // Polled like the device page, so attribution and trust stay live (P6-5).
+  const decisions = useDecisions(DEVICE_ID, accessToken, 120, LIVE_DECISION_POLL_MS);
   const provenance = useDecisionProvenance(DEVICE_ID, accessToken);
   const { channels } = useChannels(DEVICE_ID, accessToken);
 
@@ -132,11 +134,42 @@ export function DecisionsPage() {
               <span className="kv__value tabular">{rows.length}</span>
             </div>
           </div>
+          <div className="kv">
+            <div className="kv__item">
+              <span className="kv__label">Attribution</span>
+              <span className="kv__value" data-testid="decision-attribution">
+                <StatusPill
+                  tone={
+                    latest.attribution === "attack"
+                      ? "critical"
+                      : latest.attribution === "fault"
+                        ? "warning"
+                        : "muted"
+                  }
+                >
+                  {latest.attribution ?? "—"}
+                </StatusPill>
+              </span>
+            </div>
+            <div className="kv__item">
+              <span className="kv__label">Why</span>
+              <span className="kv__value t-muted" data-testid="decision-reason">
+                {latest.reason ?? "—"}
+              </span>
+            </div>
+            <div className="kv__item">
+              <span className="kv__label">Isolated</span>
+              <span className="kv__value mono" data-testid="decision-isolated">
+                {(latest.isolated_channels ?? []).join(", ") || "none"}
+              </span>
+            </div>
+          </div>
           <p className="page__footnote t-muted" data-testid="null-detector-note">
-            <strong>&ldquo;Not flagged&rdquo; is not an all-clear.</strong> The detector wired into
-            the live path is a null detector that never flags, by design — no calibrated threshold
-            exists yet. This panel shows that the pipeline executed and what it emitted, not whether
-            the pump is healthy.
+            <strong>&ldquo;Not flagged&rdquo; is not an all-clear.</strong> The live detector is an
+            Isolation Forest fitted on the bench&rsquo;s clean baseline (D031, D037); attribution
+            comes from motor-state physics (D034). Neither is validated against real attacks on this
+            pump, and an attack that keeps a sensor in its true motor state is outside what the
+            physics can see (D037).
           </p>
         </GlassTile>
       )}
@@ -166,9 +199,8 @@ export function DecisionsPage() {
           </table>
         </div>
         <p className="page__footnote t-muted">
-          There is no confidence score anywhere in this system, so none is displayed. Safety state
-          (relay position, safe-stop) is held on the edge and is not published to the backend, so it
-          cannot be shown here either.
+          There is no confidence score anywhere in this system, so none is displayed. Relay position
+          and safe-stop are on the device page&rsquo;s Pump relay panel (D041).
         </p>
       </GlassTile>
     </div>

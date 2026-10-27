@@ -72,8 +72,6 @@ export const UNCOMPUTED_DECISION_FIELDS = [
   { field: "health_state", why: "no prognosis model exists (D017)" },
   { field: "failure_eta", why: "no prognosis model exists (D017)" },
   { field: "rl_action", why: "no RL policy is wired (U06 open)" },
-  { field: "isolated_channels", why: "no isolation is executed; the live path is observe-only" },
-  { field: "attribution", why: "not published by the diagnostic path" },
 ] as const;
 
 /**

@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AuthProvider } from "../features/auth/AuthContext";
@@ -130,6 +130,19 @@ describe("HistoryPage", () => {
     withAuth(<HistoryPage />);
     await waitFor(() => expect(screen.getByTestId("state-empty")).toBeInTheDocument());
   });
+
+  it("turns a backend 500 into an error card whose retry really refetches (AC10 P5-10)", async () => {
+    const spy = vi
+      .spyOn(api, "apiGet")
+      .mockRejectedValueOnce(new api.ApiError(500, "internal error"))
+      .mockResolvedValue([] as never);
+    withAuth(<HistoryPage />);
+    await waitFor(() => expect(screen.getByTestId("state-error")).toBeInTheDocument());
+    expect(screen.getByTestId("state-error")).toHaveTextContent("internal error");
+    fireEvent.click(screen.getByRole("button", { name: /retry/i }));
+    await waitFor(() => expect(screen.getByTestId("state-empty")).toBeInTheDocument());
+    expect(spy).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe("SettingsPage", () => {
@@ -220,6 +233,43 @@ describe("DecisionsPage", () => {
     expect(screen.getByTestId("anomaly-flag")).toHaveTextContent("not flagged");
   });
 
+  it("shows the newest of a rapid attack -> heal -> fault sequence (AC10 P6-5)", async () => {
+    const row = (ts: string, attribution: string, reason: string | null) => ({
+      ts,
+      anomaly_flag: attribution !== "none",
+      anomaly_severity: 0.9,
+      attribution,
+      reason,
+      trust_temperature: 0.9,
+      trust_vibration: 0.9,
+      trust_pressure: 0.9,
+      trust_humidity: 0.9,
+      trust_gas: 0.9,
+      trust_current: 0.5,
+      health_state: null,
+      failure_eta: null,
+      rl_action: null,
+      isolated_channels: [],
+      substituted_channels: [],
+    });
+    vi.spyOn(api, "apiGet").mockImplementation((path: string) => {
+      if (path.includes("/decisions/provenance")) return Promise.reject(new Error("skip"));
+      if (path.includes("/decisions"))
+        // Oldest-first, as the API returns them (api/devices.py).
+        return Promise.resolve([
+          row("2026-10-27T10:00:01Z", "attack", "current: physics violation"),
+          row("2026-10-27T10:00:02Z", "none", null),
+          row("2026-10-27T10:00:03Z", "fault", "vibration: anomaly"),
+        ] as never);
+      return Promise.resolve([] as never);
+    });
+    withAuth(<DecisionsPage />);
+    await waitFor(() =>
+      expect(screen.getByTestId("decision-attribution")).toHaveTextContent("fault"),
+    );
+    expect(screen.getByTestId("decision-reason")).toHaveTextContent("vibration: anomaly");
+  });
+
   it("lists uncomputed fields so a blank is not read as 'nothing to report'", async () => {
     vi.spyOn(api, "apiGet").mockResolvedValue([] as never);
     withAuth(<DecisionsPage />);
@@ -227,6 +277,9 @@ describe("DecisionsPage", () => {
     const table = screen.getByTestId("uncomputed-table");
     expect(table).toHaveTextContent("rl_action");
     expect(table).toHaveTextContent("health_state");
+    // D042: attribution and isolation are computed and persisted now.
+    expect(table).not.toHaveTextContent("attribution");
+    expect(table).not.toHaveTextContent("isolated_channels");
   });
 
   it("shows an empty state when no decisions exist", async () => {
