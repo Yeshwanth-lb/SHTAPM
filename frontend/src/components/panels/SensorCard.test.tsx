@@ -297,9 +297,7 @@ describe("VIRTUAL substitution state", () => {
     // The twin's reconstruction is reported alongside telemetry, never written
     // into it. A VIRTUAL badge must not imply the number came from the twin.
     render(<SensorCard {...base} substituted />);
-    expect(screen.getByTestId("sensor-virtual-current").textContent).toMatch(
-      /still the sensor/i,
-    );
+    expect(screen.getByTestId("sensor-virtual-current").textContent).toMatch(/still the sensor/i);
     expect(screen.getByTestId("sensor-value-current").textContent).toBe("0.780");
   });
 
@@ -307,5 +305,29 @@ describe("VIRTUAL substitution state", () => {
     // Doc04 §04.6: shape/label must carry the meaning too.
     render(<SensorCard {...base} substituted />);
     expect(screen.getByTestId("sensor-virtual-current").textContent).toMatch(/VIRTUAL/);
+  });
+});
+
+describe("SensorCard: dead sensor (D045)", () => {
+  it("says SENSOR DEAD in words and keeps showing the held value", () => {
+    render(
+      <SensorCard
+        channel="humidity"
+        value={45.2}
+        meta={undefined}
+        updatedAt={null}
+        history={[]}
+        deadSince="2026-10-27T10:00:00.000Z"
+      />,
+    );
+    expect(screen.getByTestId("sensor-dead-humidity")).toHaveTextContent("SENSOR DEAD");
+    expect(screen.getByTestId("sensor-value-humidity")).toHaveTextContent("45.2");
+  });
+
+  it("shows nothing extra for a responding sensor", () => {
+    render(
+      <SensorCard channel="humidity" value={45.2} meta={undefined} updatedAt={null} history={[]} />,
+    );
+    expect(screen.queryByTestId("sensor-dead-humidity")).toBeNull();
   });
 });

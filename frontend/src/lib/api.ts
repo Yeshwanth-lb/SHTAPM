@@ -295,6 +295,20 @@ export function commandRelay(
   );
 }
 
+// ---- Dead sensors (D045) — mirrors backend app/api/sensor_health.py ----
+export interface SensorHealthOut {
+  device_id: string;
+  /** channel -> ISO time the edge first reported it dead (holding its last value). */
+  stale: Record<string, string>;
+}
+
+export function getSensorHealth(deviceId: string, accessToken: string): Promise<SensorHealthOut> {
+  return apiGet<SensorHealthOut>(
+    `/api/devices/${encodeURIComponent(deviceId)}/sensor-health`,
+    accessToken,
+  );
+}
+
 /** Mirrors backend AlertOut (api/alerts.py). */
 export interface AlertOut {
   id: string;

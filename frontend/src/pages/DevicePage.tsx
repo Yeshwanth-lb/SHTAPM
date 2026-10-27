@@ -26,6 +26,8 @@ import { ScenarioInjectPanel } from "../features/inject/ScenarioInjectPanel";
 import { RelayPanel } from "../features/relay/RelayPanel";
 import { AttributionBanner } from "../features/decisions/AttributionBanner";
 import { useDeviceTelemetry } from "../features/telemetry/useDeviceTelemetry";
+import { getSensorHealth, type SensorHealthOut } from "../lib/api";
+import { useApiResource } from "../lib/useApiResource";
 import { CHANNELS } from "../types/contracts";
 import "./device.css";
 
@@ -67,6 +69,13 @@ export function DevicePage() {
   // rendering, so nothing below branches on its error state.
   const decisions = useDecisions(DEVICE_ID, accessToken, 1, LIVE_DECISION_POLL_MS);
   const latestDecision = decisions.data?.[0] ?? null;
+  // Dead sensors (D045): which channels are holding their last good value.
+  const sensorHealth = useApiResource<SensorHealthOut>(
+    () => getSensorHealth(DEVICE_ID, accessToken!),
+    [accessToken],
+    { enabled: accessToken !== null, pollMs: LIVE_DECISION_POLL_MS },
+  );
+  const deadSince = sensorHealth.data?.stale ?? {};
   const {
     latest,
     history,
@@ -192,6 +201,7 @@ export function DevicePage() {
                   updatedAt={updatedAt}
                   history={series}
                   substituted={isSubstituted(latestDecision, channel)}
+                  deadSince={deadSince[channel] ?? null}
                 />
               );
             })}

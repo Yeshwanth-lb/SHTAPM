@@ -27,6 +27,9 @@ export interface SensorCardProps {
    * it does not mean the number shown came from the twin.
    */
   substituted?: boolean;
+  /** ISO time the edge first reported this sensor dead (D045), else null:
+   * the value shown is its LAST GOOD reading, held. */
+  deadSince?: string | null;
 }
 
 /** Significant-figure formatting that never invents precision. */
@@ -57,6 +60,7 @@ export function SensorCard({
   updatedAt,
   history,
   substituted = false,
+  deadSince = null,
 }: SensorCardProps) {
   const unavailable = value === null;
   const age = formatAge(updatedAt);
@@ -76,6 +80,13 @@ export function SensorCard({
         <h3 className="t-label">{channel}</h3>
         <ChannelProvenanceBadge source={source} />
       </header>
+
+      {deadSince && (
+        <p className="sensor-card__dead" role="alert" data-testid={`sensor-dead-${channel}`}>
+          SENSOR DEAD — not responding since {new Date(deadSince).toLocaleTimeString()}. The value
+          shown is its last good reading, held so the rest of the system keeps running.
+        </p>
+      )}
 
       {substituted && (
         /* Shape and text carry the meaning as well as colour — §04.6 forbids

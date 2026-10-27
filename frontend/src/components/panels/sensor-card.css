@@ -104,3 +104,15 @@
     opacity: 0.45;
   }
 }
+
+/* D045: a dead sensor holding its last good value. Text first, colour second. */
+.sensor-card__dead {
+  margin: 0;
+  padding: 6px 10px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--status-critical);
+  border: 1px solid var(--status-critical);
+  background: var(--glass-inset);
+}

@@ -3375,3 +3375,32 @@ does not authorize any wiring or actuation.
   Volts, not ppm: ppm needs a per-sensor clean-air calibration (R0) and a gas
   curve never performed here, and gas is a labelled proxy (PRD §12.1) that
   must not be over-claimed.
+
+### D045 — APPROVED (user decision): one dead sensor no longer stops the system (NFR-R1)
+- **Date:** 2026-10-27
+- **Decision:** the live edge samples with ``hold_last_good=True``: a channel
+  that WAS healthy and stops responding keeps publishing its LAST GOOD reading
+  and is reported in ``stale_channels`` on the decision topic (an additive,
+  defaulted field of the diagnostic schema; the frozen telemetry contract is
+  unchanged). A channel with no good reading since start-up still withholds
+  the frame -- nothing is invented; the escape hatch stays
+  ``SHTAPM_DRIVER_<CHANNEL>=fake``. Safety: a frame whose CURRENT is held does
+  not feed the watchdog or the dry-run detector, so a pump running with a dead
+  current sensor is stopped after ``SHTAPM_WATCHDOG_S`` (dry-run protection is
+  blind); any other dead sensor leaves the pump alone. Backend: latest stale set
+  per device (``GET /api/devices/{id}/sensor-health``), ``sensor_dead`` /
+  ``sensor_recovered`` chained into the ledger, and a dead sensor makes the
+  device condition ``warning`` (D043). Dashboard: "SENSOR DEAD" on the card,
+  with the held value still shown.
+- **Why:** before this, one unhealthy read on any channel withheld the whole
+  frame (decision C, a consequence of the frozen contract having no health
+  field), which is how a locking-up DHT22 blanked the entire bench twice and
+  forced temperature/humidity into simulation. NFR-R1 requires continuous
+  operation through single-sensor loss. Holding the last good value keeps the
+  telemetry a real measurement (the last one the sensor made), and the stale
+  flag travels on the topic that already reports isolation and substitution,
+  so no consumer can mistake a held value for a live one.
+- **Downstream:** a held channel is a flat line, so the detector and trust
+  layers treat it as a frozen sensor (fault) and isolate it like any other
+  misbehaving channel; current's twin can then substitute (D039).
+- **Closes:** AC10 P3-7 and P7-9 move from N/A-by-design to covered.
