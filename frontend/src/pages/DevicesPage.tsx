@@ -16,7 +16,7 @@ function statusTone(status: DeviceOut["status"]) {
   return "critical" as const;
 }
 
-function healthTone(health: DeviceOut["health_state"]) {
+export function healthTone(health: DeviceOut["health_state"]) {
   if (health === "healthy") return "healthy" as const;
   if (health === "warning") return "warning" as const;
   return "critical" as const;

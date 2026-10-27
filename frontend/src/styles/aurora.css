@@ -228,3 +228,44 @@ body {
     transition-duration: 0.001ms !important;
   }
 }
+
+/* ---- Performance and accessibility switches (TRD §02.9; lib/visualPrefs.ts) ----
+ * data-motion: VITE_AURORA_MOTION and the Settings "Reduce motion" switch.
+ * data-transparency: VITE_REDUCE_TRANSPARENCY_DEFAULT -- opaque glass, same data.
+ * data-perf: FpsGuard measured < 50 fps -- glow and blur shed, orbs frozen. */
+:root[data-motion="reduce"] *,
+:root[data-motion="reduce"] *::before,
+:root[data-motion="reduce"] *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+}
+
+:root[data-motion="off"] *,
+:root[data-motion="off"] *::before,
+:root[data-motion="off"] *::after {
+  animation: none !important;
+  transition: none !important;
+}
+
+:root[data-transparency="reduced"],
+:root[data-perf="degraded"] {
+  --blur-tile: none;
+  --blur-modal: none;
+  --glass-1: rgba(14, 18, 26, 0.96);
+  --glass-2: rgba(22, 28, 38, 0.97);
+}
+
+:root[data-perf="degraded"] {
+  --status-healthy-glow: transparent;
+  --status-warning-glow: transparent;
+  --status-critical-glow: transparent;
+  --status-virtual-glow: transparent;
+  --status-info-glow: transparent;
+}
+
+:root[data-motion="reduce"] .mesh__orb,
+:root[data-motion="off"] .mesh__orb,
+:root[data-perf="degraded"] .mesh__orb {
+  animation: none !important;
+}

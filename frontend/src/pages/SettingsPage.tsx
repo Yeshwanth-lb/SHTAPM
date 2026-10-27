@@ -13,11 +13,12 @@ import { useEffect, useState } from "react";
 import { GlassTile } from "../components/aurora/GlassTile";
 import { StateBlock } from "../components/aurora/StateBlock";
 import { apiBase } from "../lib/api";
+import { applyVisualPrefs, MOTION_STORAGE_KEY } from "../lib/visualPrefs";
 import { wsUrl } from "../lib/ws";
 import "./pages.css";
 
 const DEVICE_ID = import.meta.env.VITE_DEVICE_ID ?? "pump-01";
-const MOTION_KEY = "shtapm.pref.motion";
+const MOTION_KEY = MOTION_STORAGE_KEY;
 
 /** Strip any credential a URL might carry before it is displayed. */
 export function redactUrl(raw: string): string {
@@ -45,11 +46,15 @@ export function SettingsPage() {
 
   // Applies immediately and persists — a real preference, not a decorative one.
   useEffect(() => {
-    document.documentElement.dataset.motion = reduceMotion ? "reduce" : "full";
     try {
       window.localStorage.setItem(MOTION_KEY, reduceMotion ? "reduce" : "full");
     } catch {
       /* storage unavailable — the preference still applies for this session */
+    }
+    // Re-resolve against the deployment default (VITE_AURORA_MOTION=off wins).
+    applyVisualPrefs();
+    if (reduceMotion && document.documentElement.dataset.motion === "full") {
+      document.documentElement.dataset.motion = "reduce";
     }
   }, [reduceMotion]);
 
