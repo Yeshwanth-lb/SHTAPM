@@ -3224,3 +3224,33 @@ does not authorize any wiring or actuation.
   (previous bundle kept in ``models/prev/``, outside the loader's top-level
   ``*.json`` glob). The twin depends on vibration being trustworthy when
   current is isolated -- the same coupling the physics rule relies on.
+
+### D040 — APPROVED: recorded-session fallback profile and an automated pre-flight self-check
+- **Date:** 2026-10-27
+- **Decision:** (1) ``EDGE_SOURCE=replay`` (default ``sensors``) makes the edge
+  serve the telemetry capture at ``FALLBACK_REPLAY_PATH`` (declared in the TRD
+  env list since the start, previously unused) through ``ReplaySampler``
+  (``edge/acquisition/replay.py``): a drop-in for ``Sampler``, so replayed
+  frames take the identical live path -- injection, P2, trust, attribution,
+  isolation, self-heal, decisions, backend, dashboard. Frames are re-stamped
+  with the current time and a fresh sample_seq and loop at the end of the
+  file; the edge logs ``SOURCE = RECORDED SESSION`` at startup and a missing
+  or empty file is a boot error naming the variable. (2)
+  ``scripts/preflight.py`` automates PRD §18.3: backend, login, MQTT,
+  database, telemetry age / 1 Hz / six channels, latency (< 1 s target,
+  < 2 s limit), ledger verification, trust at green, fallback file; relay
+  stays a MANUAL item. Standard library only; admin credentials from
+  ``SHTAPM_PREFLIGHT_EMAIL``/``SHTAPM_PREFLIGHT_PASSWORD``. (3) Numeric edge
+  env vars (``SAMPLE_RATE_HZ``, ``EDGE_MQTT_PORT``, ``WINDOW_SIZE``,
+  ``P2_FIT_WINDOW_COUNT``) fail at boot with an error naming the variable.
+- **Why:** PRD §18.4 step 8 and AC8 require a fallback profile with an
+  identical narrative; Doc06 P7-8 / P8-2 / P8-6 and P1-2 / P1-4 were open in
+  the AC10 audit (``AC10_TEST_COVERAGE.md``). A replay inside the edge, rather
+  than a separate publisher, is what keeps the narrative identical: the
+  dashboard's attack injection, isolation and VIRTUAL substitution all work
+  on replayed data because they run in the same process on the same frames.
+- **Honesty and limits:** replayed values are recorded measurements and must
+  be presented as such (runbook). At the loop seam the stream jumps from the
+  last frame to the first; record the session starting and ending idle. The
+  pre-flight script is tested against the real REST routers
+  (``backend/tests/test_preflight.py``) so endpoint drift breaks a test.

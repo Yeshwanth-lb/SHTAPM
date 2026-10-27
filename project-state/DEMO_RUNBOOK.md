@@ -165,6 +165,42 @@ D036/D038) or if any channel switches between real and simulated (e.g. the
 DHT22 coming back as `SHTAPM_DRIVER_TEMPERATURE/HUMIDITY=real`): a simulated
 channel's baseline makes the real sensor look anomalous, and vice versa.
 
+## Pre-flight self-check (T-15 min, PRD §18.3)
+
+On the laptop (backend running), with an admin account in the environment:
+```
+$env:SHTAPM_PREFLIGHT_EMAIL="<admin email>"; $env:SHTAPM_PREFLIGHT_PASSWORD="<admin password>"
+python scripts/preflight.py --backend http://localhost:8000 --device pump-01
+```
+On the Pi, add the fallback check:
+`python3 scripts/preflight.py --backend http://<laptop-ip>:8000 --replay-file ~/SHTAPM/data/replay/session.jsonl`
+
+It checks backend, login, MQTT, database, telemetry age / 1 Hz / six channels,
+latency (< 1 s target, < 2 s limit), ledger verification, trust at green and
+the fallback file, and names whatever FAILED. The relay check stays manual.
+
+## Fallback: recorded-session profile (D040)
+
+If a sensor or the motor misbehaves, the Pi can replay a recorded clean
+session through the identical pipeline: same dashboard, same injection,
+detection, trust, self-heal and ledger. Only the numbers come from a file.
+
+Arm it once (any clean telemetry capture works; the 70-min baseline is ideal):
+```
+mkdir -p ~/SHTAPM/data/replay && cp ~/SHTAPM/cycling_baseline.jsonl ~/SHTAPM/data/replay/session.jsonl
+```
+Switch to it, and back:
+```
+sed -i 's/^EDGE_SOURCE=.*/EDGE_SOURCE=replay/' ~/SHTAPM/.env || true; grep -q '^EDGE_SOURCE=' ~/SHTAPM/.env || echo 'EDGE_SOURCE=replay' >> ~/SHTAPM/.env
+grep -q '^FALLBACK_REPLAY_PATH=' ~/SHTAPM/.env || echo 'FALLBACK_REPLAY_PATH=/home/shtapm/SHTAPM/data/replay/session.jsonl' >> ~/SHTAPM/.env
+sudo systemctl restart shtapm
+# back to live sensors:
+sed -i 's/^EDGE_SOURCE=.*/EDGE_SOURCE=sensors/' ~/SHTAPM/.env && sudo systemctl restart shtapm
+```
+Say so when presenting: the values are a recorded bench session. The edge
+logs `SOURCE = RECORDED SESSION` on startup; a missing or empty file stops it
+at boot with an error naming `FALLBACK_REPLAY_PATH`.
+
 ## During the demo: inject an attack from the dashboard (D032)
 
 Log in as admin, open **Device**, then use the **Scenario injection** panel:
