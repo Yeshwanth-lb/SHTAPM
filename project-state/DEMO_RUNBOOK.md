@@ -128,25 +128,42 @@ connected here."*
 
 ---
 
-## Before the demo: build the P2 clean baseline (D031)
+## Build the P2 clean baseline (D031, D037, D038)
 
 Without it the Pi learns "normal" from 2.5 minutes at startup and raises
-false alarms; channels go VIRTUAL with no attack. Do this once on the demo
-bench, in demo conditions. On the Pi, with `shtapm` running:
+false alarms; channels go VIRTUAL with no attack. Do this once per bench
+setup. On the Pi, with `shtapm` running:
 
-1. Record 40 minutes of clean data while cycling the motor (OFF 0-5 min, ON
-   5-10, OFF 10-15 ... ON 35-40). Do not touch the sensors.
+1. Check every real sensor first (an ADXL whose ADC returns `(0, 0, 0)`
+   records a flat 0 g that looks healthy): motor off, then motor on for 5 s,
+   watching `vibration` and `current` move together:
+   ```
+   timeout 20 mosquitto_sub -h localhost -t 'shtapm/pump-01/telemetry' | grep --line-buffered -o '"vibration":[0-9.]*\|"current":[0-9.]*'
+   ```
+   Idle: vibration ~0.05-0.15 g, current ~0 A. Running: vibration ~0.5 g or
+   more, current ~0.7-1.1 A.
+2. Record at least 60 minutes (70 recommended) while cycling the motor:
+   2 minutes off, then 30 s on / 90 s off. Do not touch the bench or the ADXL
+   mounting. `setsid nohup` keeps it running if SSH drops:
    ```
    cd ~/SHTAPM
-   timeout 2400 mosquitto_sub -h localhost -t 'shtapm/pump-01/telemetry' > baseline_capture.jsonl &
+   setsid nohup timeout 4200 mosquitto_sub -h localhost -t 'shtapm/pump-01/telemetry' > cycling_baseline.jsonl 2>/dev/null &
    ```
-2. Build it. The tool prints a hold-out check: every Malicious count should
-   be 0 and "channels isolated at the end" should be "none".
+3. Build it. Keep the previous baseline. The hold-out check should show
+   "channels isolated at the end: none" and no WARNING about clean trust
+   below 0.7 (such a channel could never be released after an attack, D037):
    ```
-   PYTHONPATH=backend:. .venv/bin/python edge/scripts/fit_p2_baseline.py baseline_capture.jsonl --model-dir models
+   cp models/p2_baseline.npz models/p2_baseline.prev.npz; cp models/p2_baseline.json models/p2_baseline.prev.json
+   PYTHONPATH=backend:. .venv/bin/python edge/scripts/fit_p2_baseline.py cycling_baseline.jsonl --model-dir models
    sudo systemctl restart shtapm
    ```
-3. Confirm it loaded: `journalctl -u shtapm -n 50 --no-pager | grep "P2 baseline"`.
+4. Confirm it loaded: `journalctl -u shtapm -n 50 --no-pager | grep "P2 baseline"`.
+
+A baseline is only valid for the configuration it was recorded with:
+re-record it if the ADXL is re-mounted (vibration bands are learned from it,
+D036/D038) or if any channel switches between real and simulated (e.g. the
+DHT22 coming back as `SHTAPM_DRIVER_TEMPERATURE/HUMIDITY=real`): a simulated
+channel's baseline makes the real sensor look anomalous, and vice versa.
 
 ## During the demo: inject an attack from the dashboard (D032)
 

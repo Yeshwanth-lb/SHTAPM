@@ -3101,3 +3101,75 @@ does not authorize any wiring or actuation.
   release threshold would remove the dependency but weakens the D018 pt.2
   guarantee and is not adopted without more evidence. Running-state clean
   flag rates stay high until a baseline with motor cycling is recorded.
+
+### D038 — APPROVED: vibration bands learned from steady windows only; baseline check reports band coverage; 70-min cycling baseline
+- **Date:** 2026-10-27
+- **Decision:** (1) ``calibrate_vibration_bands`` (D036) counts a window as
+  idle (running) evidence only if EVERY current sample in it is idle
+  (running), not just its median. (2) ``fit_p2_baseline.py``'s hold-out check
+  reports how well the bands learned from the fit portion describe the
+  held-out portion (share of steady idle/running windows vibration also calls
+  idle/running) and warns below 90% (reporting only, never gates saving).
+  (3) The bench's baseline is the 70-min cycling capture of 2026-10-27
+  (``cycling_capture_2026-10-27.jsonl``, gitignored like every capture; the
+  motor schedule is ``edge/eval/labels/cycling_2026-10-27_log.txt``).
+- **The capture (2026-10-27 11:36-12:46 IST, guided session):** 4169 frames,
+  70.0 min, no gaps or dropped samples; 2 min idle, then a 30 s on / 90 s off
+  schedule. Cycles 1-24 matched the logged schedule one-to-one; from cycle 25
+  the runs were irregular (several 2-3.5 min runs, some cycles skipped) --
+  still clean, real on/off operation. Temperature and humidity were SIMULATED
+  (``SHTAPM_DRIVER_TEMPERATURE/HUMIDITY=fake``, realistic mode): the DHT22
+  locks up when the motor runs. Before recording, the ADXL's MCP3008 was found
+  returning (0, 0, 0) -- a wiring fault that reads as a healthy flat 0 g -- and
+  was re-seated; the runbook now checks every real sensor first. Running
+  current 0.74 A median (0.36-1.01 A p5-p95), running vibration 0.56 g median,
+  idle vibration 0.11 g median.
+- **Why (1):** around every switch-off the motor coasts (current 0, shaft
+  still spinning), so windows whose current MEDIAN is idle still carry
+  running-level vibration. On this transition-rich capture they inflated the
+  learned idle limit to 0.39 g (steady idle ~0.11 g) and left a 0.39-0.47 g
+  gap: every switch-on (current's window median crosses 0.3 A while
+  vibration's is still ~0.15-0.33 g) and running windows at 0.39 g read as
+  physics violations. Measured with the live composition, clean data (fit on
+  the first half / first 80%): false attack channel-windows 1.39% / 1.06% ->
+  0.10% / 0.12%, false isolation episodes 2 / 1 -> 0 / 0. Older captures:
+  2026-10-26 cycling 0.11% -> 0.00%, running 0.13% -> 0.00%, idle unchanged.
+- **Cost, measured (``attribution_bench_eval``, ``self_heal_eval``):**
+  on the new capture, cross-state attacks attributed `attack` (episode)
+  52/60 -> 46/60; per scenario only 2 of 64 episodes changed (constant spoof
+  12 -> 11, bias 13 -> 12 settled; replay 16/16 and ramp 10/16 unchanged);
+  faults 25/37 -> 27/37; self-heal isolations bias 7/12 -> 6/12, constant
+  spoof 10/12 -> 9/12, 0 false isolations either way. 7.2 h idle capture and
+  2026-10-26 cycling: unchanged within one episode. 2026-10-26 running
+  capture: cross-state attacks 63/70 -> 34/69 (replay 15 -> 6, constant spoof
+  16 -> 7); self-heal bias 6/7 -> 4/7. Cause: that harness fits on its first
+  7 minutes, whose idle vibration (~0.09 g) sits below the capture's later
+  idle (0.15-0.19 g); the tighter, correct limit (0.133 g) then calls real
+  later idle data "unclear", and attacks that fake an idle motor go unjudged.
+  The median-window limit (0.38 g) covered that drift only by accident.
+- **Why (2):** the band-coverage report exposes exactly that failure at
+  baseline-build time: the 7-min fit scores 0.0% of 227 held-out idle windows
+  (warning), the new 70-min baseline 100% of 276 idle and 98.5% of 130
+  running windows. Like D037's release check, a baseline that does not
+  cover the operating conditions is caught before it is installed, instead
+  of silently losing detection.
+- **Hold-out check on the new baseline (fit 56 min, score 14 min):** no
+  Malicious window on any channel (current 3/805 before the fix), no
+  isolation, clean trust 0.75-0.86 on all channels, band coverage as above,
+  detector window flags 15.8% (threshold 0.90 by construction flags ~10% of
+  clean windows; trust and attribution absorb them).
+- **Real events (2026-10-26) replayed against the new baseline:** taps ->
+  fault/no alarm, dead ADXL -> fault (isolated as broken), normal motor run ->
+  no current/vibration isolation (4 brief attack windows at switch-on),
+  quiet idle clean. Temperature/humidity were isolated in that replay only
+  because the session carried the real DHT22 while the baseline learned the
+  simulated channels: a baseline is valid only for the real/simulated driver
+  configuration it was recorded with (runbook updated).
+- **Rejected after measurement:** ``statistics.median_low`` for the rule's
+  window state (hypothesis: the even-window midpoint flips channels apart) --
+  false attacks on the new capture 1.39% -> 13.9%, false isolations 2 -> 10.
+- **Open:** (a) attacks that keep a channel in its state remain out of the
+  physics rule's reach (9-16%); (b) the LSTM twin, trained on 2026-09-18
+  idle data, heals running current only from ~0.6 A to ~0.43 A error on this
+  capture -- retraining it on cycling data is the next self-heal step;
+  (c) the DHT22 needs a fix and, after it, a new baseline.
