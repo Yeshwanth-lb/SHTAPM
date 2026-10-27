@@ -179,6 +179,34 @@ It checks backend, login, MQTT, database, telemetry age / 1 Hz / six channels,
 latency (< 1 s target, < 2 s limit), ledger verification, trust at green and
 the fallback file, and names whatever FAILED. The relay check stays manual.
 
+## Pump relay and Safe Pump-Stop (D041)
+
+Until a relay is configured the edge runs the full safety logic against an
+in-memory relay; the dashboard's Pump relay panel says "Simulated relay".
+
+Wiring (Pi powered off): relay module VCC -> 5 V, GND -> GND, IN -> a free GPIO
+(not 2, 3, 7-11 or 17, which the sensors use; GPIO27 = physical pin 13 is free).
+Motor supply through the relay's COM and **NO** contacts, so an unpowered relay
+means motor OFF.
+
+Configure, then make systemd release the relay whenever the edge stops or crashes:
+```
+echo 'SHTAPM_RELAY_GPIO=27' >> ~/SHTAPM/.env
+echo 'SHTAPM_RELAY_ACTIVE_LOW=true' >> ~/SHTAPM/.env
+sudo mkdir -p /etc/systemd/system/shtapm.service.d
+echo '[Service]' | sudo tee /etc/systemd/system/shtapm.service.d/relay.conf
+echo 'ExecStopPost=/home/shtapm/SHTAPM/.venv/bin/python -m edge.actuation.gpio off' | sudo tee -a /etc/systemd/system/shtapm.service.d/relay.conf
+sudo systemctl daemon-reload && sudo systemctl restart shtapm
+```
+Check the polarity before connecting the motor: after the restart the relay
+must be OFF (LED off, no click). If it energised, set
+`SHTAPM_RELAY_ACTIVE_LOW=false` and restart.
+
+Start/stop: admin, Pump relay panel on the device page. Every autonomous stop
+(self-heal escalation, dry-run, watchdog) LATCHES OFF; restarting needs the
+confirmation box. Dry-run protection needs `SHTAPM_DRY_RUN_CURRENT_A`, measured
+on the real pump running dry.
+
 ## Fallback: recorded-session profile (D040)
 
 If a sensor or the motor misbehaves, the Pi can replay a recorded clean

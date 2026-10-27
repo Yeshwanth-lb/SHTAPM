@@ -3254,3 +3254,51 @@ does not authorize any wiring or actuation.
   last frame to the first; record the session starting and ending idle. The
   pre-flight script is tested against the real REST routers
   (``backend/tests/test_preflight.py``) so endpoint drift breaks a test.
+
+### D041 — APPROVED: Safe Pump-Stop software -- one safety supervisor owns the relay
+- **Date:** 2026-10-27
+- **Decision:** ``SafetySupervisor`` (``edge/actuation/supervisor.py``) is the
+  only owner of the pump relay. It switches on an operator ``RelayCommand``,
+  and stops autonomously on (a) self-heal escalation -- D018's divergence
+  rule (still disabled, U05) and its 60 s substitution expiry, now wired to
+  the relay instead of a log line; (b) dry run (FR-R2): the pump commanded ON,
+  past a 5 s spin-up grace, with current inside (motor-off level 0.05 A,
+  ``SHTAPM_DRY_RUN_CURRENT_A``] for 3 consecutive frames; (c) watchdog (FR-R3):
+  no healthy frame for ``SHTAPM_WATCHDOG_S`` (10 s) while the pump runs. Every
+  autonomous stop LATCHES OFF until an admin restarts (dashboard confirmation
+  required); the edge forces OFF at startup and on shutdown, and a systemd
+  ``ExecStopPost`` (``python -m edge.actuation.gpio off``) releases the pin
+  after a crash. Physical relay: ``PinctrlActuator`` via Raspberry Pi OS's
+  ``pinctrl`` (no new dependency); ``SHTAPM_RELAY_GPIO`` plus a REQUIRED
+  ``SHTAPM_RELAY_ACTIVE_LOW`` (polarity never guessed); pins used by the
+  sensors are refused. Unconfigured -- and always under the replay source
+  (D040) -- the identical logic runs against an in-memory relay and every
+  status says ``hardware: false``.
+- **Contract (``backend/app/schemas/actuation.py``):** relay commands use
+  their own topic ``shtapm/{id}/relay_command``, NOT the advisory injection
+  topic, so D032's guarantee that an injection can never reach the relay holds
+  by construction (tested). The edge publishes a retained ``ActuationStatus``
+  (relay, cause, reason, latched, hardware) on ``shtapm/{id}/actuation``; the
+  backend keeps the latest per device and chains every transition into the
+  ledger (``safe_stop`` for autonomous causes, ``relay_on``/``relay_off``
+  otherwise), next to the operator's ``relay_command`` -- request and outcome
+  both on the chain. ``POST /api/devices/{id}/relay`` is admin-only, audited,
+  503 when the broker is down; ``GET`` returns the edge's REPORTED state
+  (``known: false`` until it reports). Dashboard: the Pump relay panel.
+- **Why:** FR-R1..R3 and AC4 had a state machine, a watchdog and a fake-relay
+  demo but no path from any decision to a relay. The supervisor puts every
+  path behind one lock and one latch, so no two components can disagree about
+  whether the pump may run.
+- **Not invented:** the dry-run current has no default (it must be measured
+  on the real pump; unset = protection off, logged). The grace (5 s) comes from
+  the 2026-10-27 cycling capture (running current within ~2 s of switch-on);
+  hold (3 frames) and watchdog (10 s) are fail-safe timing, configurable.
+- **Consequences, stated plainly:** (1) with a relay wired, a channel that
+  stays isolated for 60 s of substitution stops the pump (D018 pt.3): on the
+  bench an injected attack lasting more than ~45 s (isolation ~15 s after
+  onset) ends in Safe Pump-Stop. (2) Residual risk: the dry-run rule reads the
+  current channel, so a spoof INTO the dry-run band forces a stop (lost
+  availability, never lost safety) and a spoof of normal current during a
+  genuine dry run would hide it (PRD R3). (3) The bench has a DC motor, not a
+  pump with a reservoir: FR-R2's physical dry run cannot be produced here;
+  the rule is validated on injected frames (``test_safety_supervisor.py``).
