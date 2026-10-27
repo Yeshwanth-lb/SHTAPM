@@ -3030,3 +3030,63 @@ does not authorize any wiring or actuation.
   quantised near-constant idle reading poorly. Tonight's capture releases
   normally (trust 0.52-0.88). Fix candidates: release relative to the
   channel's own clean trust level, or a quantisation-aware c.
+
+### D037 — APPROVED: keep the deployed detector; mid-rank ties in the empirical CDFs; baseline check warns when a channel could never be released
+- **Date:** 2026-10-27
+- **Decision:** (1) The live detector stays the Isolation Forest over
+  per-window min-max windows (identity filters, threshold 0.90). (2) The two
+  empirical-CDF ranks that see quantised values -- the consistency signal
+  ``c`` (``edge/trust/c_consistency.py``) and the variance flag policy
+  (``edge/anomaly/policy.py``) -- count training values equal to the scored
+  value as half (mid-rank). (3) ``edge/scripts/fit_p2_baseline.py``'s hold-out
+  check reports each channel's median clean trust and warns when it is below
+  TRUSTED_MIN: such a channel, once isolated, would never be released
+  (D018 pt.2). Evidence only, no gate, like the rest of the check.
+- **Why (1), detector candidates, measured 2026-10-26/27**
+  (``edge/eval/swat_ablation.py``, ``edge/eval/detector_bench_eval.py``):
+  on SWaT at fixed thresholds the z-score is precise but catches 13/35 attack
+  events (F1 0.739), the deployed IF 32/35 (F1 0.370), max(z, IF + low-pass)
+  33/35 (F1 0.629). On this bench's own idle capture every level-aware
+  candidate fails from real sensor drift: at a nominal 5% clean-flag
+  threshold the z-score flags 80.4% of clean windows and the IF on globally
+  standardised values 99.7%, while the deployed IF flags 8.4% and detects
+  113/120 injected faults and 232/240 attacks (running capture: 36.7% clean
+  flags, 60/60 faults, 120/120 attacks -- the baseline has no motor cycling
+  yet, see open items). A detector that is blind on the bench cannot be
+  deployed on SWaT evidence alone.
+- **Why (2):** the INA219's idle current is 0 A or a few 0.00015 A codes, so
+  many windows share an identical score. The right-continuous rank counted
+  every tie as "at least as deviant" and gave the most common, perfectly
+  normal window a severity near 1. Mid-rank raised idle ``current``'s clean
+  trust on the 7.2 h capture from 0.64 to 0.69. For tie-free (continuous)
+  values the two ranks are identical.
+  Side effect on the synthetic U06 cold-start diagnostics (pinned test
+  values updated): the unvalidated baseline policy's clean-scenario
+  false-isolation proxy 9/9 -> 6/9; constant-spoof channel-match
+  opportunities 3 -> 2 (0 matches either way). The P2 acceptance tests are
+  unchanged (spoofed trust still below 0.4 within 3 windows).
+- **Why (3), and the root cause of D036's open item:** replaying an injected
+  60-sample 0.8 A spoof on idle ``current`` (7.2 h capture, live composition)
+  with baselines of increasing length: 36 min -> clean trust 0.60, never
+  released; 43 min -> 0.69, never released; 51 min -> 0.82, released 35
+  samples after the attack ended; 71 min -> 0.87, released after 37. The
+  INA219's idle texture changed during the first hour (code toggles, then a
+  steady 0 A); a baseline that ends before the later regime makes a normal
+  flat window look unusual to ``c``. The check now surfaces this when the
+  baseline is built, instead of on the dashboard after an attack. Tonight's
+  40-min capture: current 0.74, vibration 0.73, pressure 0.72 -- passes, with
+  little margin.
+- **Rejected after measurement:** treating a window whose span is within one
+  sensor quantisation step as flat. (a) Applied to the detector input it
+  collapsed bench detection (idle attacks 232/240 -> 42/240, faults
+  113/120 -> 20/120; running attacks 120/120 -> 78/120): 95% of temperature
+  windows turned flat, so rare non-flat DHT22 windows dominated the forest's
+  score tail. (b) Applied only to ``c`` it changed nothing measurable (idle
+  ``current`` c 0.562 vs 0.560; identical release results at all four
+  baseline lengths), because the September toggles span 2-4 codes, not one.
+  Reverted; an earlier claim that it fixed release came from a changed
+  baseline length in the check script, not from the code.
+- **Open:** release still depends on baseline coverage; a channel-relative
+  release threshold would remove the dependency but weakens the D018 pt.2
+  guarantee and is not adopted without more evidence. Running-state clean
+  flag rates stay high until a baseline with motor cycling is recorded.
