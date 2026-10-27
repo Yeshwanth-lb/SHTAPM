@@ -243,6 +243,58 @@ export function getActiveInjection(
   );
 }
 
+// ---- Pump relay (FR-R1, D041) — mirrors backend app/api/relay.py ----
+
+export type RelayState = "on" | "off";
+export type ActuationCause =
+  | "startup"
+  | "command"
+  | "safe_stop"
+  | "dry_run"
+  | "watchdog"
+  | "shutdown";
+
+/** The edge's own report of the relay (retained on shtapm/{id}/actuation). */
+export interface ActuationStatus {
+  device_id: string;
+  ts: string;
+  relay: RelayState;
+  cause: ActuationCause;
+  reason: string;
+  latched: boolean;
+  hardware: boolean;
+}
+
+export interface RelayOut {
+  device_id: string;
+  known: boolean;
+  status: ActuationStatus | null;
+}
+
+export interface RelayCommandOut {
+  command_id: string;
+  device_id: string;
+  state: RelayState;
+  issued_by: string;
+  issued_at: string;
+}
+
+export function getRelay(deviceId: string, accessToken: string): Promise<RelayOut> {
+  return apiGet<RelayOut>(`/api/devices/${encodeURIComponent(deviceId)}/relay`, accessToken);
+}
+
+export function commandRelay(
+  deviceId: string,
+  state: RelayState,
+  accessToken: string,
+): Promise<RelayCommandOut> {
+  return apiPost<RelayCommandOut>(
+    `/api/devices/${encodeURIComponent(deviceId)}/relay`,
+    { state },
+    accessToken,
+  );
+}
+
 /** Mirrors backend AlertOut (api/alerts.py). */
 export interface AlertOut {
   id: string;

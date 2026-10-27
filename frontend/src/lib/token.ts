@@ -26,3 +26,8 @@ export function roleFromToken(token: string | null | undefined): Role | null {
 export function canInject(role: Role | null): boolean {
   return role === "analyst" || role === "admin";
 }
+
+/** Starting/stopping the pump is a physical action: admin only (D041). */
+export function canControlRelay(role: Role | null): boolean {
+  return role === "admin";
+}

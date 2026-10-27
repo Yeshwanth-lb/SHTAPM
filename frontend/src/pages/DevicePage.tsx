@@ -23,6 +23,7 @@ import {
   useDecisions,
 } from "../features/decisions/useDecisions";
 import { ScenarioInjectPanel } from "../features/inject/ScenarioInjectPanel";
+import { RelayPanel } from "../features/relay/RelayPanel";
 import { useDeviceTelemetry } from "../features/telemetry/useDeviceTelemetry";
 import { CHANNELS } from "../types/contracts";
 import "./device.css";
@@ -196,6 +197,8 @@ export function DevicePage() {
           </div>
         )}
       </GlassTile>
+
+      <RelayPanel deviceId={DEVICE_ID} accessToken={accessToken} />
 
       <ScenarioInjectPanel
         deviceId={DEVICE_ID}
