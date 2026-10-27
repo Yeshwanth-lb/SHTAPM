@@ -157,6 +157,7 @@ from app.schemas.command import MAX_DURATION_S
 from app.schemas.contracts import CHANNELS
 
 from edge.acquisition.command_listener import CommandListener
+from edge.acquisition.health import ChannelHealthBoard
 from edge.acquisition.mqtt_publisher import ResilientTelemetryPublisher
 from edge.acquisition.replay import ReplaySampler, load_replay_frames
 from edge.acquisition.runtime import AcquisitionRuntime
@@ -402,6 +403,7 @@ def _build_p2_monitor(
     self_heal: SelfHealRuntime | None = None,
     recent_frames: deque | None = None,
     baseline: P2Baseline | None = None,
+    channel_health: ChannelHealthBoard | None = None,
 ) -> LiveP2Monitor:
     """Compose the real (non-stub) P2 pipeline for observe-only live
     monitoring. The detector, flag policy, and physics rule are real, fitted
@@ -468,7 +470,12 @@ def _build_p2_monitor(
         substituted = _run_self_heal(outcome, tracked, self_heal, recent_frames)
         try:
             message = build_decision_diagnostic_message(
-                device_id, outcome, tracked, raw, substituted_channels=substituted
+                device_id,
+                outcome,
+                tracked,
+                raw,
+                substituted_channels=substituted,
+                stale_channels=channel_health.stale() if channel_health is not None else (),
             )
             decision_publisher.publish(message)
         except Exception:
@@ -632,7 +639,12 @@ def main() -> None:
     if source == "replay":
         sampler = ReplaySampler(device_id=device_id, frames=load_replay_frames(replay_path))
     else:
-        sampler = Sampler(device_id=device_id, drivers=build_drivers(channel_specs))
+        # Degraded mode (D045): a sensor that dies mid-run holds its last good
+        # value and is reported stale, instead of stopping every frame.
+        sampler = Sampler(
+            device_id=device_id, drivers=build_drivers(channel_specs), hold_last_good=True
+        )
+    channel_health = ChannelHealthBoard()
     publisher = ResilientTelemetryPublisher(device_id=device_id, rate_hz=rate_hz)
     publisher.start(host, port)
     # Separate object, separate MQTT connection -- see module docstring's
@@ -670,10 +682,11 @@ def main() -> None:
         self_heal=self_heal,
         recent_frames=recent_frames,
         baseline=p2_baseline,
+        channel_health=channel_health,
     )
 
     def _on_healthy_frame(frame) -> None:
-        supervisor.on_frame(frame)  # safety first: watchdog + dry-run
+        supervisor.on_frame(frame, stale=channel_health.stale())  # safety first
         recent_frames.append(frame)
         p2_monitor.on_frame(frame)
 
@@ -693,6 +706,7 @@ def main() -> None:
         rate_hz=rate_hz,
         on_healthy_frame=_on_healthy_frame,
         frame_transform=injector.transform,
+        on_result=channel_health.update,
     )
 
     running = {"go": True}

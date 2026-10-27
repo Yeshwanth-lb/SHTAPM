@@ -71,6 +71,7 @@ class AcquisitionRuntime:
         rate_hz: float,
         on_healthy_frame: Callable[[TelemetryMessage], None] | None = None,
         frame_transform: Callable[[TelemetryMessage], TelemetryMessage] | None = None,
+        on_result: Callable[[SampleResult], None] | None = None,
     ) -> None:
         """``frame_transform`` (optional, default None = byte-identical
         behaviour) rewrites each healthy frame BEFORE monitoring and
@@ -84,12 +85,20 @@ class AcquisitionRuntime:
         self._period = 1.0 / rate_hz
         self._on_healthy_frame = on_healthy_frame
         self._frame_transform = frame_transform
+        # Every tick's per-channel health, healthy or not (D045 channel-health
+        # board). Called before the frame is published.
+        self._on_result = on_result
 
     def tick(self) -> SampleResult:
         """One sample tick: sample, and publish only if a frame was produced.
         Publish exceptions propagate (no silent swallow). An unhealthy tick logs
         a WARNING naming the unhealthy channel(s) — see module docstring."""
         result = self._sampler.sample_once()
+        if self._on_result is not None:
+            try:
+                self._on_result(result)
+            except Exception:  # health bookkeeping must never break telemetry
+                log.warning("on_result hook raised; continuing", exc_info=True)
         if result.frame is not None:
             frame = result.frame
             if self._frame_transform is not None:

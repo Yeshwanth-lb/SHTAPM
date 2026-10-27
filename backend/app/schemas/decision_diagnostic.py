@@ -72,6 +72,10 @@ class DecisionDiagnosticMessage(_Strict):
     # never mistake a reconstruction for a measurement. Defaults to empty so a
     # publisher without a trained twin stays schema-valid.
     substituted_channels: list[Channel] = []
+    # Sensors that stopped responding (D045): their telemetry value is their
+    # last good reading, held so one dead sensor does not stop the stream.
+    # Defaults to empty so older publishers stay schema-valid.
+    stale_channels: list[Channel] = []
     execution_mode: Literal["live"] = "live"
     data_source: Literal["edge_live_pipeline"] = "edge_live_pipeline"
     model_status: Literal["diagnostic_unvalidated"] = "diagnostic_unvalidated"

@@ -71,9 +71,7 @@ def test_driver_reads_its_channel_in_volts():
 
 
 def test_a_failed_spi_read_is_unhealthy_never_raised():
-    reading = MQ135Driver(
-        divider_ratio=1.769, channel=3, reader=FakeReader(OSError("spi"))
-    ).read()
+    reading = MQ135Driver(divider_ratio=1.769, channel=3, reader=FakeReader(OSError("spi"))).read()
     assert reading.healthy is False
 
 

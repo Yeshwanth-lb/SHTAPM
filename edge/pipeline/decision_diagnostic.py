@@ -52,6 +52,7 @@ def build_decision_diagnostic_message(
     tracked: IsolationTrackerResult,
     raw: RawChannelValues,
     substituted_channels: Sequence[str] = (),
+    stale_channels: Sequence[str] = (),
 ) -> DecisionDiagnosticMessage:
     """Pure mapping, no I/O: the exact fields a ``WindowOutcome`` + the
     paired ``RawChannelValues`` + the current ``IsolationTrackerResult``
@@ -83,6 +84,7 @@ def build_decision_diagnostic_message(
         isolation_candidates=sorted(tracked.candidates_this_cycle),
         tracked_isolation_candidates=sorted(tracked.tracked_channels),
         substituted_channels=sorted(substituted_channels),
+        stale_channels=sorted(stale_channels),
     )
 
 

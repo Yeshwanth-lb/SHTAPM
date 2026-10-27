@@ -143,9 +143,15 @@ class SafetySupervisor:
             self._emit("shutdown", "edge stopped; relay forced OFF")
 
     # ---- inputs ----------------------------------------------------------------
-    def on_frame(self, frame: TelemetryMessage) -> None:
-        """Every healthy frame: feed the watchdog and the dry-run detector."""
+    def on_frame(self, frame: TelemetryMessage, stale: frozenset[str] = frozenset()) -> None:
+        """Every published frame: feed the watchdog and the dry-run detector.
+
+        A frame whose current is a HELD value (dead sensor, D045) feeds
+        neither: dry-run protection is blind without a live current reading,
+        so a pump left running that way is stopped by the watchdog."""
         with self._lock:
+            if "current" in stale:
+                return
             self._watchdog.kick()
             if self._dry_run is None:
                 return
@@ -207,7 +213,8 @@ class SafetySupervisor:
         if self._relay.is_on():
             self.safe_stop(
                 "watchdog",
-                "no healthy telemetry frame within the watchdog timeout while the pump ran",
+                "no live current reading within the watchdog timeout while the pump ran "
+                "(edge stalled, or the current sensor is dead and dry-run protection is blind)",
             )
 
     def _watch(self) -> None:
