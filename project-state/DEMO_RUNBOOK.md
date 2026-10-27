@@ -170,10 +170,10 @@ channel's baseline makes the real sensor look anomalous, and vice versa.
 On the laptop (backend running), with an admin account in the environment:
 ```
 $env:SHTAPM_PREFLIGHT_EMAIL="<admin email>"; $env:SHTAPM_PREFLIGHT_PASSWORD="<admin password>"
-python scripts/preflight.py --backend http://localhost:8000 --device pump-01
+python scripts/preflight.py --backend http://localhost:8002 --device pump-01
 ```
 On the Pi, add the fallback check:
-`python3 scripts/preflight.py --backend http://<laptop-ip>:8000 --replay-file ~/SHTAPM/data/replay/session.jsonl`
+`python3 scripts/preflight.py --backend http://<laptop-ip>:8002 --replay-file ~/SHTAPM/data/replay/session.jsonl`
 
 It checks backend, login, MQTT, database, telemetry age / 1 Hz / six channels,
 latency (< 1 s target, < 2 s limit), ledger verification, trust at green and
@@ -262,6 +262,39 @@ It skips an admin that already exists, so it's safe to re-run.
 `SEED_ADMIN_PASSWORD` must be set in `.env`.
 
 ---
+
+## Recovery: SD card or database corruption (AC10 P8-7)
+
+**Back up now, while everything works.** These are NOT in git: the P2
+baseline and twin (`models/`), the Pi's `.env`, the recordings, and the
+systemd unit (it exists only on the Pi). From PowerShell on the laptop:
+```
+mkdir pi-backup
+scp -r shtapm@shtapm-pi.local:~/SHTAPM/models pi-backup/
+scp shtapm@shtapm-pi.local:~/SHTAPM/.env pi-backup/pi.env
+scp shtapm@shtapm-pi.local:~/SHTAPM/cycling_baseline.jsonl pi-backup/
+ssh shtapm@shtapm-pi.local "systemctl cat shtapm; ls /etc/systemd/system/shtapm.service.d 2>/dev/null" > pi-backup/shtapm.service.txt
+```
+
+**The Pi's SD card fails.** Reflash Raspberry Pi OS (64-bit) with the same
+hostname `shtapm-pi` and user `shtapm`, enable SSH, then on the Pi: enable I2C
+and SPI (`sudo raspi-config` -> Interface Options), add `dtoverlay=dht11,gpiopin=17`
+to `/boot/firmware/config.txt`, reboot, `git clone` the repo to `~/SHTAPM`,
+create `.venv` and `pip install -r edge/requirements.txt -r edge/requirements-p3.txt`.
+Copy back `models/` and `pi.env` (as `~/SHTAPM/.env`), recreate the service from
+`shtapm.service.txt` (and the relay drop-in, if any), `sudo systemctl enable --now shtapm`,
+then run the pre-flight check. If the backup is lost, record a new baseline
+(section above) and retrain the twin (`edge/eval/bench_twin_training.py`,
+D039) from that recording.
+
+**The backend database is corrupt.** Export each device's ledger first if the
+API still answers (`GET /api/ledger/pump-01/export`, admin), so the audit trail
+survives outside the database. With a SQLite `DATABASE_URL`: stop the backend,
+move the `.db` file aside (keep it), start the backend (the schema is
+recreated) and re-seed the admin (`python -m app.core.seed` from `backend/`).
+With Postgres: restore the latest `pg_dump`. Either way a fresh database
+starts a NEW ledger chain from genesis -- say so; the exported file is the
+record of the old one.
 
 ## Troubleshooting: failures we have actually hit
 

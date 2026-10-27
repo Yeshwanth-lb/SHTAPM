@@ -3302,3 +3302,33 @@ does not authorize any wiring or actuation.
   genuine dry run would hide it (PRD R3). (3) The bench has a DC motor, not a
   pump with a reservoir: FR-R2's physical dry run cannot be produced here;
   the rule is validated on injected frames (``test_safety_supervisor.py``).
+
+### D042 — APPROVED: persist the edge's attribution (attack > fault > none) and isolation set; show them on the dashboard
+- **Date:** 2026-10-27
+- **Decision:** ``DecisionDiagnosticPersistence`` writes (1) ``isolated_channels``
+  = the edge's tracked isolation set, and (2) a decision-level
+  ``attribution`` reduced from the per-channel labels by severity --
+  ``attack`` if any channel is attributed an attack, else ``fault`` if any
+  channel a fault, else ``none`` -- with ``reason`` naming the channel(s) that
+  carry the winning label and the edge's own reason (e.g. "current: physics
+  violation: current says the motor is running while vibration says it is
+  idle"). No schema change (the columns existed, NULL). The device page shows
+  an attribution banner (attack = alert, fault = status, isolated/VIRTUAL
+  channels listed); the decisions page shows attribution, reason and
+  isolation.
+- **Why:** the per-channel attribution is the project's core output (O3), and
+  the PRD demo (§18.4 step 3) has the screen say "Attack -- physics
+  violation". It reached the wire but was dropped at persistence because no
+  reduction rule to the single ``attribution`` column had been approved
+  (2026-09-06). Severity ordering is that rule: a security incident outranks a
+  fault, which outranks nothing, and the reason keeps every channel that
+  carries the winning label, so the reduction hides neither WHICH sensor nor
+  WHY. The isolation set has been the acting set since the twin started
+  substituting (D029) and the ledger chains ``isolate``/``recover`` on it;
+  leaving it NULL made the dashboard say "no isolation is executed", which was
+  false, and silently disabled the pre-flight check's isolation test (D040).
+- **Also corrected (stale, false text on the dashboard):** "the live detector
+  is a null detector that never flags" (it is the Isolation Forest since
+  D031) and "safety state is not published to the backend" (D041).
+- **Still NULL, by design:** ``health_state``, ``failure_eta`` (no prognosis
+  model on pump data, D017) and ``rl_action`` (no RL policy, U06).

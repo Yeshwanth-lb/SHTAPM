@@ -18,7 +18,7 @@ Credentials come from the environment, never from the command line or code:
 ``SHTAPM_PREFLIGHT_EMAIL`` / ``SHTAPM_PREFLIGHT_PASSWORD`` (an admin account).
 
 Usage:
-    python scripts/preflight.py --backend http://localhost:8000 --device pump-01
+    python scripts/preflight.py --backend http://localhost:8002 --device pump-01
     python scripts/preflight.py --replay-file ~/SHTAPM/data/replay/session.jsonl   # on the Pi
 
 Exit status 0 when nothing FAILED (WARN and MANUAL do not fail the check).
@@ -253,7 +253,7 @@ def run(args: argparse.Namespace, backend: Backend, env: dict) -> list[Check]:
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    parser.add_argument("--backend", default="http://localhost:8000")
+    parser.add_argument("--backend", default="http://localhost:8002")
     parser.add_argument("--device", default="pump-01")
     parser.add_argument("--replay-file", default=None)
     args = parser.parse_args(argv)
