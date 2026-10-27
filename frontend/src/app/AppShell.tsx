@@ -4,11 +4,60 @@
 // disabled with the phase they belong to. That is deliberate: an enabled link
 // to an empty page reads as broken, a labelled one reads as scoped. Nothing
 // here fabricates a screen that has no data behind it.
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import { useAuth } from "../features/auth/AuthContext";
+import { apiGet, type DeviceOut } from "../lib/api";
+import { roleFromToken } from "../lib/token";
+import { useApiResource } from "../lib/useApiResource";
 import { navigate, useRoute } from "./router";
 import "./shell.css";
+
+const DEVICE_ID = import.meta.env.VITE_DEVICE_ID ?? "pump-01";
+const CONDITION_POLL_MS = 5_000;
+
+const CONDITION_DOT: Record<string, string> = {
+  healthy: "ok",
+  warning: "warn",
+  critical: "alarm",
+};
+
+/** Top status bar (D046): device, its condition (D043), clock, session. */
+function StatusBar({ onSignOut }: { onSignOut: () => void }) {
+  const { tokens } = useAuth();
+  const accessToken = tokens?.accessToken ?? null;
+  const device = useApiResource<DeviceOut>(
+    () => apiGet<DeviceOut>(`/api/devices/${encodeURIComponent(DEVICE_ID)}`, accessToken!),
+    [accessToken],
+    { enabled: accessToken !== null, pollMs: CONDITION_POLL_MS },
+  );
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const tick = window.setInterval(() => setNow(new Date()), 1000);
+    return () => window.clearInterval(tick);
+  }, []);
+  const condition = device.data?.health_state ?? null;
+  const role = roleFromToken(accessToken);
+
+  return (
+    <>
+      <span className="hmi-top__title">SHTAPM</span>
+      <span className="hmi-top__item mono">{DEVICE_ID}</span>
+      <span className="hmi-top__item" data-testid="condition">
+        <span className={`hmi-dot${condition ? ` hmi-dot--${CONDITION_DOT[condition]}` : ""}`} />
+        {condition ? condition.toUpperCase() : "CONDITION —"}
+      </span>
+      <span className="hmi-top__spacer" />
+      <span className="hmi-top__item mono tabular" data-testid="clock">
+        {now.toLocaleTimeString()}
+      </span>
+      {role && <span className="hmi-top__item">{role}</span>}
+      <button type="button" className="shell__signout" onClick={onSignOut} data-testid="sign-out">
+        Sign out
+      </button>
+    </>
+  );
+}
 
 interface NavItem {
   label: string;
@@ -21,7 +70,7 @@ interface NavItem {
 // endpoint. A `phase` tag renders the item disabled — used for screens whose
 // backing data does not exist yet, so a nav item never leads to an empty shell.
 const NAV: NavItem[] = [
-  { label: "Overview", path: "/" },
+  { label: "Control Room", path: "/" },
   { label: "Device", path: "/device" },
   { label: "Devices", path: "/devices" },
   { label: "Decisions", path: "/decisions" },
@@ -52,7 +101,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                   aria-current={active ? "page" : undefined}
                   disabled={Boolean(item.phase)}
                   onClick={() => !item.phase && navigate(item.path)}
-                  data-testid={`nav-${item.label.toLowerCase()}`}
+                  data-testid={`nav-${item.label.toLowerCase().replace(/\s+/g, "-")}`}
                 >
                   {item.label}
                   {item.phase && <span className="shell__phase">{item.phase}</span>}
@@ -65,17 +114,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       <div className="shell__main">
         <header className="shell__top glass">
-          <span className="t-label">Pump Monitoring</span>
-          <button
-            type="button"
-            className="shell__signout"
-            onClick={() => {
-              void signOut().then(() => navigate("/login"));
-            }}
-            data-testid="sign-out"
-          >
-            Sign out
-          </button>
+          <StatusBar onSignOut={() => void signOut().then(() => navigate("/login"))} />
         </header>
         <div className="shell__content">{children}</div>
       </div>

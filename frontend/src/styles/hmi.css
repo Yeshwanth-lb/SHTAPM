@@ -1,0 +1,456 @@
+/* Industrial HMI theme (D046) -- replaces the Aurora visual language (Doc04)
+ * at the user's direction with the style plant control rooms use
+ * (ISA-101 "high-performance HMI"):
+ *
+ *   - calm graphite surfaces; NORMAL is grey, never decorated
+ *   - colour is reserved for ABNORMAL states, so an alarm is the only thing
+ *     that stands out: red = alarm/attack/trip, amber = caution/fault,
+ *     magenta = substituted (VIRTUAL) -- the HMI convention for "not the
+ *     field value", cyan = information/selection
+ *   - no glow, no blur, no ambient motion; small radii; dense, tabular figures
+ *
+ * Loaded after aurora.css: it redefines the shared tokens, so every page
+ * restyles at once, and adds the shell + control-room primitives. Doc04's
+ * accessibility rules stay in force (state is never colour alone; reduced
+ * motion honoured).
+ */
+
+:root {
+  --void: #14171c;
+  --void-2: #181c22;
+
+  /* Surfaces: solid panels instead of glass. */
+  --glass-1: #1c2026;
+  --glass-2: #232830;
+  --glass-inset: #111418;
+  --glass-border: #2b313a;
+  --glass-border-strong: #3a424d;
+  --glass-highlight: transparent;
+  --blur-tile: none;
+  --blur-modal: none;
+
+  /* Text: high contrast, neutral. */
+  --text-hero: #eef1f4;
+  --text-primary: #d2d7de;
+  --text-secondary: #8f98a3;
+  --text-muted: #5f6873;
+
+  /* Status: abnormal-only colour. "healthy" is deliberately desaturated. */
+  --status-healthy: #7fa38c;
+  --status-warning: #e8a317;
+  --status-critical: #e5484d;
+  --status-virtual: #c66dd9;
+  --status-info: #4ea8de;
+  --status-healthy-glow: transparent;
+  --status-warning-glow: transparent;
+  --status-critical-glow: transparent;
+  --status-virtual-glow: transparent;
+  --status-info-glow: transparent;
+
+  --aurora-teal: var(--status-info);
+  --font-display: Geist, "Inter", system-ui, sans-serif;
+
+  --hmi-radius: 4px;
+  --hmi-gap: 10px;
+}
+
+body {
+  background: var(--void);
+  font-size: 13px;
+}
+
+.glass {
+  border-radius: var(--hmi-radius);
+  background: var(--glass-1);
+  box-shadow: none;
+}
+
+.glass::before {
+  display: none;
+}
+
+.glass-inset,
+.field,
+.btn {
+  border-radius: var(--hmi-radius);
+}
+
+.t-metric {
+  font-weight: 500;
+  font-size: 26px;
+  letter-spacing: -0.01em;
+}
+
+.t-label {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+}
+
+/* ---- Shell: top status bar + compact navigation rail ---------------------- */
+.shell {
+  grid-template-columns: 172px 1fr;
+  gap: var(--hmi-gap);
+  padding: var(--hmi-gap);
+}
+
+.shell__rail {
+  top: var(--hmi-gap);
+  padding: 14px 8px;
+}
+
+.shell__link {
+  border-radius: var(--hmi-radius);
+  padding: 8px 10px;
+}
+
+.shell__link.is-active {
+  background: var(--glass-2);
+  box-shadow: inset 3px 0 0 var(--status-info);
+}
+
+.shell__top {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 8px 14px;
+}
+
+.hmi-top__title {
+  font-weight: 600;
+  color: var(--text-hero);
+  letter-spacing: 0.02em;
+}
+
+.hmi-top__spacer {
+  flex: 1;
+}
+
+.hmi-top__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.hmi-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+
+.hmi-dot--ok {
+  background: var(--status-healthy);
+}
+
+.hmi-dot--warn {
+  background: var(--status-warning);
+}
+
+.hmi-dot--alarm {
+  background: var(--status-critical);
+}
+
+/* ---- Control room ---------------------------------------------------------- */
+.cr {
+  display: grid;
+  gap: var(--hmi-gap);
+}
+
+.cr__row {
+  display: grid;
+  gap: var(--hmi-gap);
+}
+
+.cr__row--top {
+  grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr);
+}
+
+.cr__row--main {
+  grid-template-columns: minmax(0, 3fr) minmax(260px, 1fr);
+}
+
+@media (max-width: 1100px) {
+  .cr__row--top,
+  .cr__row--main {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Master caution: grey when normal; a solid coloured band when not. */
+.caution {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 16px;
+  border-radius: var(--hmi-radius);
+  border: 1px solid var(--glass-border);
+  background: var(--glass-1);
+}
+
+.caution__lamp {
+  min-width: 132px;
+  padding: 8px 12px;
+  text-align: center;
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  border-radius: var(--hmi-radius);
+  border: 1px solid var(--glass-border-strong);
+  color: var(--text-secondary);
+  background: var(--glass-inset);
+}
+
+.caution--caution .caution__lamp {
+  background: var(--status-warning);
+  border-color: var(--status-warning);
+  color: #1a1407;
+}
+
+.caution--alarm .caution__lamp {
+  background: var(--status-critical);
+  border-color: var(--status-critical);
+  color: #fff;
+}
+
+.caution--alarm.caution--unacked .caution__lamp {
+  animation: hmi-flash 1s steps(2, start) infinite;
+}
+
+.caution__text strong {
+  display: block;
+  color: var(--text-hero);
+  font-size: 14px;
+}
+
+.caution__text span {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+@keyframes hmi-flash {
+  to {
+    opacity: 0.35;
+  }
+}
+
+/* Instrument tiles. */
+.instruments {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--hmi-gap);
+}
+
+@media (max-width: 900px) {
+  .instruments {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.instrument {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: var(--hmi-radius);
+  background: var(--glass-1);
+  border: 1px solid var(--glass-border);
+  border-left: 3px solid var(--glass-border-strong);
+}
+
+.instrument--caution {
+  border-left-color: var(--status-warning);
+}
+
+.instrument--alarm {
+  border-left-color: var(--status-critical);
+}
+
+.instrument--virtual {
+  border-left-color: var(--status-virtual);
+}
+
+.instrument__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.instrument__value {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.instrument__unit {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.instrument__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-height: 20px;
+}
+
+.tag {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  border: 1px solid currentColor;
+}
+
+.tag--alarm {
+  color: var(--status-critical);
+}
+
+.tag--caution {
+  color: var(--status-warning);
+}
+
+.tag--virtual {
+  color: var(--status-virtual);
+}
+
+.tag--info {
+  color: var(--status-info);
+}
+
+.tag--muted {
+  color: var(--text-muted);
+}
+
+.trustbar {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.trustbar__track {
+  position: relative;
+  height: 6px;
+  background: var(--glass-inset);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.trustbar__fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--text-secondary);
+}
+
+.trustbar__fill--caution {
+  background: var(--status-warning);
+}
+
+.trustbar__fill--alarm {
+  background: var(--status-critical);
+}
+
+/* Annunciator: a grid of windows, unlit when normal. */
+.annunciator {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.annunciator__window {
+  padding: 8px 4px;
+  text-align: center;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  border-radius: 3px;
+  border: 1px solid var(--glass-border);
+  background: var(--glass-inset);
+  color: var(--text-muted);
+}
+
+.annunciator__window--caution {
+  background: var(--status-warning);
+  border-color: var(--status-warning);
+  color: #1a1407;
+}
+
+.annunciator__window--alarm {
+  background: var(--status-critical);
+  border-color: var(--status-critical);
+  color: #fff;
+}
+
+.annunciator__window--virtual {
+  background: var(--status-virtual);
+  border-color: var(--status-virtual);
+  color: #1b0b1f;
+}
+
+/* Event log. */
+.eventlog {
+  display: grid;
+  gap: 2px;
+  max-height: 360px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.eventlog__row {
+  display: grid;
+  grid-template-columns: 74px 16px 1fr;
+  gap: 8px;
+  align-items: baseline;
+  padding: 5px 6px;
+  border-bottom: 1px solid var(--glass-border);
+  font-size: 12px;
+}
+
+.eventlog__mark {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: var(--text-muted);
+  align-self: center;
+}
+
+.eventlog__mark--alarm {
+  background: var(--status-critical);
+}
+
+.eventlog__mark--caution {
+  background: var(--status-warning);
+}
+
+.eventlog__mark--virtual {
+  background: var(--status-virtual);
+}
+
+.eventlog__mark--info {
+  background: var(--status-info);
+}
+
+/* Transport strip. */
+.transport {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .caution--alarm.caution--unacked .caution__lamp {
+    animation: none;
+  }
+}

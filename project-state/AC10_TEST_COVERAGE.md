@@ -4,7 +4,7 @@
 
 | Phase | Rows | Covered | Partial | Not covered | N/A · by design |
 |---|---|---|---|---|---|
-| **Total 2026-10-27** | **77** | **35** | **31** | **9** | **2** |
+| **Total 2026-10-27** | **77** | **35** | **30** | **9** | **3** |
 | Total 2026-09-24 | 77 | 17 | 34 | 21 | 5 |
 
 Rows that changed, with the evidence (same strict standard as below: a test
@@ -19,13 +19,13 @@ that drives a fake does not count for a claim about physical hardware):
 | P3-9 kill edge -> pump OFF | N/A | PARTIAL | stall: `test_watchdog_stops_a_running_pump_without_frames`; crash: systemd `ExecStopPost` hook `test_systemd_off_hook` (D041); physical pending |
 | P4-2 inject via REST | NOT COVERED | COVERED | `backend/tests/test_inject_api.py` (D032) |
 | P4-6 WS reconnect, no dup storm | PARTIAL | COVERED | `useDeviceTelemetry.session.test.ts` "reconnect loop" (backoff 1 s -> 2 s, one socket per attempt) |
-| P5-3 health -> aurora colour | NOT COVERED | COVERED | `aurora-budget.test.tsx` (tone + field palette per state) |
+| P5-3 health -> status colour | NOT COVERED | COVERED | `pages/devicesHealth.test.ts` (tone per condition; the aurora field was retired by D046) |
 | P5-8 `VITE_REDUCE_TRANSPARENCY` | NOT COVERED (not implemented) | COVERED | implemented (`lib/visualPrefs.ts`, opaque glass, no data change); `visualPrefs.test.ts` |
 | P5-9 WS drop -> "reconnecting" | PARTIAL | COVERED | hook test above: state `closed` drives "Stream disconnected" + the reconnecting notice |
 | P5-10 history 500 -> error + retry | PARTIAL | COVERED | `pages.test.tsx` "turns a backend 500 into an error card whose retry really refetches" |
 | P5-12 expired session -> login, return route kept | PARTIAL | COVERED | guard remembers the page, login shows a notice and returns there (`app/returnRoute.test.tsx`); an in-page notice instead of a global toast |
 | P6-5 rapid attack -> heal -> fault ordering | NOT COVERED | COVERED | `pages.test.tsx` "shows the newest of a rapid attack -> heal -> fault sequence"; the decisions page now polls every 2 s |
-| P6-8 <= 4 orbs / <= 6 blur layers | NOT COVERED | PARTIAL | orb count asserted (`aurora-budget.test.tsx`); blur layers and fps need a real browser |
+| P6-8 <= 4 orbs / <= 6 blur layers | NOT COVERED | N/A by design | the industrial HMI theme (D046) has no orbs and no blur |
 | P6-10 latency > 2 s -> critical | NOT COVERED | COVERED | `SystemPage.latency.test.tsx` "marks the target missed when p95 is over 2 s" |
 | P6-11 fps < 50 -> auto-downgrade | NOT COVERED (not implemented) | COVERED (logic) | `FpsGuard` sheds glow/blur and freezes orbs after 2 s under 50 fps; `visualPrefs.test.ts` with synthetic frames |
 | P7-2 UI inject -> isolate -> VIRTUAL | NOT COVERED | PARTIAL | inject path + twin exist; current goes VIRTUAL (`self_heal_eval`, D039); no single automated E2E test; pressure still has no twin |

@@ -3404,3 +3404,29 @@ does not authorize any wiring or actuation.
   layers treat it as a frozen sensor (fault) and isolate it like any other
   misbehaving channel; current's twin can then substitute (D039).
 - **Closes:** AC10 P3-7 and P7-9 move from N/A-by-design to covered.
+
+### D046 — APPROVED (user decision): industrial HMI replaces the Aurora visual language; Control Room home screen
+- **Date:** 2026-10-27
+- **Decision:** at the user's direction ("not the aurora style ... professional,
+  industry-grade"), the dashboard follows the ISA-101 "high-performance HMI"
+  style used in plant control rooms instead of Doc04's Aurora language:
+  graphite solid panels, no glow/blur/ambient motion, small radii, dense
+  tabular figures, and colour ONLY for abnormal states (red alarm/attack/trip,
+  amber caution/fault/dead sensor, magenta VIRTUAL, cyan information).
+  Implemented as ``styles/hmi.css`` loaded after ``aurora.css``: it redefines
+  the shared tokens, so every page restyles at once. The home route ``/`` is a
+  new Control Room: master caution with acknowledge (flashes until acked, per
+  alarm), an annunciator (one window per sensor, lit by the worst condition),
+  six instrument tiles (value, unit, trend, trust bar, ATTACK / FAULT /
+  SENSOR DEAD / ISOLATED / VIRTUAL / LOW TRUST tags), the pump relay panel,
+  transport health, and the audit ledger as an operator event log. A top status
+  bar shows device, condition (D043), clock and role. The ambient aurora field
+  (MeshBackground/AmbientHealth) and the old Overview page are removed.
+- **Kept from Doc04:** state is never colour alone (every lamp and tag is a
+  word), reduced motion is honoured (the caution flash stops), the Settings and
+  ``VITE_*`` motion/transparency switches still work.
+- **Display rules** live in ``features/controlroom/model.ts`` as pure, tested
+  functions; nothing in the UI decides anything -- it translates what the
+  edge and backend reported.
+- **Supersedes:** Doc04's visual language (palette, glass, aurora field). AC10
+  rows tied to it (P6-8 orb budget, P6-1/P6-8 glow fps) become N/A by design.

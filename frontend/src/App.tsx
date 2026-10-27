@@ -5,7 +5,6 @@
 // cockpit that consumes them is the next slice.
 import { AppShell } from "./app/AppShell";
 import { useRoute } from "./app/router";
-import { AmbientHealth } from "./components/aurora/AmbientHealth";
 import { AuthProvider } from "./features/auth/AuthContext";
 import { LoginScreen } from "./features/auth/LoginScreen";
 import { RequireAuth } from "./features/auth/RequireAuth";
@@ -15,17 +14,19 @@ import { DevicePage } from "./pages/DevicePage";
 import { DevicesPage } from "./pages/DevicesPage";
 import { HistoryPage } from "./pages/HistoryPage";
 import { LedgerPage } from "./pages/LedgerPage";
-import { Overview } from "./pages/Overview";
+import { ControlRoomPage } from "./pages/ControlRoomPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { SystemPage } from "./pages/SystemPage";
 import { UsersPage } from "./pages/UsersPage";
 import "./styles/fonts.css";
 import "./styles/aurora.css";
+// Industrial HMI theme (D046): redefines the shared tokens; loaded last.
+import "./styles/hmi.css";
 
 /** Route table. Every entry here is a page backed by real API data; anything
  *  not listed renders an honest "not found" rather than an empty shell. */
 const PAGES: Record<string, () => JSX.Element> = {
-  "/": Overview,
+  "/": ControlRoomPage,
   "/device": DevicePage,
   "/devices": DevicesPage,
   "/history": HistoryPage,
@@ -66,8 +67,6 @@ function Routes() {
 export function App() {
   return (
     <AuthProvider>
-      {/* Condition rollup (D043): the field follows devices.health_state. */}
-      <AmbientHealth />
       <Routes />
     </AuthProvider>
   );

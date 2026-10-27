@@ -65,7 +65,7 @@ describe("route table", () => {
     render(<App />);
     await waitFor(() => expect(screen.getByTestId("nav-devices")).toBeInTheDocument());
     for (const item of [
-      "overview",
+      "control-room",
       "device",
       "devices",
       "decisions",
