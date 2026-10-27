@@ -112,9 +112,10 @@ def test_bench_table_builds_the_expected_driver_objects_without_hardware():
         assert isinstance(drivers[channel], Sensor)
 
 
-def test_gas_has_no_real_driver_so_it_can_never_be_flipped_real_by_mistake():
-    """MQ-135 is unimplemented; a future edit flipping gas to real must fail
-    loudly at construction, never fall back to fake silently."""
+def test_gas_can_never_be_flipped_real_by_mistake():
+    """The MQ-135 driver (D044) needs SHTAPM_GAS_DIVIDER_RATIO; flipping gas to
+    real without it must fail loudly at construction, never fall back to fake
+    silently."""
     specs = dict(_DEFAULT_CHANNEL_SPECS)
     specs["gas"] = _DEFAULT_CHANNEL_SPECS["vibration"]  # kind="real"
     with pytest.raises(UnsupportedDriverError):

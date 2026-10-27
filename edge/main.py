@@ -17,7 +17,7 @@ channels across four physical sensors, one fake constant:
   humidity     DHT22 %RH, GPIO17 (shared)               DHT22Adafruit
   vibration    ADXL335, MCP3008 CH0-2 over SPI0 CE0     ADXL335
   pressure     BMP280, I²C bus 1, address 0x76          BMP280
-  gas          — (no MQ-135 driver implemented)         fake constant 150.0
+  gas          MQ-135 AO via divider, MCP3008 CH3        fake constant 150.0 (D044: driver ready)
   current      INA219, I²C bus 1, address 0x40          INA219
 
 TEMPERATURE + HUMIDITY BOTH COME FROM THE ONE DHT22 (GPIO17, Adafruit
@@ -52,8 +52,9 @@ params needed; see edge/drivers/registry.py). ``current`` is INA219
 the board's shunt is R100 (0.1 Ω), matching the driver's ``shunt_ohms``
 default, so no params are needed. U09 (pump model / rated current) is still
 open, so the driver's 5.0 A ``max_expected_amps`` is a default, not a sizing
-decision. ``gas`` remains the only fake constant — MQ-135 has no driver at
-all. A disconnected sensor declared ``kind="real"`` would be permanently
+decision. ``gas`` remains a fake constant until the MQ-135 is wired: its driver
+exists (D044) and needs only SHTAPM_DRIVER_GAS=real + SHTAPM_GAS_DIVIDER_RATIO.
+A disconnected sensor declared ``kind="real"`` would be permanently
 unhealthy and would block every frame (Sampler.sample_once() requires all
 six channels healthy) — which is why this table tracks the bench's real
 wiring rather than what is merely implemented.
@@ -69,9 +70,9 @@ NOT a physical validation claim, see that function's docstring); the
 default (unset) is ``constant``, i.e. today's flat values, unchanged. No
 code edit or import change is needed for any of this — see
 ``edge.drivers.registry`` for the full mechanism and its own docstring for
-exactly what each variable does. "gas" has no real driver implemented yet;
-requesting ``SHTAPM_DRIVER_GAS=real`` fails clearly at startup
-(``UnsupportedDriverError``) rather than silently staying fake.
+exactly what each variable does. ``SHTAPM_DRIVER_GAS=real`` without
+``SHTAPM_GAS_DIVIDER_RATIO`` fails clearly at startup (``UnsupportedDriverError``
+naming the variable) rather than silently staying fake (D044).
 
 The frozen six-channel telemetry contract is preserved. Thin by design
 (env + wiring + signals) — the logic lives in the tested runtime/sampler/publisher.

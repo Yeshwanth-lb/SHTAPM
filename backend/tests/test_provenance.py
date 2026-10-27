@@ -74,12 +74,18 @@ def test_seeds_the_documented_parts(db):
     assert rows["current"].part == "INA219"
 
 
-def test_gas_registers_no_part_because_none_is_documented(db):
-    """No MQ-135 driver exists and no wiring is documented anywhere in this
-    repository. The column is nullable so "we do not know" is representable;
-    writing "MQ-135" would assert hardware nobody has established."""
-    seed_sensor_registry(db)
+def test_gas_registers_no_part_until_the_deployment_says_it_is_wired(db):
+    """The MQ-135 driver exists (D044) but the sensor is not wired by default.
+    The column is nullable so "not established" is representable; writing
+    "MQ-135" without the deployment saying so would assert hardware."""
+    seed_sensor_registry(db, env={})
     assert _rows(db)["gas"].part is None
+
+
+def test_a_wired_mq135_registers_the_part_and_its_honest_unit(db):
+    seed_sensor_registry(db, env={"SHTAPM_GAS_SENSOR": "mq135"})
+    gas = _rows(db)["gas"]
+    assert (gas.part, gas.unit, gas.is_proxy) == ("MQ-135", "V", True)
 
 
 def test_seeds_the_documented_units(db):
@@ -210,9 +216,12 @@ def test_resolution_ignores_telemetry_entirely(declared):
 # ---------------------------------------------------------------------------
 
 
-def test_gas_has_no_documented_interface_for_any_part():
-    """No ADC channel may ever be shown for gas."""
-    assert not any(channel == "gas" for channel, _part in _DOCUMENTED_INTERFACES)
+def test_gas_interface_is_keyed_to_the_mq135_part_only():
+    """No ADC channel is shown for gas unless the registry names the MQ-135
+    (part=None by default, so nothing is shown until it is wired)."""
+    gas_keys = [key for key in _DOCUMENTED_INTERFACES if key[0] == "gas"]
+    assert gas_keys == [("gas", "MQ-135")]
+    assert ("gas", None) not in _DOCUMENTED_INTERFACES
 
 
 def test_vibration_interface_names_all_three_adc_channels():

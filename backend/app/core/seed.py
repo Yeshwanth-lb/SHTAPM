@@ -25,6 +25,7 @@ channel as live -- see ``app.api.devices.resolve_channel_source``.
 from __future__ import annotations
 
 import os
+from collections.abc import Mapping
 
 from sqlalchemy.orm import Session
 
@@ -68,7 +69,7 @@ def seed_admin(db: Session, settings: AuthSettings) -> User:
 #   vibration             IMPLEMENTATION_LOG 2026-09-03 + edge/drivers/adxl335.py
 #   pressure              edge/drivers/bmp280.py; commit 554066f records it as
 #                         implemented but NOT currently connected
-#   gas                   edge/drivers/registry.py: "no MQ-135 driver exists yet"
+#   gas                   edge/drivers/mq135.py (D044): driver ready, sensor not wired
 #   current               edge/drivers/ina219.py; implemented, not connected
 #
 # `part` is the PART THE BENCH IS DOCUMENTED TO USE, not an assertion that it is
@@ -81,19 +82,31 @@ _PUMP01_SENSORS: dict[str, dict[str, object]] = {
     "vibration": {"part": "ADXL335", "unit": "g", "is_proxy": False},
     "pressure": {"part": "BMP280", "unit": "hPa", "is_proxy": True},
     "humidity": {"part": "DHT22", "unit": "%", "is_proxy": False},
-    # part=None on purpose. No MQ-135 driver exists and no wiring is documented
-    # anywhere in this repository, so there is no part to register. The column
-    # is nullable precisely so "we do not know" is representable; writing
-    # "MQ-135" here would assert hardware nobody has established.
+    # part=None on purpose: the MQ-135 driver exists (D044) but the sensor is
+    # not wired, so there is no part to register. The column is nullable
+    # precisely so "not established" is representable; SHTAPM_GAS_SENSOR=mq135
+    # switches this row to the wired part (see _GAS_MQ135 below).
     "gas": {"part": None, "unit": "ppm", "is_proxy": True},
     "current": {"part": "INA219", "unit": "A", "is_proxy": False},
 }
+# Once the MQ-135 is wired and its driver switched on (D044), the deployment
+# says so with SHTAPM_GAS_SENSOR=mq135 and gas registers the part and the unit
+# the driver reports: the module's AO voltage, not an uncalibrated ppm.
+_GAS_MQ135 = {"part": "MQ-135", "unit": "V", "is_proxy": True}
+GAS_SENSOR_ENV = "SHTAPM_GAS_SENSOR"
+
+
+def _sensor_spec(channel: str, env: Mapping[str, str]) -> dict[str, object]:
+    if channel == "gas" and env.get(GAS_SENSOR_ENV, "").strip().lower() == "mq135":
+        return _GAS_MQ135
+    return _PUMP01_SENSORS[channel]
+
 
 # Left deliberately unset, with the reason. Listed so a future reader can see
 # these are open questions rather than oversights.
 _UNKNOWNS = {
     "display_hue": "Doc04 section 04.5 asks for a per-channel hue but assigns none.",
-    "gas.part": "No MQ-135 driver and no documented wiring exist.",
+    "gas.part": "MQ-135 not wired yet; set SHTAPM_GAS_SENSOR=mq135 once it is (D044).",
     "calibration": "adxl335.py uses nominal datasheet sensitivity, not per-chip calibration.",
     "location": "No location is documented for pump-01.",
 }
@@ -101,7 +114,9 @@ _UNKNOWNS = {
 SEED_DEVICE_ID = "pump-01"
 
 
-def seed_sensor_registry(db: Session, device_id: str = SEED_DEVICE_ID) -> list[Sensor]:
+def seed_sensor_registry(
+    db: Session, device_id: str = SEED_DEVICE_ID, env: Mapping[str, str] | None = None
+) -> list[Sensor]:
     """Create or correct the documented ``sensors`` rows for one device.
 
     Idempotent via the Doc05 ``UNIQUE(device_id, channel)`` constraint: an
@@ -129,9 +144,10 @@ def seed_sensor_registry(db: Session, device_id: str = SEED_DEVICE_ID) -> list[S
         for row in db.query(Sensor).filter(Sensor.device_id == device.id).all()
     }
 
+    env = os.environ if env is None else env
     seeded: list[Sensor] = []
     for channel in CHANNELS:
-        spec = _PUMP01_SENSORS[channel]
+        spec = _sensor_spec(channel, env)
         row = existing.get(channel)
         if row is None:
             row = Sensor(

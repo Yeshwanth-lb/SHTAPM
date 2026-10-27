@@ -80,14 +80,16 @@ _DEFAULT_DEVICES_LIMIT = 200
 #   BMP280   edge/drivers/bmp280.py (I2C bus 1, address 0x76)
 #   INA219   edge/drivers/ina219.py (I2C bus 1, address 0x40)
 #
-# MQ-135 is absent on purpose: no driver exists and no wiring is documented, so
-# no ADC channel may be shown for `gas`.
+#   MQ-135   edge/drivers/mq135.py (D044): AO through a resistor divider to
+#            MCP3008 CH3. Shown only when the registry names MQ-135, i.e.
+#            once SHTAPM_GAS_SENSOR=mq135 says the part is wired.
 _DOCUMENTED_INTERFACES: dict[tuple[str, str], str] = {
     ("temperature", "DHT22"): "GPIO17",
     ("humidity", "DHT22"): "GPIO17",
     ("vibration", "ADXL335"): "MCP3008 CH0-2 / SPI0 CE0",
     ("pressure", "BMP280"): "I2C bus 1 @ 0x76",
     ("current", "INA219"): "I2C bus 1 @ 0x40",
+    ("gas", "MQ-135"): "MCP3008 CH3 / SPI0 CE0 (AO via divider)",
 }
 
 # Measurement caveats a dashboard must carry with the value. These are

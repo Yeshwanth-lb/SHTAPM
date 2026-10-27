@@ -117,6 +117,23 @@ class ADXL335MCP3008Reader:
             )
         return value
 
+    def read_channel(self, channel: int) -> int:
+        """Raw count (0-1023) of any one MCP3008 channel on this bus -- the
+        gas driver (``edge/drivers/mq135.py``) shares the chip. Raises OSError
+        on failure, like ``read_raw_xyz``."""
+        spi = self._open_spi()
+        try:
+            return self._read_channel(spi, channel)
+        except OSError:
+            raise
+        except Exception as e:
+            raise OSError(f"SPI read failed on bus {self._bus}.{self._device}: {e}") from e
+        finally:
+            try:
+                spi.close()
+            except Exception:
+                pass
+
     def read_raw_xyz(self) -> tuple[int, int, int]:
         """Read raw ADC counts (0-1023) for X, Y, Z.
 

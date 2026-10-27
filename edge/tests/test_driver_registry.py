@@ -143,8 +143,9 @@ def test_real_driver_invalid_parameters_fail_clearly():
 
 
 def test_unimplemented_real_driver_fails_clearly_not_silently_fake():
-    """gas has no real driver (no MQ-135 implementation exists yet) --
-    requesting kind="real" must fail loudly, never silently stay fake."""
+    """gas's real driver (MQ-135, D044) is unusable without its divider
+    configuration -- requesting kind="real" unconfigured must fail loudly,
+    never silently stay fake."""
     with pytest.raises(UnsupportedDriverError):
         build_driver("gas", DriverSpec(kind="real"))
 
@@ -324,7 +325,7 @@ def test_alternate_is_never_reached_by_falling_back_from_real():
     unavailable must fail or read unhealthy, never quietly become something
     else (registry module docstring: 'never a silent substitution')."""
     with pytest.raises(UnsupportedDriverError):
-        build_driver("gas", DriverSpec(kind="real"))  # gas has no real driver at all
+        build_driver("gas", DriverSpec(kind="real"))  # MQ-135 unconfigured (D044)
 
 
 def test_alternate_invalid_parameters_fail_clearly():

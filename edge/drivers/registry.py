@@ -44,6 +44,7 @@ from edge.drivers.dht22_adafruit import DHT22AdafruitDriver, DHT22AdafruitTemper
 from edge.drivers.ds18b20 import DS18B20Driver
 from edge.drivers.fake import constant_raw, realistic_raw
 from edge.drivers.ina219 import INA219Driver
+from edge.drivers.mq135 import MQ135Driver
 
 # Cosmetic only (never carried on the frozen wire frame) — matches each real
 # driver's own ``unit=`` value.
@@ -57,15 +58,16 @@ _UNITS: dict[str, str] = {
 }
 
 # Exactly one real driver class per channel this project has actually
-# implemented. "gas" is deliberately absent — no MQ-135 driver exists yet
-# (see project-state/IMPLEMENTATION_LOG.md); requesting kind="real" for it
-# raises UnsupportedDriverError immediately, never a silent fallback to fake.
+# implemented. "gas" (MQ-135, D044) needs its divider configuration
+# (SHTAPM_GAS_DIVIDER_RATIO): without it, requesting kind="real" raises
+# UnsupportedDriverError naming the variable -- never a silent fallback to fake.
 _REAL_DRIVER_CLASSES: dict[str, type[SensorDriver]] = {
     "temperature": DHT22AdafruitTemperatureDriver,
     "vibration": ADXL335Driver,
     "pressure": BMP280Driver,
     "humidity": DHT22AdafruitDriver,
     "current": INA219Driver,
+    "gas": MQ135Driver,
 }
 
 # Additional supported hardware for a channel that already has an approved
@@ -201,6 +203,10 @@ def _build_real_driver(channel: str, spec: DriverSpec) -> SensorDriver:
         raise UnsupportedDriverError(
             f"invalid real-driver parameters {dict(spec.params)!r} for channel "
             f"{channel!r} ({driver_cls.__name__}): {e}"
+        ) from e
+    except ValueError as e:  # a driver's own configuration check (e.g. GasConfigError)
+        raise UnsupportedDriverError(
+            f"real driver for channel {channel!r} ({driver_cls.__name__}) is not configured: {e}"
         ) from e
 
 
