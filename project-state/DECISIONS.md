@@ -3065,6 +3065,17 @@ does not authorize any wiring or actuation.
   false-isolation proxy 9/9 -> 6/9; constant-spoof channel-match
   opportunities 3 -> 2 (0 matches either way). The P2 acceptance tests are
   unchanged (spoofed trust still below 0.4 within 3 windows).
+  Re-measured on the bench after the change (2026-10-27):
+  attribution unchanged (idle cross-state attacks 71/72 = 99% vs 98%,
+  running 63/70 both; clean false attacks 0.0% idle / 0.1% running).
+  Self-heal (``edge/eval/self_heal_eval.py``) traded sensitivity for
+  specificity: false isolation episodes on the clean running capture 2 -> 0,
+  running release 47 -> 34 samples (median), but idle time to isolate
+  12 -> 15.5 samples (median; max 46 -> 16) and running bias attacks
+  isolated 7/7 -> 6/7. Kept: a healthy sensor wrongly switched to VIRTUAL is
+  the costlier operator error, mid-rank is the standard tie convention, and
+  no project document sets an isolation-time target. The missed running
+  bias episode is a recorded cost, not hidden.
 - **Why (3), and the root cause of D036's open item:** replaying an injected
   60-sample 0.8 A spoof on idle ``current`` (7.2 h capture, live composition)
   with baselines of increasing length: 36 min -> clean trust 0.60, never
