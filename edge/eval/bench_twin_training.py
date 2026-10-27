@@ -27,6 +27,22 @@ contains no gas measurement. Fabricating one to fill the six-wide input would
 make the training set indistinguishable from measured data. Gas is instead
 masked as unavailable (value 0.0 in scaled space, i.e. the channel mean), and
 no twin is trained to reconstruct it.
+
+INPUTS (D039, ``--inputs``): the channels the twin may read. Any channel left
+out is masked exactly like gas -- not fitted in the saved scale, so the live
+runtime (``edge/pipeline/self_heal_runtime.py``) also feeds it as 0.0. Measured
+2026-10-27: the bundle trained on all five measured channels removed 66% of the
+mean-predictor's current error on its own capture but did WORSE than the mean
+on other days (skill -0.38 on 2026-10-26, -0.13 on 2026-10-27), because
+ambient temperature/humidity/pressure shift between days by dozens of their
+tiny training standard deviations while carrying no information about current
+(R^2 < 0.006, BENCH_LOAD_VALIDATION.md). ``--inputs current vibration`` keeps
+only the physically coupled pair.
+
+CAPTURES: one or more files, either ``load_capture.py`` rows or the edge's own
+telemetry JSONL (``mosquitto_sub`` of ``shtapm/<id>/telemetry``); windows never
+span two files or a time gap. ``--test-capture`` evaluates on separate captures
+(a different day) instead of the chronological tail of the training data.
 """
 
 from __future__ import annotations
@@ -38,6 +54,7 @@ import statistics
 import sys
 from collections.abc import Sequence
 from dataclasses import dataclass
+from datetime import datetime
 
 import torch
 from app.schemas.contracts import CHANNELS
@@ -64,6 +81,9 @@ MEASURED_CHANNELS: tuple[str, ...] = (
 DEFAULT_TARGETS: tuple[str, ...] = ("current", "vibration")
 
 WINDOW_SIZE = 30  # matches edge/anomaly/preprocess.py's documented default
+# Consecutive telemetry rows further apart than this are not one history
+# (same rule as edge/models/p2_baseline.py's DEFAULT_MAX_GAP_S).
+MAX_GAP_S = 5.0
 
 # Training fixtures -- NOT project specification values. D016 specifies no
 # hyperparameters; these are explicit, overridable arguments.
@@ -107,40 +127,84 @@ class Evaluation:
         return 1.0 - (self.model_rmse_scaled / self.baseline_rmse_scaled)
 
 
-def load_capture(path: str) -> list[Sample]:
-    """Read a load_capture.py JSONL file, keeping only rows where every
-    measured channel is healthy.
+def _telemetry_values(row: dict) -> dict[str, float] | None:
+    sensors = row.get("sensors")
+    if not isinstance(sensors, dict):
+        return None
+    return {ch: sensors.get(ch) for ch in MEASURED_CHANNELS}
+
+
+def _load_capture_values(row: dict) -> dict[str, float]:
+    return {
+        "temperature": row.get("temperature_c"),
+        "vibration": row.get("vibration_g_driver"),
+        "pressure": row.get("pressure_hpa"),
+        "humidity": row.get("humidity_pct"),
+        "current": row.get("current_a"),
+    }
+
+
+def load_capture(
+    path: str, index_offset: int = 0, required: Sequence[str] = MEASURED_CHANNELS
+) -> list[Sample]:
+    """Read a ``load_capture.py`` or edge telemetry JSONL file, keeping only
+    rows where every ``required`` channel (the twin's inputs) is present -- a
+    DHT22 dropout does not cost a row the twin never reads.
 
     Rows with an unhealthy channel are DROPPED rather than imputed: the DHT22
     drops out under motor EMI (~30% of load samples), and inventing values for
     those would be fabricating exactly the data the capture proves is missing.
+    Indices start at ``index_offset`` and jump past a telemetry time gap, so
+    build_windows() never treats a gap as consecutive history.
     """
     samples: list[Sample] = []
     dropped = 0
+    index = index_offset
+    last_ts: datetime | None = None
     with open(path, encoding="utf-8") as handle:
-        for row_index, line in enumerate(handle):
+        for line in handle:
             line = line.strip()
             if not line:
                 continue
             row = json.loads(line)
-            values = {
-                "temperature": row.get("temperature_c"),
-                "vibration": row.get("vibration_g_driver"),
-                "pressure": row.get("pressure_hpa"),
-                "humidity": row.get("humidity_pct"),
-                "current": row.get("current_a"),
-            }
-            if any(v is None for v in values.values()):
+            values = _telemetry_values(row)
+            if values is None:
+                values = _load_capture_values(row)
+            elif "ts" in row:
+                ts = datetime.fromisoformat(row["ts"].replace("Z", "+00:00"))
+                if last_ts is not None and (ts - last_ts).total_seconds() > MAX_GAP_S:
+                    index += WINDOW_SIZE  # break contiguity across the gap
+                last_ts = ts
+            index += 1
+            if any(values[ch] is None for ch in required):
                 dropped += 1
                 continue
-            samples.append(Sample(index=row_index, values=values))
-    print(f"loaded {len(samples)} complete samples ({dropped} dropped for an unhealthy channel)")
+            samples.append(Sample(index=index, values=values))
+    print(
+        f"{path}: loaded {len(samples)} complete samples "
+        f"({dropped} dropped for an unhealthy channel)"
+    )
     return samples
 
 
-def fit_scaler(samples: Sequence[Sample]) -> ChannelScaler:
+def load_captures(
+    paths: Sequence[str], required: Sequence[str] = MEASURED_CHANNELS
+) -> list[Sample]:
+    """Several captures, with index ranges far apart so no window spans two."""
+    samples: list[Sample] = []
+    for path in paths:
+        offset = (samples[-1].index + WINDOW_SIZE + 1) if samples else 0
+        samples.extend(load_capture(path, index_offset=offset, required=required))
+    return samples
+
+
+def fit_scaler(
+    samples: Sequence[Sample], channels: Sequence[str] = MEASURED_CHANNELS
+) -> ChannelScaler:
+    """Fit the scale for ``channels`` only; every other channel stays unfitted
+    and is therefore masked as 0.0 in training and by the live runtime."""
     scaler = ChannelScaler()
-    scaler.fit({ch: [s.values[ch] for s in samples] for ch in MEASURED_CHANNELS})
+    scaler.fit({ch: [s.values[ch] for s in samples] for ch in channels})
     return scaler
 
 
@@ -169,7 +233,7 @@ def build_windows(samples: Sequence[Sample], scaler: ChannelScaler) -> list[Wind
             continue
         features: dict[str, tuple[float, ...]] = {}
         for ch in CHANNELS:
-            if ch in MEASURED_CHANNELS:
+            if ch in scaler.fitted_channels:
                 features[ch] = tuple(scaler.normalize(ch, s.values[ch]) for s in chunk)
             else:
                 features[ch] = (0.0,) * WINDOW_SIZE
@@ -300,7 +364,21 @@ UNITS = {
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("capture", help="load_capture.py JSONL file")
+    parser.add_argument(
+        "capture", nargs="+", help="load_capture.py or edge telemetry JSONL file(s)"
+    )
+    parser.add_argument(
+        "--test-capture",
+        nargs="*",
+        default=None,
+        help="evaluate on these captures instead of the chronological holdout",
+    )
+    parser.add_argument(
+        "--inputs",
+        nargs="*",
+        default=list(MEASURED_CHANNELS),
+        help="channels the twin may read; the others are masked (D039)",
+    )
     parser.add_argument("--targets", nargs="*", default=list(DEFAULT_TARGETS))
     parser.add_argument("--hidden-size", type=int, default=HIDDEN_SIZE_FIXTURE)
     parser.add_argument("--epochs", type=int, default=EPOCHS_FIXTURE)
@@ -310,7 +388,15 @@ def main() -> int:
     parser.add_argument("--save-prefix", default=None, help="write <prefix>_<channel>.pt")
     args = parser.parse_args()
 
-    samples = load_capture(args.capture)
+    unknown = sorted(set(args.inputs) - set(MEASURED_CHANNELS))
+    if unknown or not set(args.targets) <= set(args.inputs):
+        print(
+            f"ERROR: --inputs must be measured channels {MEASURED_CHANNELS} and include "
+            f"every target (unknown: {unknown})",
+            file=sys.stderr,
+        )
+        return 1
+    samples = load_captures(args.capture, args.inputs)
     if len(samples) < WINDOW_SIZE * 4:
         print(f"ERROR: need at least {WINDOW_SIZE * 4} samples", file=sys.stderr)
         return 1
@@ -319,12 +405,16 @@ def main() -> int:
     # random shuffle. Neighbouring 1 Hz windows overlap by 29/30 samples, so a
     # random split would put near-identical windows on both sides and report a
     # meaninglessly optimistic score.
-    split = int(len(samples) * (1.0 - args.holdout))
-    train_samples, test_samples = samples[:split], samples[split:]
+    if args.test_capture:
+        # Cross-capture: train on everything given, test on another day.
+        train_samples, test_samples = samples, load_captures(args.test_capture, args.inputs)
+    else:
+        split = int(len(samples) * (1.0 - args.holdout))
+        train_samples, test_samples = samples[:split], samples[split:]
 
     # The scale is fitted on the training segment only -- same leakage
     # discipline as D025's cross-bearing statistics and DivergenceScorer's fit.
-    scaler = fit_scaler(train_samples)
+    scaler = fit_scaler(train_samples, args.inputs)
     train_windows = build_windows(train_samples, scaler)
     test_windows = build_windows(test_samples, scaler)
     print(f"train windows: {len(train_windows)}   test windows: {len(test_windows)}")
@@ -347,7 +437,9 @@ def main() -> int:
         verdict = (
             "beats mean"
             if result.skill > 0.1
-            else "no better than mean" if result.skill > -0.1 else "WORSE than mean"
+            else "no better than mean"
+            if result.skill > -0.1
+            else "WORSE than mean"
         )
         print(
             f"{channel:<12}{result.model_rmse_raw:>10.5f} {result.unit:<3}"
@@ -376,7 +468,7 @@ def main() -> int:
                 residual_std=residual_std,
                 hidden_size=args.hidden_size,
                 skill=result.skill,
-                trained_on=args.capture,
+                trained_on=" + ".join(args.capture),
             )
             print(f"  saved bundle: {args.save_prefix}_{channel}.pt + .json")
 
