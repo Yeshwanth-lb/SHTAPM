@@ -7,18 +7,24 @@ never affect telemetry ingestion or persistence.
 
 Reuses the EXISTING ``decisions`` table (``app.models.decision.Decision``)
 and its already-nullable columns — no schema change, no new table. Persists
-ONLY the fields genuinely compatible with this diagnostic payload:
-``anomaly_flag``, ``anomaly_severity``, and the six per-channel trust
-scores. ``health_state``, ``failure_eta``, ``rl_action`` and
-``isolated_channels`` are left ``NULL`` —
-nothing in this diagnostic payload maps to them without inventing a value
-(see ``app/schemas/decision_diagnostic.py``'s own docstring for why those
-fields don't exist on the wire payload at all). ``attribution``/``reason``
-are ALSO left ``NULL`` here: the diagnostic payload carries a genuine
-per-channel attribution, but ``decisions.attribution``/``reason`` are
-single-value columns with no existing, non-invented reduction rule to a
-single value — approved scope is to preserve the full per-channel
-attribution on the wire only, not to persist it into these columns.
+the fields this diagnostic payload genuinely carries: ``anomaly_flag``,
+``anomaly_severity``, the six per-channel trust scores,
+``substituted_channels`` (twin reconstructions), and (D042):
+
+``isolated_channels``  the edge's tracked isolation set -- the channels the
+                       edge currently isolates, substitutes for, and chains
+                       ``isolate``/``recover`` ledger blocks about.
+``attribution``        one decision-level label from the per-channel ones,
+                       by severity: ``attack`` if any channel is attributed an
+                       attack, else ``fault`` if any channel a fault, else
+                       ``none`` (a security incident outranks a fault, which
+                       outranks nothing). ``reason`` names the channel(s)
+                       carrying that label with the edge's own reason, so the
+                       reduction never hides WHICH sensor or WHY.
+
+``health_state``, ``failure_eta`` and ``rl_action`` stay ``NULL``: nothing
+computes them (no prognosis model, no RL policy), and a value would be
+invented.
 """
 
 from __future__ import annotations
@@ -31,9 +37,31 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.models import Decision, Device
+from app.schemas.contracts import Attribution
 from app.schemas.decision_diagnostic import DecisionDiagnosticMessage
 
 log = logging.getLogger("shtapm.decision_diagnostic_persistence")
+
+
+_SEVERITY = (Attribution.attack, Attribution.fault)
+
+
+def reduce_attribution(message: DecisionDiagnosticMessage) -> tuple[Attribution, str | None]:
+    """attack > fault > none over the per-channel labels (D042), with the
+    channel(s) and the edge's reasons for the winning label."""
+    for label in _SEVERITY:
+        hits = [
+            f"{_channel_name(channel)}: {verdict.reason}"
+            for channel, verdict in message.attribution.items()
+            if verdict.attribution == label
+        ]
+        if hits:
+            return label, "; ".join(sorted(hits))
+    return Attribution.none, None
+
+
+def _channel_name(channel: object) -> str:
+    return getattr(channel, "value", str(channel))
 
 
 class DecisionDiagnosticPersistence:
@@ -46,6 +74,7 @@ class DecisionDiagnosticPersistence:
         ``DecisionDiagnosticSink``. See module docstring for exactly which
         columns get a value and which stay ``NULL``."""
         ts = datetime.fromisoformat(message.ts)
+        attribution, reason = reduce_attribution(message)
         with self._session_factory() as db:
             device_uuid = self._ensure_device(db, message.device_id)
             db.add(
@@ -60,6 +89,11 @@ class DecisionDiagnosticPersistence:
                     trust_humidity=message.trust.humidity,
                     trust_gas=message.trust.gas,
                     trust_current=message.trust.current,
+                    attribution=attribution,
+                    reason=reason,
+                    isolated_channels=[
+                        _channel_name(c) for c in message.tracked_isolation_candidates
+                    ],
                     # Real executed substitutions (FR-H1/FR-H2). Unlike the
                     # NULL columns above, this one now has a genuine producer:
                     # the edge's trained digital twin. Written as [] rather

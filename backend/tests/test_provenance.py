@@ -13,6 +13,8 @@ Doc05 §05.2 `sensors` table can do that — and the tests below pin both halves
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 sa = pytest.importorskip("sqlalchemy")
@@ -253,11 +255,11 @@ def test_decision_fields_nothing_computes_stay_null():
     """Columns with no producer are UNIMPLEMENTED CAPABILITY, not missing data,
     and a UI must not render them as an assessed 'healthy' or an absent fault.
 
-    `substituted_channels` was on this list until 2026-09-18 and has been
-    removed deliberately: the edge now runs a trained digital twin and reports
-    the channels it reconstructed, so the guard's own condition ("the UI's 'not
-    computed' labelling must be revisited before this passes") was satisfied —
-    see UNCOMPUTED_DECISION_FIELDS in frontend/src/features/decisions.
+    `substituted_channels` was on this list until 2026-09-18 and
+    `isolated_channels` until 2026-10-27 (D042); each was removed deliberately
+    once it got a real producer AND the UI's 'not computed' labelling was
+    revisited -- see UNCOMPUTED_DECISION_FIELDS in
+    frontend/src/features/decisions.
     """
     from app.services.decision_diagnostic_persistence import DecisionDiagnosticPersistence
 
@@ -266,7 +268,6 @@ def test_decision_fields_nothing_computes_stay_null():
         "health_state",
         "failure_eta",
         "rl_action",
-        "isolated_channels",
     ):
         assert never_written not in source, (
             f"{never_written} is now written by the diagnostic path; the UI's "
@@ -281,6 +282,30 @@ def test_substituted_channels_are_written_and_labelled_as_real():
     from app.services.decision_diagnostic_persistence import DecisionDiagnosticPersistence
 
     assert "substituted_channels" in inspect_source(DecisionDiagnosticPersistence.persist)
+
+
+def test_isolation_and_attribution_are_written_and_labelled_as_real():
+    """D042's counterpart: the isolation set and the attribution are persisted,
+    so the UI must not list them as uncomputed. If either is removed again,
+    this fails and forces the labelling back."""
+    from app.services.decision_diagnostic_persistence import DecisionDiagnosticPersistence
+
+    source = inspect_source(DecisionDiagnosticPersistence.persist)
+    assert "isolated_channels" in source
+    assert "attribution=attribution" in source
+    ui = (
+        Path(__file__).resolve().parents[2]
+        / "frontend"
+        / "src"
+        / "features"
+        / "decisions"
+        / "useDecisions.ts"
+    ).read_text(encoding="utf-8")
+    start = ui.index("export const UNCOMPUTED_DECISION_FIELDS")
+    uncomputed = ui[start : ui.index("] as const", start)]
+    assert "rl_action" in uncomputed  # the slice really is the list
+    assert "isolated_channels" not in uncomputed
+    assert '"attribution"' not in uncomputed
 
 
 def test_no_confidence_field_exists_anywhere_in_the_decision_schema():

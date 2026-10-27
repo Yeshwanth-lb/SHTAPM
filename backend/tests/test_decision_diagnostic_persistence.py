@@ -76,19 +76,66 @@ def test_persist_creates_device_and_partial_decision_row(persistence, session_fa
         assert row.trust_vibration == 0.5
 
 
-def test_unsupported_fields_remain_null(persistence, session_factory):
+def test_uncomputed_fields_remain_null(persistence, session_factory):
     persistence.persist(_message())
 
     with session_factory() as db:
         row = db.query(Decision).one()
+        # Nothing computes these (no prognosis, no RL policy): never invented.
         assert row.health_state is None
         assert row.failure_eta is None
         assert row.rl_action is None
-        assert row.isolated_channels is None
-        # Per-channel attribution has no single-value column to map into --
-        # deliberately not persisted here (see module docstring).
-        assert row.attribution is None
+        # D042: a clean cycle is an explicit "none" and an empty isolation set.
+        assert row.attribution == Attribution.none
         assert row.reason is None
+        assert row.isolated_channels == []
+
+
+def _attributed(**labels) -> dict:
+    out = dict(_NONE_ATTRIBUTION)
+    for channel, (label, reason) in labels.items():
+        out[channel] = ChannelAttribution(attribution=label, reason=reason)
+    return out
+
+
+def test_attack_outranks_fault_and_names_channel_and_reason(persistence, session_factory):
+    message = _message().model_copy(
+        update={
+            "attribution": _attributed(
+                vibration=(Attribution.fault, "anomaly: physics consistent"),
+                current=(
+                    Attribution.attack,
+                    "physics violation: current says the motor is running while vibration "
+                    "says it is idle",
+                ),
+            )
+        }
+    )
+    persistence.persist(message)
+    with session_factory() as db:
+        row = db.query(Decision).one()
+        assert row.attribution == Attribution.attack
+        assert row.reason.startswith("current: physics violation")
+        assert "vibration: anomaly" not in row.reason  # only the winning label's channels
+
+
+def test_a_fault_alone_is_reported_as_fault(persistence, session_factory):
+    message = _message().model_copy(
+        update={"attribution": _attributed(vibration=(Attribution.fault, "anomaly"))}
+    )
+    persistence.persist(message)
+    with session_factory() as db:
+        row = db.query(Decision).one()
+        assert (row.attribution, row.reason) == (Attribution.fault, "vibration: anomaly")
+
+
+def test_tracked_isolation_is_persisted(persistence, session_factory):
+    message = _message().model_copy(
+        update={"tracked_isolation_candidates": ["current"], "isolation_candidates": ["current"]}
+    )
+    persistence.persist(message)
+    with session_factory() as db:
+        assert db.query(Decision).one().isolated_channels == ["current"]
 
 
 def test_substituted_channels_are_persisted(persistence, session_factory):

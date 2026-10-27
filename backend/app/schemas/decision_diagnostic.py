@@ -60,7 +60,11 @@ class DecisionDiagnosticMessage(_Strict):
     # per-channel — no single-value reduction invented (see module docstring)
     attribution: dict[Channel, ChannelAttribution]
     isolation_candidates: list[Channel]  # FR-RL4 stateless, THIS cycle only — not real isolation
-    tracked_isolation_candidates: list[Channel]  # FR-RL4 persistent — not real isolation
+    # FR-RL4 persistent set. Since D018 pt.2/D029 it is the edge's ACTING
+    # isolation set: the twin substitutes for these channels, the ledger chains
+    # isolate/recover on it, and the backend persists it as isolated_channels
+    # (D042). Still not a removal of the sensor: its raw value keeps flowing.
+    tracked_isolation_candidates: list[Channel]
     # Channels the digital twin actually reconstructed this cycle (FR-H1/FR-H2).
     # Unlike the two lists above, this IS a real executed action — but only on
     # the reporting side: a substituted value is carried here, never written

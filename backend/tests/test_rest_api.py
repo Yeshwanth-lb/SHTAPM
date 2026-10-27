@@ -337,14 +337,15 @@ def test_get_decisions_returns_partial_diagnostic_row(client, seed, session_fact
     assert row["trust_humidity"] == 0.9
     assert row["trust_gas"] == 0.9
     assert row["trust_current"] == 0.9
-    # Fields this diagnostic payload cannot honestly populate stay NULL --
-    # never a fabricated health/action/isolation/attribution claim.
+    # Fields nothing computes stay NULL -- never a fabricated health/action.
     assert row["health_state"] is None
     assert row["failure_eta"] is None
     assert row["rl_action"] is None
-    assert row["isolated_channels"] is None
-    assert row["attribution"] is None
-    assert row["reason"] is None
+    # D042: the edge's isolation set and the decision-level attribution
+    # (attack > fault > none) with the channel and the edge's own reason.
+    assert row["isolated_channels"] == []
+    assert row["attribution"] == "fault"
+    assert row["reason"] == "vibration: anomaly"
     # substituted_channels is NOT in that list: the edge runs a trained digital
     # twin now. Empty here because this fixture substituted nothing -- `[]` and
     # NULL stay distinguishable ("a twin ran and substituted nothing" vs "no
