@@ -66,3 +66,6 @@ motor_load*.jsonl
 
 # Real fault-injection session capture (evidence, not source)
 fault_injection_session*.jsonl
+
+# scripts/final_eval.py output (regenerated per capture)
+results/

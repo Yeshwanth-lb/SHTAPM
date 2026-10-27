@@ -246,26 +246,44 @@ Say so when presenting: the values are a recorded bench session. The edge
 logs `SOURCE = RECORDED SESSION` on startup; a missing or empty file stops it
 at boot with an error naming `FALLBACK_REPLAY_PATH`.
 
-## During the demo: inject an attack from the dashboard (D032)
+## The demo script (PRD §18.4, adapted to this bench)
 
-Log in as admin, open **Device**, then use the **Scenario injection** panel:
+Open the **Control Room** (home page). Admin login. Motor OFF at the start.
 
-1. Pick **Constant spoof**, channel **current**, duration about 60 s.
-   Use current: it is the channel the twin reconstructs (VIRTUAL), and the
-   offline rehearsal caught current attacks in 2 s and reached Malicious in
-   9 s. Vibration attacks mostly never reach Malicious at idle (D033).
-2. Type **0.8** (amps — a plausible running-motor value) as the spoofed value,
-   then **Inject attack**. With the motor off the real reading is ~0 A, so
-   "Use current reading" would spoof 0 A and change nothing. **Bias injection**
-   with offset 0.5 behaves the same way.
-3. Watch the channel's value flatten; trust drops; the twin takes over
-   (VIRTUAL) when trust reaches Malicious; the ledger records
-   `scenario_inject`, `trust_drop`, `isolate`, then `recover` after the
-   injection ends and trust returns to Trusted.
-4. **Stop** ends it early. Every command is audited and chained in the ledger.
+1. **Scene (30 s).** Master caution **NORMAL**, annunciator dark, six
+   instruments live, trust bars grey. Say which channels are real and which
+   are labelled placeholders (gas; the dashboard marks them).
+2. **Start the pump (motor).** Pump relay panel -> **Start pump** (or the motor
+   switch if no relay is wired). Current and vibration rise TOGETHER: the
+   physics agrees, nothing lights up.
+3. **Inject the attack (40 s max).** Device page -> Scenario injection ->
+   **Constant spoof**, channel **current**, value **0** (A), duration **40 s**.
+   (Adapted from the PRD's pressure spoof: only current and vibration are a
+   physically coupled pair on this bench, so only an attack on them can be
+   PROVEN, D034. 40 s keeps it under D018's 60 s substitution limit, D043.)
+4. **Detect + attribute.** Within ~15 s: master caution **ATTACK**,
+   "current says the motor is idle while vibration says it is running",
+   annunciator **CURR ATTACK**, current's trust bar red. Say it out loud:
+   "not a fault -- a lie". Press **Acknowledge**.
+5. **Self-heal.** Current is **ISOLATED** and **VIRTUAL**: the digital twin
+   reconstructs it from vibration (D039). The pump keeps running.
+6. **Recover.** The injection ends; trust climbs back; the event log shows
+   `recover`; the caution returns to NORMAL.
+7. **Prove it.** Ledger page: every step is a hash-chained block; **Verify**
+   passes. (Tamper demonstration: backend test
+   `test_ledger.py::test_verify_detects_tampered_payload`, or edit a block in
+   the database and verify again.)
+8. **Fault for contrast (optional).** Tap the motor mount for a few seconds:
+   an anomaly that the physics explains is labelled **FAULT**, not attack.
+9. **Fallback.** If the hardware misbehaves: recorded-session profile
+   (section above), same screens, said out loud.
 
-If the panel says "Not sent: MQTT broker unavailable", the backend has lost
-the broker (T6). Nothing was injected.
+Safe Pump-Stop with a relay wired: an attack left running past ~45 s, or a
+dead current sensor, stops the motor on its own (PUMP TRIP); restart needs the
+confirmation box. Without a relay the panel says "Simulated relay".
+
+If the injection panel says "Not sent: MQTT broker unavailable", the backend
+has lost the broker (T6). Nothing was injected.
 
 ---
 

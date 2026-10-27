@@ -6,6 +6,47 @@
 
 ---
 
+# ⚠️ CURRENT STATE — 2026-10-27 (read this section first)
+
+Sections below are history; this one wins where they disagree.
+
+## Bench
+All five physical sensors PASS `hw_diagnostic.py` (DHT22, BMP280, INA219,
+ADXL335 via MCP3008). The DHT22 is healthy at rest but drops out under motor
+EMI; it runs SIMULATED (`SHTAPM_DRIVER_TEMPERATURE/HUMIDITY=fake`) until the
+final baseline session. Gas: MQ-135 driver ready (D044) but the sensor is not
+wired; simulated and labelled placeholder. Motor only -- a small water pump was
+tried and dropped by the team's choice (time); the dry run stays software-only. No relay wired
+yet. Pi clock NTP-synced; reach it as `shtapm-pi.local` (its IP changes).
+
+## Landed 2026-10-27 (all pushed)
+- D037 mid-rank ECDF ties; D038 steady-window vibration bands + band-coverage
+  check; 70-min cycling baseline installed on the Pi.
+- D039 current twin from current+vibration only (old bundle was worse than the
+  mean off its training day); new bundle installed on the Pi.
+- D040 recorded-session fallback (`EDGE_SOURCE=replay`) + `scripts/preflight.py`.
+- D041 Safe Pump-Stop software: one safety supervisor owns the relay
+  (operator start/stop, self-heal escalation, dry run, watchdog; latching).
+- D042 attribution + isolation persisted and shown (they were dropped).
+- D043 device condition rollup (user choice 1A); D018's 60 s rule kept.
+- D045 one dead sensor no longer stops the stream (holds last good value,
+  "SENSOR DEAD").
+- D046 industrial HMI dashboard (ISA-101 style) with a Control Room home.
+- AC10: 35 covered / 30 partial / 9 not / 3 N/A of 77 (was 17/34/21/5).
+
+## Measured
+See DECISIONS.md D037-D046 and EVALUATION_RESULTS_2026-10-26.md §8.
+Cross-state attacks attributed 75-99%; in-state attacks ~10% (physical limit,
+§8); faults 50-73%. Self-heal error 0.003-0.05 A out of sample.
+
+## Next (one bench session)
+1. Switch the DHT22 to real; record the final 70-min cycling baseline.
+2. `python scripts/final_eval.py <capture>` and update the results.
+3. Optional relay wiring (runbook); pre-flight; rehearse the adapted demo
+   script twice (runbook "The demo script").
+
+---
+
 # ⚠️ CURRENT STATE — 2026-10-26 (read this section first)
 
 The 2026-09-18 section below is still accurate except where this one updates it.

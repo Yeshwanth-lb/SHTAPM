@@ -7,6 +7,26 @@
 
 ---
 
+## ⚠️ STATUS AS OF 2026-10-27 — newest first
+
+| | criterion | status |
+|---|---|---|
+| AC1 | 6 channels live | 🟡 5 real sensors pass; DHT22 simulated until the final baseline; gas placeholder (driver ready, D044) |
+| AC2 | Attack detected + attributed, trust <0.4 in <=3 windows | 🟡 attribution shown on the dashboard (D042); cross-state attacks 75-99%; trust reaches Malicious in ~15 windows on the bench (3 on synthetic) |
+| AC3 | VIRTUAL substitution | ✅ current; new twin (D039) |
+| AC4 | Dry-run safe-stop | 🟡 software complete (D041); no relay wired; no pump -> no physical dry run |
+| AC5 | Ledger + tamper | ✅ + relay, safe-stop, sensor-dead events |
+| AC6 | <2 s sensor->UI | 🟡 measured; verify with both clocks synced |
+| AC7 | Auth + RBAC + audit | ✅ incl. relay (admin only) |
+| AC8 | Demo twice incl. fallback | 🟡 fallback (D040), pre-flight, adapted script; not rehearsed |
+| AC9 | SWaT + ablations + confusion matrix | 🟡 SWaT done; WADI not |
+| AC10 | Happy/Edge/Sad | 🟡 35/30/9/3 of 77 |
+
+Open: [ ] final baseline with real DHT22 · [ ] final_eval.py on it · [ ] relay
+(optional) · [ ] rehearse twice (AC8) · [ ] MQ-135 wiring (optional, D044).
+
+---
+
 ## ⚠️ STATUS AS OF 2026-10-26 — newest first
 
 | | criterion | status |
