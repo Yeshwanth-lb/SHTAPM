@@ -63,6 +63,7 @@ from app.mqtt.consumer import TelemetryConsumer
 from app.mqtt.decision_diagnostic_consumer import DecisionDiagnosticConsumer
 from app.mqtt.status_consumer import StatusConsumer
 from app.services.actuation import ActuationLedgerRecorder, ActuationRegistry
+from app.services.condition import ConditionRollup
 from app.services.decision_diagnostic_persistence import DecisionDiagnosticPersistence
 from app.services.decision_ledger import DecisionLedgerRecorder
 from app.services.latency_tracker import LatencyTracker
@@ -111,6 +112,10 @@ async def lifespan(app: FastAPI):
     # rather than one per cycle. Its own errors are swallowed, so a ledger fault
     # cannot stop decision ingestion.
     decision_diagnostic_consumer.add_sink(DecisionLedgerRecorder(session_factory).record)
+    # Third sink: the device condition rollup (D043) -> devices.health_state.
+    condition_rollup = ConditionRollup(session_factory)
+    decision_diagnostic_consumer.add_sink(condition_rollup.on_decision)
+    app.state.condition_rollup = condition_rollup
     decision_diagnostic_consumer.start(settings.host, settings.port)
     app.state.decision_diagnostic_consumer = decision_diagnostic_consumer
 
@@ -135,6 +140,7 @@ async def lifespan(app: FastAPI):
     actuation_consumer = ActuationConsumer()
     actuation_consumer.add_sink(actuation_registry.update)
     actuation_consumer.add_sink(ActuationLedgerRecorder(session_factory).record)
+    actuation_consumer.add_sink(condition_rollup.on_actuation)  # safe stop -> critical
     actuation_consumer.start(settings.host, settings.port)
     app.state.actuation_registry = actuation_registry
     app.state.actuation_consumer = actuation_consumer
