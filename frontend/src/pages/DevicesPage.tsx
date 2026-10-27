@@ -79,8 +79,7 @@ export function DevicesPage() {
                       <StatusPill tone={statusTone(d.status)}>{d.status}</StatusPill>
                     </td>
                     <td>
-                      {/* health_state is a stored rollup; nothing computes it
-                          yet (no prognosis model), so it reads as its default. */}
+                      {/* Condition rollup (D043), not a prognosis. */}
                       <StatusPill tone={healthTone(d.health_state)}>{d.health_state}</StatusPill>
                     </td>
                     <td className="mono">{d.last_seen_at ?? "never"}</td>
@@ -103,9 +102,11 @@ export function DevicesPage() {
           <span className="mono">devices.status</span>. It is a fact about the device, and is
           unrelated to whether this browser holds a WebSocket.
           <br />
-          <strong>Health</strong> is the stored <span className="mono">devices.health_state</span>{" "}
-          rollup. No component computes it yet, so it shows its schema default rather than an
-          assessed condition.
+          <strong>Health</strong> is the device&rsquo;s <em>condition</em> (
+          <span className="mono">devices.health_state</span>): critical on a latched Safe Pump-Stop
+          or a sustained attack, warning on an isolated channel or sustained faults, otherwise
+          healthy (D043). It is condition monitoring from what the system has seen, not a prediction
+          of remaining life &mdash; no prognosis model exists for this pump.
         </p>
       </GlassTile>
     </div>

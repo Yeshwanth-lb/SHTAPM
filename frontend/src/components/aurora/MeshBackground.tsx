@@ -4,11 +4,9 @@
 // orb PALETTE is bound to overall system health; motion speed follows it too
 // (serene when healthy, breathing when warning, a slow pulse when critical).
 //
-// Scope note: this foundation slice renders the field and accepts a health
-// prop, but NOTHING in this app computes real health yet — no prognosis model
-// exists (U06/D017 open) and `decisions.health_state` is NULL from the
-// diagnostic ingestion path. Callers therefore pass "healthy" as a neutral
-// default. That is a rendering default, not a health claim.
+// The health prop comes from AmbientHealth: the backend's condition rollup
+// (D043) from attribution, isolation and safe-stop -- condition monitoring,
+// not a prognosis. "healthy" remains the neutral default when signed out.
 //
 // §04.6 GPU budget: 3 orbs (spec allows <=4), one blur layer each.
 import "./mesh.css";
@@ -16,7 +14,7 @@ import "./mesh.css";
 export type FieldHealth = "healthy" | "warning" | "critical";
 
 export interface MeshBackgroundProps {
-  /** Drives orb palette + motion. Defaults to "healthy" — see scope note. */
+  /** Drives orb palette + motion. Defaults to "healthy" (neutral). */
   health?: FieldHealth;
 }
 

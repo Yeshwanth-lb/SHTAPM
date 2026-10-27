@@ -5,7 +5,7 @@
 // cockpit that consumes them is the next slice.
 import { AppShell } from "./app/AppShell";
 import { useRoute } from "./app/router";
-import { MeshBackground } from "./components/aurora/MeshBackground";
+import { AmbientHealth } from "./components/aurora/AmbientHealth";
 import { AuthProvider } from "./features/auth/AuthContext";
 import { LoginScreen } from "./features/auth/LoginScreen";
 import { RequireAuth } from "./features/auth/RequireAuth";
@@ -66,9 +66,8 @@ function Routes() {
 export function App() {
   return (
     <AuthProvider>
-      {/* health="healthy" is a rendering default: nothing computes real health
-          yet (no prognosis model; decisions.health_state is NULL). */}
-      <MeshBackground health="healthy" />
+      {/* Condition rollup (D043): the field follows devices.health_state. */}
+      <AmbientHealth />
       <Routes />
     </AuthProvider>
   );
