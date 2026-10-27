@@ -10,7 +10,8 @@ produces, never a remaining-life prediction (``decisions.health_state`` and
   critical  an autonomous Safe Pump-Stop is latched (D041), OR attacks were
             attributed in a majority of the recent decisions, OR a channel is
             isolated while the newest decision attributes an attack
-  warning   a channel is isolated, OR faults/attacks in a majority of the
+  warning   a channel is isolated, OR a sensor is dead (D045: publishing
+            its last good reading), OR faults/attacks in a majority of the
             recent decisions
   healthy   otherwise
 
@@ -67,7 +68,9 @@ class ConditionRollup:
         with self._lock:
             recent = self._recent.setdefault(message.device_id, deque(maxlen=self._window))
             recent.append(label)
-            self._isolated[message.device_id] = bool(message.tracked_isolation_candidates)
+            self._isolated[message.device_id] = bool(
+                message.tracked_isolation_candidates or message.stale_channels
+            )
             self._refresh(message.device_id)
 
     def on_actuation(self, status: ActuationStatus) -> None:

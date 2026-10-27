@@ -52,6 +52,7 @@ from app.api.inject import InjectionRegistry
 from app.api.inject import router as inject_router
 from app.api.ledger import router as ledger_router
 from app.api.relay import router as relay_router
+from app.api.sensor_health import router as sensor_health_router
 from app.api.system import router as system_router
 from app.api.users import router as users_router
 from app.core.config import AuthSettings, CorsSettings, DatabaseSettings, MqttSettings
@@ -67,6 +68,7 @@ from app.services.condition import ConditionRollup
 from app.services.decision_diagnostic_persistence import DecisionDiagnosticPersistence
 from app.services.decision_ledger import DecisionLedgerRecorder
 from app.services.latency_tracker import LatencyTracker
+from app.services.sensor_health import SensorHealthLedger, SensorHealthRegistry
 from app.services.status_persistence import StatusPersistence
 from app.services.telemetry_persistence import TelemetryPersistence
 from app.services.telemetry_store import TelemetryStore
@@ -116,6 +118,11 @@ async def lifespan(app: FastAPI):
     condition_rollup = ConditionRollup(session_factory)
     decision_diagnostic_consumer.add_sink(condition_rollup.on_decision)
     app.state.condition_rollup = condition_rollup
+    # Dead sensors (D045): latest stale set for the dashboard + ledger events.
+    sensor_health_registry = SensorHealthRegistry()
+    decision_diagnostic_consumer.add_sink(sensor_health_registry.update)
+    decision_diagnostic_consumer.add_sink(SensorHealthLedger(session_factory).record)
+    app.state.sensor_health_registry = sensor_health_registry
     decision_diagnostic_consumer.start(settings.host, settings.port)
     app.state.decision_diagnostic_consumer = decision_diagnostic_consumer
 
@@ -219,6 +226,7 @@ app.include_router(auth_router)
 app.include_router(devices_router)
 app.include_router(inject_router)
 app.include_router(relay_router)
+app.include_router(sensor_health_router)
 app.include_router(alerts_router)
 app.include_router(users_router)
 app.include_router(system_router)
