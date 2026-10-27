@@ -222,3 +222,40 @@ configuration, persisted same-evening baseline:
 Before D036 the dead ADXL with the motor off was attributed attack in 22
 windows and the normal run produced a false isolation; before D034 taps were
 attributed attack (D030).
+
+## 8. Where attribution stops: in-state attacks (research finding, 2026-10-27)
+
+**Question.** The deployed attribution (D034-D038) labels attacks that push a
+channel across a motor state correctly 75-99% of the time, but attacks that
+keep the channel in its true state only 9-16%. Can a second witness close that
+gap? The retrained current twin (D039) predicts current from vibration alone,
+so a spoofed current that stays "plausibly running" should still disagree with
+what vibration implies.
+
+**Method.** Twin trained WITHOUT the 2026-10-27 cycling capture, run on it;
+residual = twin prediction - measured current on steady running windows
+(n = 236); in-state bias injected on running current.
+
+| | value |
+|---|---|
+| clean residual, median / p99 / p99.9 | 0.059 / 0.469 / 0.479 A |
+| windows over the clean p99.9, bias +0.1 / +0.2 / +0.3 / +0.4 A | 0.0 / 0.0 / 0.4 / 1.7 % |
+| windows over the clean p99.9, bias +0.6 A | 72.0 % |
+
+**Finding.** Analytic redundancy from vibration only exposes in-state
+deviations of roughly 0.6 A and more (about +80% of running current). The
+harness's in-state scenarios are far smaller by construction -- bias 0.02 A,
+stealth capped at 0.02 A, a constant spoof pinned AT the true median -- below
+the sensor's own noise, so no physical evidence on this bench separates them
+from clean data. Likewise most misattributed faults are drift crossing a state
+boundary, which is the same waveform as a ramp attack. On these scenario
+definitions attribution is at the physical limit of the available sensors;
+going further needs evidence that is not a sensor reading (sensor
+attestation/signing, timing watermarks, a redundant sensor on the same
+quantity).
+
+**Consequence for O3 (>= 85% on labelled bench scenarios).** Report accuracy
+separately for physically distinguishable scenarios (cross-state attacks and
+faults) and for in-state ones, and state the limit, rather than a single
+blended number. No in-state rule was added: a 0.6 A threshold rule would
+catch only gross spoofs while adding a new false-alarm source.
