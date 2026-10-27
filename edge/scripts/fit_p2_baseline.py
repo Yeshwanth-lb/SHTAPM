@@ -20,12 +20,22 @@ is clean by construction, so every isolation candidate it reports is a false
 alarm. The saved baseline is then built from the WHOLE capture. The check
 reports evidence; it does not gate saving, because no project document sets an
 acceptable false-alarm rate.
+
+It also reports each channel's median clean trust. An isolated channel is
+released only at trust >= TRUSTED_MIN (D018 pt.2), so a channel whose CLEAN
+trust sits below that would stay isolated forever after an attack. Measured on
+the 7.2 h idle capture (D037): baselines of 36 and 43 min left idle `current`
+at 0.60 and 0.69 (never released), 51 and 71 min at 0.82 and 0.87 (released
+35-37 samples after the attack ended) -- the INA219's idle texture changed
+during the first hour, and a baseline that misses the later regime makes a
+normal 0 A window look unusual. A warning names such channels.
 """
 
 from __future__ import annotations
 
 import argparse
 import logging
+import statistics
 import sys
 from collections import Counter
 from pathlib import Path
@@ -41,6 +51,7 @@ from edge.models.p2_baseline import (
     save_baseline,
     split_segments,
 )
+from edge.trust.beta import TRUSTED_MIN
 
 # Must match edge/main.py's live Preprocessor exactly: the baseline is only
 # valid for the windowing it was built with (P2Baseline.windows() enforces it).
@@ -103,6 +114,17 @@ def _holdout_check(messages, *, fit_fraction: float, max_gap_s: float, preproces
         n = candidate_counts.get(ch, 0)
         print(f"  {ch:12s} Malicious  : {n:5d}/{eval_windows} ({n / eval_windows:.1%})")
     print(f"  channels isolated at the end : {tracked_at_end or 'none'}")
+    clean_trust = {
+        ch: statistics.median(getattr(m.trust, ch) for m in publisher.messages) for ch in CHANNELS
+    }
+    print("  median clean trust  : " + ", ".join(f"{ch} {t:.2f}" for ch, t in clean_trust.items()))
+    unreleasable = [ch for ch, t in clean_trust.items() if t < TRUSTED_MIN]
+    if unreleasable:
+        print(
+            f"WARNING: clean trust below {TRUSTED_MIN} for {unreleasable}: once isolated, "
+            "these channels would not be released (D018 pt.2, D037). Record a longer "
+            "baseline that covers the operating conditions."
+        )
     return eval_windows
 
 
