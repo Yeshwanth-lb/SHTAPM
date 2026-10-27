@@ -29,6 +29,15 @@ at 0.60 and 0.69 (never released), 51 and 71 min at 0.82 and 0.87 (released
 35-37 samples after the attack ended) -- the INA219's idle texture changed
 during the first hour, and a baseline that misses the later regime makes a
 normal 0 A window look unusual. A warning names such channels.
+
+Finally it reports how well the vibration motor-state bands learned from the
+fit portion describe the held-out portion (D038): the share of steady idle
+(running) windows that vibration also calls idle (running). Measured: the
+70-min cycling capture of 2026-10-27 scores 100% / 98.5%; a 7-min fit of the
+2026-10-26 running capture scores 0% idle, because idle vibration later
+drifted above the learned limit -- and the rule then missed most attacks that
+fake an idle motor. Below MIN_BAND_COVERAGE a warning asks for a baseline
+that covers the operating conditions.
 """
 
 from __future__ import annotations
@@ -42,6 +51,7 @@ from pathlib import Path
 
 from app.schemas.contracts import CHANNELS
 
+from edge.anomaly.operating_state_rule import band_coverage
 from edge.anomaly.preprocess import Preprocessor
 from edge.models.p2_baseline import (
     DEFAULT_MAX_GAP_S,
@@ -52,6 +62,10 @@ from edge.models.p2_baseline import (
     split_segments,
 )
 from edge.trust.beta import TRUSTED_MIN
+
+# Reporting threshold only (the check never gates saving): warn when the learned
+# bands misjudge more than one in ten steady held-out windows.
+MIN_BAND_COVERAGE = 0.9
 
 # Must match edge/main.py's live Preprocessor exactly: the baseline is only
 # valid for the windowing it was built with (P2Baseline.windows() enforces it).
@@ -67,6 +81,37 @@ class _CapturingPublisher:
 
     def publish(self, message) -> None:
         self.messages.append(message)
+
+
+def _report_band_coverage(provisional, eval_part, max_gap_s: float, window: int) -> None:
+    from edge.main import _vibration_bands  # the live calibration, unmodified
+
+    bands = _vibration_bands(provisional, window)
+    segments = [
+        ([m.sensors.current for m in seg], [m.sensors.vibration for m in seg])
+        for seg in split_segments(eval_part, max_gap_s)
+    ]
+    idle_ok, n_idle, run_ok, n_run = band_coverage(segments, bands, window)
+
+    def fmt(frac, n):
+        return "no such window" if frac is None else f"{frac:.1%} of {n}"
+
+    print(
+        f"  vibration bands       : idle <= {bands.idle_max:.3f} g, running >= "
+        f"{bands.running_min:.3f} g; held-out steady idle judged idle "
+        f"{fmt(idle_ok, n_idle)}, running judged running {fmt(run_ok, n_run)}"
+    )
+    poor = [
+        state
+        for state, frac in (("idle", idle_ok), ("running", run_ok))
+        if frac is not None and frac < MIN_BAND_COVERAGE
+    ]
+    if poor:
+        print(
+            f"WARNING: the learned vibration bands misjudge held-out {' and '.join(poor)} "
+            "windows: the motor-state rule will miss attacks in those conditions (D038). "
+            "Record a longer baseline that covers them."
+        )
 
 
 def _holdout_check(messages, *, fit_fraction: float, max_gap_s: float, preprocessor) -> int:
@@ -118,6 +163,7 @@ def _holdout_check(messages, *, fit_fraction: float, max_gap_s: float, preproces
         ch: statistics.median(getattr(m.trust, ch) for m in publisher.messages) for ch in CHANNELS
     }
     print("  median clean trust  : " + ", ".join(f"{ch} {t:.2f}" for ch, t in clean_trust.items()))
+    _report_band_coverage(provisional, eval_part, max_gap_s, preprocessor.window_size)
     unreleasable = [ch for ch, t in clean_trust.items() if t < TRUSTED_MIN]
     if unreleasable:
         print(
