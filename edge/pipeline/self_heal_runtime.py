@@ -12,8 +12,12 @@ UNITS (D029's fixed scale makes the reconstruction invertible).
 
 WHAT THIS DELIBERATELY DOES NOT DO:
 
-  * **No actuation.** ``safe_stop`` is a log-only callback. No relay, no GPIO,
-    no pump control is wired, by explicit project instruction.
+  * **Actuation only through the safety supervisor (D041).** ``safe_stop`` is
+    injected: ``edge/main.py`` passes ``SafetySupervisor.safe_stop``, which
+    drives the relay when one is configured and is otherwise in-memory.
+    Without an injected callback it stays log-only. D018's 60 s substitution
+    expiry DOES reach it: a channel still isolated after 60 s of substitution
+    escalates to Safe Pump-Stop.
   * **No divergence escalation.** ``divergence_threshold`` is +inf, so the
     escalate-to-Safe-Pump-Stop path can never fire. This is not a placeholder
     awaiting a number: U05 is open *because the measurement failed*. On clean
@@ -40,7 +44,7 @@ from __future__ import annotations
 
 import logging
 import math
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -82,11 +86,11 @@ class SubstitutionReport:
 
 
 def _log_only_safe_stop() -> None:
-    """Stands in for Safe Pump-Stop. Actuation is not wired, by instruction.
+    """Default Safe Pump-Stop when no safety supervisor is injected.
 
-    Unreachable while ``divergence_threshold`` is +inf and the substitution
-    window is unbounded, but supplied explicitly: SelfHealOrchestrator requires
-    a callable, and a silent lambda would hide that a real one is absent.
+    Reached by D018's 60 s substitution expiry (divergence escalation stays
+    disabled). Supplied explicitly: SelfHealOrchestrator requires a callable,
+    and a silent lambda would hide that a real one is absent.
     """
     log.warning(
         "safe-stop requested by self-heal orchestrator -- NOT actuated "
@@ -97,7 +101,12 @@ def _log_only_safe_stop() -> None:
 class SelfHealRuntime:
     """Per-cycle substitution for isolated channels, driven by a trained twin."""
 
-    def __init__(self, bundle: TwinBundle, window_size: int) -> None:
+    def __init__(
+        self,
+        bundle: TwinBundle,
+        window_size: int,
+        safe_stop: Callable[[], None] = _log_only_safe_stop,
+    ) -> None:
         self._bundle = bundle
         self._window_size = window_size
 
@@ -109,9 +118,9 @@ class SelfHealRuntime:
             uncertainty_proxy=ElapsedTimeUncertaintyProxy(scaling_fn=linear_scaling),
             divergence_threshold=ESCALATION_DISABLED_THRESHOLD,
             uncertainty_cap=UNCERTAINTY_CAP_D020,
-            safe_stop=_log_only_safe_stop,
-            # The substitution clock is left at its D018 default; with
-            # escalation disabled, expiry cannot actuate either.
+            safe_stop=safe_stop,
+            # The substitution clock is left at its D018 default (60 s): a
+            # channel still isolated when it runs out escalates to safe_stop.
         )
 
     @property
@@ -207,7 +216,11 @@ class SelfHealRuntime:
         )
 
 
-def load_self_heal_runtime(model_dir: str | Path, window_size: int) -> SelfHealRuntime | None:
+def load_self_heal_runtime(
+    model_dir: str | Path,
+    window_size: int,
+    safe_stop: Callable[[], None] = _log_only_safe_stop,
+) -> SelfHealRuntime | None:
     """Load the twin bundle from ``model_dir`` if one is present.
 
     Returns None -- having logged why -- when no bundle exists or it cannot be
@@ -245,4 +258,4 @@ def load_self_heal_runtime(model_dir: str | Path, window_size: int) -> SelfHealR
         bundle.skill * 100.0,
         bundle.trained_on,
     )
-    return SelfHealRuntime(bundle, window_size=window_size)
+    return SelfHealRuntime(bundle, window_size=window_size, safe_stop=safe_stop)

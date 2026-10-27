@@ -149,7 +149,7 @@ import os
 import signal
 import time
 from collections import deque
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from typing import TYPE_CHECKING
 
 from app.schemas.command import MAX_DURATION_S
@@ -160,6 +160,10 @@ from edge.acquisition.mqtt_publisher import ResilientTelemetryPublisher
 from edge.acquisition.replay import ReplaySampler, load_replay_frames
 from edge.acquisition.runtime import AcquisitionRuntime
 from edge.acquisition.sampler import Sampler
+from edge.actuation.gpio import PinctrlActuator, relay_config_from_env
+from edge.actuation.mqtt import ActuationPublisher, RelayCommandListener
+from edge.actuation.relay import FakeActuator, RelayController
+from edge.actuation.supervisor import WATCHDOG_TIMEOUT_S, DryRunDetector, SafetySupervisor
 from edge.anomaly.attribution import AttributionEngine
 from edge.anomaly.iforest import IsolationForestDetector
 from edge.anomaly.operating_state_rule import (
@@ -192,7 +196,9 @@ if TYPE_CHECKING:
 log = logging.getLogger("shtapm.edge.main")
 
 
-def _load_self_heal(model_dir: str, window_size: int) -> SelfHealRuntime | None:
+def _load_self_heal(
+    model_dir: str, window_size: int, safe_stop: Callable[[], None] | None = None
+) -> SelfHealRuntime | None:
     """Load the self-heal runtime, or None if its optional stack is unavailable.
 
     self_heal_runtime imports torch (edge/requirements-p3.txt). Imported here
@@ -208,7 +214,52 @@ def _load_self_heal(model_dir: str, window_size: int) -> SelfHealRuntime | None:
             e,
         )
         return None
-    return load_self_heal_runtime(model_dir, window_size)
+    if safe_stop is None:
+        return load_self_heal_runtime(model_dir, window_size)
+    return load_self_heal_runtime(model_dir, window_size, safe_stop=safe_stop)
+
+
+SELF_HEAL_ESCALATION = (
+    "self-heal escalation (D018: divergence over threshold, or a channel still "
+    "isolated after 60 s of substitution)"
+)
+
+
+def _build_safety_supervisor(
+    *, device_id: str, replay: bool, publish: Callable, env: Mapping[str, str] | None = None
+) -> SafetySupervisor:
+    """The relay owner (D041). A physical relay only when configured AND the
+    edge reads live sensors: replayed current says nothing about the real
+    motor, so the fallback profile always runs the logic in memory."""
+    env = os.environ if env is None else env
+    config = relay_config_from_env(env)  # an unsafe configuration stops the boot here
+    if config is not None and not replay:
+        pin, active_low = config
+        actuator = PinctrlActuator(pin, active_low=active_low)
+        hardware = True
+    else:
+        if config is not None:
+            log.warning("replay source: the physical relay is NOT driven (in-memory relay)")
+        actuator = FakeActuator()
+        hardware = False
+    relay = RelayController(actuator)  # forces OFF at construction
+    raw_threshold = env.get("SHTAPM_DRY_RUN_CURRENT_A", "").strip()
+    dry_run = (
+        DryRunDetector(_env_number("SHTAPM_DRY_RUN_CURRENT_A", raw_threshold, float, env=env))
+        if raw_threshold
+        else None
+    )
+    if dry_run is None:
+        log.warning("dry-run protection OFF: SHTAPM_DRY_RUN_CURRENT_A not set (FR-R2)")
+    watchdog_s = _env_number("SHTAPM_WATCHDOG_S", str(WATCHDOG_TIMEOUT_S), float, env=env)
+    return SafetySupervisor(
+        device_id=device_id,
+        relay=relay,
+        hardware=hardware,
+        publish=publish,
+        dry_run=dry_run,
+        watchdog_timeout_s=watchdog_s,
+    )
 
 
 def _load_p2_baseline(model_dir: str) -> P2Baseline | None:
@@ -593,7 +644,23 @@ def main() -> None:
     # frames so the self-heal runtime can build its own correctly-scaled window.
     window_size = _env_number("WINDOW_SIZE", "30", int)
     recent_frames: deque = deque(maxlen=window_size)
-    self_heal = _load_self_heal(model_dir, window_size)
+
+    # Safety supervisor (D041): the only owner of the pump relay. Built before
+    # self-heal so its escalation reaches the relay.
+    actuation_publisher = ActuationPublisher(device_id=device_id)
+    actuation_publisher.start(host, port)
+    supervisor = _build_safety_supervisor(
+        device_id=device_id, replay=source == "replay", publish=actuation_publisher.publish
+    )
+    supervisor.start()
+    relay_listener = RelayCommandListener(device_id=device_id, supervisor=supervisor)
+    relay_listener.start(host, port)
+
+    self_heal = _load_self_heal(
+        model_dir,
+        window_size,
+        safe_stop=lambda: supervisor.safe_stop("safe_stop", SELF_HEAL_ESCALATION),
+    )
 
     p2_monitor = _build_p2_monitor(
         fit_window_count=p2_fit_window_count,
@@ -605,6 +672,7 @@ def main() -> None:
     )
 
     def _on_healthy_frame(frame) -> None:
+        supervisor.on_frame(frame)  # safety first: watchdog + dry-run
         recent_frames.append(frame)
         p2_monitor.on_frame(frame)
 
@@ -640,6 +708,12 @@ def main() -> None:
             f"{sampler.frame_count} recorded frames from {replay_path}, looping -- "
             "values are recorded measurements, not live sensors"
         )
+    status = supervisor.last_status
+    relay_kind = "PHYSICAL" if status and status.hardware else "in-memory (no relay driven)"
+    print(
+        f"[edge] relay: {relay_kind}, OFF at startup; remote start/stop on "
+        f"{relay_listener.topic} (D041)"
+    )
     real_channels = sorted(ch for ch in CHANNELS if channel_specs[ch].kind == "real")
     alternates = sorted(ch for ch in CHANNELS if channel_specs[ch].kind == "alternate")
     fake_channels = sorted(ch for ch in CHANNELS if channel_specs[ch].kind == "fake")
@@ -662,6 +736,9 @@ def main() -> None:
     try:
         runtime.run(should_continue=lambda: running["go"], sleep=time.sleep)
     finally:
+        supervisor.stop()  # relay OFF and announced while the publisher is still up
+        relay_listener.stop()
+        actuation_publisher.stop()
         runtime.stop()
         command_listener.stop()
         decision_publisher.stop()
