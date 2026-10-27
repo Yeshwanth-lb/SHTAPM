@@ -6,7 +6,7 @@
 // page reload.
 import { useEffect, type ReactNode } from "react";
 
-import { navigate } from "../../app/router";
+import { navigate, rememberReturnPath } from "../../app/router";
 import { useAuth } from "./AuthContext";
 
 export interface RequireAuthProps {
@@ -19,7 +19,10 @@ export function RequireAuth({ children, redirectTo = "/login" }: RequireAuthProp
   const { isAuthenticated, isRestoring } = useAuth();
 
   useEffect(() => {
-    if (!isRestoring && !isAuthenticated) navigate(redirectTo);
+    if (!isRestoring && !isAuthenticated) {
+      rememberReturnPath(); // come back here after signing in (P5-12)
+      navigate(redirectTo);
+    }
   }, [isAuthenticated, isRestoring, redirectTo]);
 
   if (isRestoring) return <div data-testid="auth-restoring" />;

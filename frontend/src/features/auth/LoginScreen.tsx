@@ -6,7 +6,7 @@
 // specific — being "helpful" here would leak which accounts exist.
 import { useEffect, useState, type FormEvent } from "react";
 
-import { navigate } from "../../app/router";
+import { navigate, peekReturnPath, takeReturnPath } from "../../app/router";
 import { GlassTile } from "../../components/aurora/GlassTile";
 import { apiBase, describeRequestFailure, isApiError } from "../../lib/api";
 import { useAuth } from "./AuthContext";
@@ -18,10 +18,11 @@ export function LoginScreen() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [returnTo] = useState<string | null>(() => peekReturnPath());
 
   // Already signed in (or just restored a session): skip the form.
   useEffect(() => {
-    if (!isRestoring && isAuthenticated) navigate("/");
+    if (!isRestoring && isAuthenticated) navigate(takeReturnPath() ?? "/");
   }, [isAuthenticated, isRestoring]);
 
   async function onSubmit(event: FormEvent) {
@@ -29,8 +30,9 @@ export function LoginScreen() {
     setBusy(true);
     setError(null);
     try {
+      // Navigation happens in the effect above once the session is adopted --
+      // one place, so the return path (P5-12) is consumed exactly once.
       await signIn(email, password);
-      navigate("/");
     } catch (err: unknown) {
       if (isApiError(err)) {
         setError(err.status === 401 ? "Invalid email or password." : err.message);
@@ -53,6 +55,12 @@ export function LoginScreen() {
           <h1 className="t-h1">SHTAPM</h1>
           <p className="t-label">Self-Healing Trust-Aware Pump Monitoring</p>
         </div>
+
+        {returnTo && (
+          <p className="login__notice" role="status" data-testid="login-return-notice">
+            You were signed out. Sign in to return to <span className="mono">{returnTo}</span>.
+          </p>
+        )}
 
         <form onSubmit={onSubmit} className="login__form" noValidate>
           <label className="login__field">

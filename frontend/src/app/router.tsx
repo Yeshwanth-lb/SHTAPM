@@ -34,3 +34,40 @@ export function useRoute(): { path: string; navigate: (to: string) => void } {
   const go = useCallback((to: string) => navigate(to), []);
   return { path, navigate: go };
 }
+
+// Return route (AC10 P5-12): the auth guard remembers where a signed-out user
+// was, and the login screen sends them back there. Only in-app hash paths are
+// accepted, so this can never redirect off-site.
+const RETURN_KEY = "shtapm.returnTo";
+
+function validReturn(path: string | null): string | null {
+  return path && path.startsWith("/") && !path.startsWith("//") && path !== "/login" ? path : null;
+}
+
+export function rememberReturnPath(path: string = currentPath()): void {
+  const valid = validReturn(path);
+  if (!valid || valid === "/") return;
+  try {
+    window.sessionStorage.setItem(RETURN_KEY, valid);
+  } catch {
+    /* storage unavailable: the user lands on the overview instead */
+  }
+}
+
+export function peekReturnPath(): string | null {
+  try {
+    return validReturn(window.sessionStorage.getItem(RETURN_KEY));
+  } catch {
+    return null;
+  }
+}
+
+export function takeReturnPath(): string | null {
+  const path = peekReturnPath();
+  try {
+    window.sessionStorage.removeItem(RETURN_KEY);
+  } catch {
+    /* nothing to clear */
+  }
+  return path;
+}
