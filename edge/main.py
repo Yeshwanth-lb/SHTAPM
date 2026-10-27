@@ -149,6 +149,7 @@ import os
 import signal
 import time
 from collections import deque
+from collections.abc import Mapping
 from typing import TYPE_CHECKING
 
 from app.schemas.command import MAX_DURATION_S
@@ -156,6 +157,7 @@ from app.schemas.contracts import CHANNELS
 
 from edge.acquisition.command_listener import CommandListener
 from edge.acquisition.mqtt_publisher import ResilientTelemetryPublisher
+from edge.acquisition.replay import ReplaySampler, load_replay_frames
 from edge.acquisition.runtime import AcquisitionRuntime
 from edge.acquisition.sampler import Sampler
 from edge.anomaly.attribution import AttributionEngine
@@ -279,6 +281,39 @@ _DEFAULT_CHANNEL_SPECS: dict[str, DriverSpec] = {
 }
 
 
+EDGE_SOURCES = ("sensors", "replay")
+
+
+def _edge_source(env: Mapping[str, str] | None = None) -> tuple[str, str | None]:
+    """``EDGE_SOURCE`` (default ``sensors``) and, for ``replay``, the required
+    ``FALLBACK_REPLAY_PATH`` (D040). Bad values fail at boot, naming the
+    variable."""
+    env = os.environ if env is None else env
+    source = env.get("EDGE_SOURCE", "sensors")
+    if source not in EDGE_SOURCES:
+        raise RuntimeError(f"EDGE_SOURCE={source!r} must be one of {EDGE_SOURCES}")
+    if source == "sensors":
+        return source, None
+    path = env.get("FALLBACK_REPLAY_PATH")
+    if not path:
+        raise RuntimeError("EDGE_SOURCE=replay requires FALLBACK_REPLAY_PATH (see .env.example)")
+    return source, path
+
+
+def _env_number(name: str, default: str, cast: type, env: Mapping[str, str] | None = None):
+    """A numeric env var with a default; a malformed value fails at boot with
+    an error naming the variable (TRD §02.7, AC10 P1-4), not a bare
+    ``could not convert string to float``."""
+    env = os.environ if env is None else env
+    raw = env.get(name, default)
+    try:
+        return cast(raw)
+    except ValueError:
+        raise RuntimeError(
+            f"{name}={raw!r} is not a valid {cast.__name__} (see .env.example)"
+        ) from None
+
+
 def _required_env_int(name: str) -> int:
     """Read a required integer env var — raises with a clear message if
     unset, per TRD §02.7's "missing var → clear boot error naming it"
@@ -287,7 +322,7 @@ def _required_env_int(name: str) -> int:
     value = os.environ.get(name)
     if value is None:
         raise RuntimeError(f"{name} is required (see .env.example) — no default is invented")
-    return int(value)
+    return _env_number(name, value, int)
 
 
 def _vibration_bands(baseline: P2Baseline | None, window: int) -> StateBands:
@@ -523,9 +558,9 @@ def _log_raw_values(outcome: WindowOutcome, raw: RawChannelValues) -> None:
 
 def main() -> None:
     device_id = os.environ.get("DEVICE_ID", "pump-01")
-    rate_hz = float(os.environ.get("SAMPLE_RATE_HZ", "1"))
+    rate_hz = _env_number("SAMPLE_RATE_HZ", "1", float)
     host = os.environ.get("EDGE_MQTT_HOST", "localhost")
-    port = int(os.environ.get("EDGE_MQTT_PORT", "1883"))
+    port = _env_number("EDGE_MQTT_PORT", "1883", int)
     model_dir = os.environ.get("MODEL_DIR", "./models")
     # A persisted clean baseline (D031) replaces live warm-up fitting. Only
     # without one is P2_FIT_WINDOW_COUNT needed -- and then still required,
@@ -539,9 +574,13 @@ def main() -> None:
     # on top of _DEFAULT_CHANNEL_SPECS; unset env = today's bench state,
     # unchanged) and construct the actual SensorDriver instances.
     channel_specs = resolve_channel_specs_from_env(_DEFAULT_CHANNEL_SPECS)
-    drivers = build_drivers(channel_specs)
-
-    sampler = Sampler(device_id=device_id, drivers=drivers)
+    # Recorded-session fallback (D040): EDGE_SOURCE=replay serves a recorded
+    # telemetry file through the identical live path instead of the sensors.
+    source, replay_path = _edge_source()
+    if source == "replay":
+        sampler = ReplaySampler(device_id=device_id, frames=load_replay_frames(replay_path))
+    else:
+        sampler = Sampler(device_id=device_id, drivers=build_drivers(channel_specs))
     publisher = ResilientTelemetryPublisher(device_id=device_id, rate_hz=rate_hz)
     publisher.start(host, port)
     # Separate object, separate MQTT connection -- see module docstring's
@@ -552,7 +591,7 @@ def main() -> None:
     # The twin consumes windows in D029's fixed clean-baseline scale, which is
     # NOT the per-window min-max space LiveP2Monitor's windows use. Keep the raw
     # frames so the self-heal runtime can build its own correctly-scaled window.
-    window_size = int(os.environ.get("WINDOW_SIZE", "30"))
+    window_size = _env_number("WINDOW_SIZE", "30", int)
     recent_frames: deque = deque(maxlen=window_size)
     self_heal = _load_self_heal(model_dir, window_size)
 
@@ -595,6 +634,12 @@ def main() -> None:
     signal.signal(signal.SIGINT, _stop)
     signal.signal(signal.SIGTERM, _stop)
 
+    if source == "replay":
+        print(
+            f"[edge] SOURCE = RECORDED SESSION (fallback profile, D040): replaying "
+            f"{sampler.frame_count} recorded frames from {replay_path}, looping -- "
+            "values are recorded measurements, not live sensors"
+        )
     real_channels = sorted(ch for ch in CHANNELS if channel_specs[ch].kind == "real")
     alternates = sorted(ch for ch in CHANNELS if channel_specs[ch].kind == "alternate")
     fake_channels = sorted(ch for ch in CHANNELS if channel_specs[ch].kind == "fake")
