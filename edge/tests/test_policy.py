@@ -371,3 +371,17 @@ def test_multiple_calls_independent():
     assert flags2["temperature"] is True
     # First result's channel-of-interest unaffected by the second call.
     assert flags1["pressure"] is True
+
+
+# --- Ties (D037): the common, tied baseline value is not a tail ------------
+
+
+def test_value_tied_with_whole_baseline_not_flagged():
+    """A quantised near-constant channel gives every baseline window the same
+    variance; the right-continuous rank put that value at percentile 1.0 (top
+    tail). Mid-rank places it at 0.5."""
+    policy = SeverityThresholdFlagPolicy(tail_fraction=0.1)
+    policy.fit([_window({ch: _flat(0.0) for ch in CHANNELS}) for _ in range(20)])
+    window = _window({ch: _flat(0.0) for ch in CHANNELS})
+    flags = dict(policy.flags(window, AnomalyResult(flag=True, severity=0.95)))
+    assert not any(flags.values())

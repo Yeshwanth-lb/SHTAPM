@@ -170,9 +170,19 @@ class ConsistencyProvider:
             # Aggregate into a single RMS score for the window
             rms_z = np.sqrt(np.mean(z**2))
 
-            # Empirical CDF: rank this window's rms_z in the training distribution
-            rank = int(np.searchsorted(self._train_rms_z_sorted[ch], rms_z, side="right"))
-            severity = rank / len(self._train_rms_z_sorted[ch])
+            # Empirical CDF with MID-RANK for ties (D037): rank this window's
+            # rms_z in the training distribution, counting equal training values
+            # as half. A quantised, near-constant channel (the INA219's idle
+            # current: 0 A or a few 0.00015 A steps) produces many identical
+            # rms_z values; the right-continuous rank counted every tie as "at
+            # least as deviant" and gave the most common, perfectly normal window
+            # a severity near 1. Measured on the 7.2 h idle capture, mid-rank
+            # raised idle ``current``'s clean trust from 0.64 to 0.69. For
+            # continuous values (no ties) mid-rank equals the old rank.
+            train = self._train_rms_z_sorted[ch]
+            below = int(np.searchsorted(train, rms_z, side="left"))
+            at_most = int(np.searchsorted(train, rms_z, side="right"))
+            severity = (below + at_most) / (2 * len(train))
 
             # Invert to get consistency: high when severity is low (consistent)
             self._c[ch] = 1.0 - severity

@@ -268,7 +268,8 @@ def test_channel_agreement_interval_uses_original_counts():
 
 def test_channel_agreement_interval_is_a_real_interval_across_all_seeds():
     """Verified directly: all 5 seeds under baseline_policy produce the
-    known real mismatch (3 opportunities, 0 matches) -- the interval must
+    known real mismatch (2 opportunities, 0 matches; 3 before D037's
+    mid-rank ``c``) -- the interval must
     be a real, non-None interval for every one of them, at the approved
     95% confidence level."""
     report = build_seed_repetition_report()
@@ -277,7 +278,7 @@ def test_channel_agreement_interval_is_a_real_interval_across_all_seeds():
             interval = result.channel_agreement_interval
             assert interval is not None
             assert interval.numerator == 0
-            assert interval.denominator == 3
+            assert interval.denominator == 2
             assert interval.confidence_level == 0.95
             assert interval.lower_bound == 0.0
             assert interval.upper_bound > 0.0

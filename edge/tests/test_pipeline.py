@@ -9,6 +9,7 @@ any P2 acceptance gate.
 
 from collections.abc import Mapping
 
+import pytest
 from app.schemas.build import build_telemetry
 from app.schemas.contracts import CHANNELS, Attribution
 
@@ -225,16 +226,19 @@ def test_pipeline_calls_record_window_on_c_provider():
     # Before processing, c should be at initial 0.5
     assert c.evaluate("temperature") == 0.5
 
-    # Create pipeline with real c provider
+    # Create pipeline with real c provider, counting record_window calls.
+    # (Not "c != 0.5": a window identical to every training window has
+    # mid-rank severity 0.5, so a correctly updated c can legitimately be 0.5.)
+    calls = []
+    original = c.record_window
+    c.record_window = lambda window: (calls.append(window), original(window))[1]
     pipe = _pipeline(window_size=4, c=c)
 
     # Process a stream
     _ = pipe.process(_stream(4))
 
-    # After processing, c should have been updated (no longer 0.5)
-    # It will be 1.0 or some value based on the test stream matching training
+    assert len(calls) == 1, "c provider was not updated by pipeline"
     temp_c = c.evaluate("temperature")
-    assert temp_c != 0.5, "c provider was not updated by pipeline"
     assert 0.0 <= temp_c <= 1.0
 
 
@@ -311,7 +315,7 @@ def test_pipeline_c_h_k_wiring_together():
     outcomes = pipe.process(_stream(6))
 
     # Verify all three were updated
-    assert c.evaluate("temperature") != 0.5, "c not updated"
+    assert c.evaluate("temperature") == pytest.approx(0.5), "c: identical windows -> mid-rank"
     assert h.evaluate("temperature") == 1.0, "h should stay 1.0 when not flagged"
     assert k.evaluate("current") != 0.5, "k not updated"
 

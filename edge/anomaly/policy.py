@@ -170,8 +170,14 @@ class SeverityThresholdFlagPolicy:
             current_var = _window_channel_variance(window, ch)
             train_sorted = self._train_variance_sorted[ch]
             n = len(train_sorted)
-            # Empirical CDF: fraction of baseline windows with variance <= current_var.
-            rank = bisect.bisect_right(train_sorted, current_var)
-            percentile = rank / n
+            # Empirical CDF with MID-RANK for ties (D037): equal baseline
+            # variances count as half. A quantised near-constant channel has
+            # many identical window variances; right-continuous ranking put
+            # the most common, normal value in the top tail and flagged it
+            # whenever the window-level detector fired. Unchanged when the
+            # baseline has no ties.
+            below = bisect.bisect_left(train_sorted, current_var)
+            at_most = bisect.bisect_right(train_sorted, current_var)
+            percentile = (below + at_most) / (2 * n)
             out[ch] = percentile <= self.tail_fraction or percentile >= (1.0 - self.tail_fraction)
         return out

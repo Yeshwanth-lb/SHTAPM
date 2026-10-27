@@ -411,3 +411,31 @@ def test_state_persists_across_record_window_calls():
         assert isinstance(c_second[ch], float)
         assert isinstance(c_third[ch], float)
         assert all(0.0 <= v <= 1.0 for v in [c_first[ch], c_second[ch], c_third[ch]])
+
+
+# ---------------------------------------------------------------------------
+# 13. Ties (D037): a window equal to many training windows ranks mid-way
+# ---------------------------------------------------------------------------
+
+
+def test_window_tied_with_every_training_window_is_neutral():
+    """A quantised idle channel yields identical windows; the most common,
+    perfectly normal window must not rank as maximally deviant."""
+    p = ConsistencyProvider()
+    p.fit([_constant_window(0.0) for _ in range(20)])
+    p.record_window(_constant_window(0.0))
+    assert p.evaluate("current") == pytest.approx(0.5)
+
+
+def test_continuous_ranks_unchanged_by_mid_rank():
+    """Without ties mid-rank equals the right-continuous rank."""
+    p = ConsistencyProvider()
+    training = [_normal_window(10.0, 1.0, seed=i) for i in range(40)]
+    p.fit(training)
+    p.record_window(_normal_window(10.0, 1.0, seed=999))
+    train = p._train_rms_z_sorted["current"]
+    samples = np.array(_normal_window(10.0, 1.0, seed=999).features["current"])
+    z = (samples - p._train_mean["current"]) / (p._train_std["current"] + 1e-8)
+    rms_z = np.sqrt(np.mean(z**2))
+    right = np.searchsorted(train, rms_z, side="right") / len(train)
+    assert p.evaluate("current") == pytest.approx(1.0 - right)

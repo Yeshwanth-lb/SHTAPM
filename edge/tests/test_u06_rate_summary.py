@@ -84,13 +84,14 @@ def _episode(transitions, **overrides) -> EpisodeRecord:
 
 
 def test_known_hand_computed_counts_on_baseline_policy_clean_scenario():
-    """BaselinePolicy requests reduce_weight on every step of this clean
-    scenario (persistent "suspicious" trust banding in a short, cold-start
+    """BaselinePolicy requests reduce_weight on 6 of the 9 steps of this
+    clean scenario ("suspicious" trust banding in a short, cold-start
     episode -- see this increment's own sanity check), always overridden by
     the fallback gate to "continue" since BaselinePolicy is unvalidated.
     safety_status stays "nominal" throughout (no channel ever tracked as
-    malicious). Hand-verified: 9 steps, all nominal, all reduce_weight
-    requests -> false_isolation is 9/9. This is a faithful consequence of
+    malicious). 9 steps, all nominal, 6 reduce_weight requests ->
+    false_isolation is 6/9 (9/9 before D037: mid-rank ties in ``c`` keep
+    three cold-start steps out of the Suspicious band). This is a faithful consequence of
     axis (i)'s own proxy definition on this specific scenario, not a
     real-world false-isolation claim -- see module docstring."""
     record = run_baseline_policy_episode(SCENARIO_CLEAN_DEGRADATION)
@@ -98,8 +99,8 @@ def test_known_hand_computed_counts_on_baseline_policy_clean_scenario():
 
     assert summary.step_count == 9
     assert summary.false_isolation_denominator == 9
-    assert summary.false_isolation_numerator == 9
-    assert summary.false_isolation_rate == 1.0
+    assert summary.false_isolation_numerator == 6
+    assert summary.false_isolation_rate == 6 / 9
     assert summary.missed_fault_denominator == 0
     assert summary.missed_fault_numerator == 0
     assert summary.missed_fault_rate is None

@@ -207,9 +207,10 @@ def test_every_result_carries_all_six_confidence_interval_fields():
 
 
 def test_known_constant_spoof_channel_agreement_interval_is_a_real_interval():
-    """Verified real, already-observed mismatch case: 3 opportunities, 0
+    """Verified real, already-observed mismatch case: 2 opportunities, 0
     matches -- must produce a real (non-None) interval, not None, since
-    there WAS an opportunity."""
+    there WAS an opportunity. (3 opportunities before D037's mid-rank ``c``:
+    one cold-start step no longer reaches the Suspicious band.)"""
     report = build_diagnostic_report()
     result = next(
         r
@@ -220,7 +221,7 @@ def test_known_constant_spoof_channel_agreement_interval_is_a_real_interval():
     interval = result.channel_agreement_interval
     assert interval is not None
     assert interval.numerator == 0
-    assert interval.denominator == 3
+    assert interval.denominator == 2
     assert interval.rate == 0.0
     assert interval.confidence_level == 0.95
     assert interval.lower_bound == 0.0
