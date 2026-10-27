@@ -307,3 +307,33 @@ def test_operating_state_k_rejects_unknown_channels():
 
     with pytest.raises(ValueError):
         OperatingStateCorrelationProvider().evaluate("flow")
+
+
+def test_calibration_ignores_coast_down_windows_around_switch_off():
+    """D038: after a switch-off the motor coasts -- current is 0 but vibration
+    stays at running level for a few samples. Windows whose current MEDIAN is
+    idle but that still contain running samples must not inflate idle_max."""
+    from edge.anomaly.operating_state_rule import calibrate_vibration_bands
+
+    cur, vib = [], []
+    for _ in range(20):  # on/off cycles: 30 s on, 5 s coast, 60 s idle
+        cur += [0.8] * 30 + [0.0001] * 65
+        vib += [0.6] * 30 + [0.6] * 5 + [0.1] * 60
+    bands = calibrate_vibration_bands([(cur, vib)], window=N)
+    assert bands.idle_max == pytest.approx(1.5 * 0.1)
+    assert bands.classify(0.39) != IDLE  # a running window at 0.39 g is not "idle"
+
+
+def test_band_coverage_reports_drift_outside_the_learned_bands():
+    """D038: bands learned from one idle level misjudge later idle data that
+    drifted above them; matching data is fully covered."""
+    from edge.anomaly.operating_state_rule import StateBands, band_coverage
+
+    bands = StateBands(idle_max=0.15, running_min=0.5)
+    cur = [0.0001] * 60 + [0.8] * 60
+    same = [0.1] * 60 + [0.6] * 60
+    drifted = [0.18] * 60 + [0.6] * 60
+    assert band_coverage([(cur, same)], bands, window=N) == (1.0, 31, 1.0, 31)
+    idle_ok, _, run_ok, _ = band_coverage([(cur, drifted)], bands, window=N)
+    assert idle_ok == 0.0 and run_ok == 1.0
+    assert band_coverage([([0.0001] * 40, [0.1] * 40)], bands, window=N)[2] is None

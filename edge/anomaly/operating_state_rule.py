@@ -110,6 +110,16 @@ TRANSDUCER_LIMITS = {"current": 3.2, "vibration": 6.24}
 # reference: vibration's idle band is learned from baseline windows where
 # current says idle, and its running band from windows where current says
 # running when the baseline has enough of them.
+#
+# STEADY WINDOWS ONLY (D038). A window counts as idle (running) evidence only if
+# EVERY current sample in it is idle (running), not just its median. Around a
+# switch-off the motor coasts: current has stopped but the shaft still spins,
+# so median-idle windows near transitions carry running-level vibration. On the
+# 2026-10-27 70-min cycling capture (33 on/off cycles) those windows inflated
+# idle_max to 0.39 g (steady idle ~0.11 g) and the band gap to 0.39-0.47 g;
+# running windows at 0.39 g and every switch-on then read as a physics
+# violation (1.4% false attack windows, 2 false isolations). Steady windows:
+# idle_max 0.19 g, 0.10% false attack windows, no false isolation.
 IDLE_MARGIN = 1.5  # idle_max = margin x the idle medians' 99.9th percentile
 RUNNING_FACTOR = 3.0  # running_min without running data = factor x that percentile
 MIN_RUNNING_WINDOWS = 60
@@ -121,24 +131,36 @@ def _percentile(values: Sequence[float], q: float) -> float:
     return ordered[min(len(ordered) - 1, int(q * len(ordered)))]
 
 
+def _steady_window_medians(
+    segments: Sequence[tuple[Sequence[float], Sequence[float]]],
+    window: int,
+    current_bands: StateBands,
+) -> tuple[list[float], list[float]]:
+    """Vibration window medians of windows whose current is idle (running) in
+    EVERY sample (see STEADY WINDOWS ONLY above): (idle, running)."""
+    idle_medians: list[float] = []
+    running_medians: list[float] = []
+    for current, vibration in segments:
+        for end in range(window, len(current) + 1):
+            cur = current[end - window : end]
+            vib = statistics.median(vibration[end - window : end])
+            if max(cur) <= current_bands.idle_max:
+                idle_medians.append(vib)
+            elif min(cur) >= current_bands.running_min:
+                running_medians.append(vib)
+    return idle_medians, running_medians
+
+
 def calibrate_vibration_bands(
     segments: Sequence[tuple[Sequence[float], Sequence[float]]],
     window: int,
     current_bands: StateBands = BENCH_CURRENT_BANDS,
 ) -> StateBands:
-    """Learn vibration bands from clean baseline (current, vibration) series.
+    """Learn vibration bands from clean baseline (current, vibration) series,
+    using only windows whose current is idle (running) in every sample.
 
     Returns the bench defaults if the baseline holds no current-idle window."""
-    idle_medians: list[float] = []
-    running_medians: list[float] = []
-    for current, vibration in segments:
-        for end in range(window, len(current) + 1):
-            state = current_bands.classify(statistics.median(current[end - window : end]))
-            vib = statistics.median(vibration[end - window : end])
-            if state == IDLE:
-                idle_medians.append(vib)
-            elif state == RUNNING:
-                running_medians.append(vib)
+    idle_medians, running_medians = _steady_window_medians(segments, window, current_bands)
     if not idle_medians:
         return BENCH_VIBRATION_BANDS
     idle_p999 = _percentile(idle_medians, 0.999)
@@ -148,6 +170,24 @@ def calibrate_vibration_bands(
     else:
         running_min = RUNNING_FACTOR * idle_p999
     return StateBands(idle_max=idle_max, running_min=max(running_min, GAP_FACTOR * idle_max))
+
+
+def band_coverage(
+    segments: Sequence[tuple[Sequence[float], Sequence[float]]],
+    bands: StateBands,
+    window: int,
+    current_bands: StateBands = BENCH_CURRENT_BANDS,
+) -> tuple[float | None, int, float | None, int]:
+    """How well learned vibration ``bands`` describe OTHER clean data (D038):
+    the fraction of steady current-idle windows that vibration also calls idle,
+    and of steady current-running windows it calls running, with their counts
+    (fraction None when there is no such window). A low fraction means the
+    baseline did not cover these conditions (e.g. idle vibration that drifted
+    above the learned limit), and the rule will miss attacks there."""
+    idle, running = _steady_window_medians(segments, window, current_bands)
+    idle_ok = sum(bands.classify(v) == IDLE for v in idle) / len(idle) if idle else None
+    run_ok = sum(bands.classify(v) == RUNNING for v in running) / len(running) if running else None
+    return idle_ok, len(idle), run_ok, len(running)
 
 
 class OperatingStateRule:
