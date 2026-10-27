@@ -3332,3 +3332,46 @@ does not authorize any wiring or actuation.
   D031) and "safety state is not published to the backend" (D041).
 - **Still NULL, by design:** ``health_state``, ``failure_eta`` (no prognosis
   model on pump data, D017) and ``rl_action`` (no RL policy, U06).
+
+### D043 — APPROVED (user decision 1A): device condition rollup; D018's 60 s rule kept
+- **Date:** 2026-10-27
+- **Decision:** ``devices.health_state`` is computed by ``ConditionRollup``
+  (``backend/app/services/condition.py``) as CONDITION MONITORING, never a
+  prognosis: critical on a latched autonomous Safe Pump-Stop, attacks in a
+  majority (5) of the last 10 decisions, or an isolated channel under a fresh
+  attack; warning on an isolated channel or faults/attacks in a majority of
+  the last 10; otherwise healthy. Written only on change. The dashboard's
+  Ambient Health Field follows it (``AmbientHealth``, 5 s poll) and the
+  devices page explains it. ``decisions.health_state``/``failure_eta`` stay
+  NULL (no remaining-life model on pump data, D017).
+- **Why:** Doc05 §05.3 asks for exactly this rollup "as a presentation-state
+  derivation ... no new safety logic"; the project lead offered (A) live
+  condition state or (B) nothing live, and the user chose (A). The 5-of-10
+  majority keeps one noisy window (~10% of clean windows flag by construction,
+  D037) from flashing the dashboard; it is smoothing, not a threshold anything
+  acts on.
+- **Also decided by the user (decision 2): keep D018 pt.3** -- a channel still
+  isolated after 60 s of substitution escalates to Safe Pump-Stop when a relay
+  is wired. Demo attacks are therefore kept under ~40 s (isolation follows
+  ~15 s after onset).
+- **Not done (still open):** the ``system_health`` WebSocket frame (Doc05
+  §05.8); the field is polled over REST instead.
+
+### D044 — APPROVED (user decision 3): MQ-135 driver ready behind configuration; volts, not ppm
+- **Date:** 2026-10-27
+- **Decision:** ``edge/drivers/mq135.py`` reads the MQ-135 analog output
+  through a resistor divider on MCP3008 CH3 (CH0-2 are the ADXL335) and
+  reports the AO voltage in volts. It is registered as gas's real driver but
+  needs ``SHTAPM_GAS_DIVIDER_RATIO`` (no default; bench 10k/13k = 1.769):
+  ``SHTAPM_DRIVER_GAS=real`` without it fails at boot naming the variable, so
+  gas cannot be flipped real by mistake (the existing tests keep that
+  guarantee). Rail readings (0 or 1023 counts) are unhealthy, never values.
+  Backend: ``SHTAPM_GAS_SENSOR=mq135`` makes the seed register part MQ-135,
+  unit V, and shows the documented interface; default unchanged (no part,
+  "ppm" placeholder). Gas stays simulated on the bench.
+- **Why:** the user wants gas to keep running simulated now and work "just
+  replacing the simulated values" once wired. The pipeline is scale-free
+  (baseline-relative), so the switch is configuration plus a new baseline.
+  Volts, not ppm: ppm needs a per-sensor clean-air calibration (R0) and a gas
+  curve never performed here, and gas is a labelled proxy (PRD §12.1) that
+  must not be over-claimed.

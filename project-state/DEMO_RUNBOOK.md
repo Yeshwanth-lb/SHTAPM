@@ -207,6 +207,23 @@ Start/stop: admin, Pump relay panel on the device page. Every autonomous stop
 confirmation box. Dry-run protection needs `SHTAPM_DRY_RUN_CURRENT_A`, measured
 on the real pump running dry.
 
+## Gas sensor: switching from simulated to the real MQ-135 (D044)
+
+The driver is ready; until then gas is simulated. When the sensor is wired
+(Pi powered off): MQ-135 VCC -> 5 V, GND -> GND, AO -> 10 kOhm -> MCP3008 pin 4
+(CH3), and a 13 kOhm resistor from MCP3008 pin 4 to GND. Never connect AO
+straight to the MCP3008: it can exceed 3.3 V. Then on the Pi:
+```
+sed -i '/^SHTAPM_DRIVER_GAS=/d;/^SHTAPM_GAS_DIVIDER_RATIO=/d' ~/SHTAPM/.env
+echo 'SHTAPM_DRIVER_GAS=real' >> ~/SHTAPM/.env
+echo 'SHTAPM_GAS_DIVIDER_RATIO=1.769' >> ~/SHTAPM/.env
+sudo systemctl restart shtapm
+```
+Let it warm up (the MQ-135 heater needs minutes to settle), then record a new
+baseline (section above): the old one learned simulated gas. On the laptop set
+`SHTAPM_GAS_SENSOR=mq135` in `.env` and run `python -m app.core.seed` from
+`backend/` so the dashboard labels gas as MQ-135, in volts.
+
 ## Fallback: recorded-session profile (D040)
 
 If a sensor or the motor misbehaves, the Pi can replay a recorded clean
