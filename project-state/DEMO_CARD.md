@@ -20,6 +20,15 @@ use current, the channel the bench evaluation tested.
 After each attack: **Acknowledge**, wait for **NORMAL** (about 1-2 min), then
 the next one. Finish with **Ledger -> Verify**.
 
+**Safe Pump-Stop may follow an attack -- by design (D018).** If current stays
+isolated for more than 60 s (40 s attack + recovery), the caution shows
+**PUMP TRIP** and the relay latches off (simulated relay: the motor itself is not
+switched). Say: "the twin covers for the sensor, but not forever -- after 60 s
+the system stops the pump safely and waits for a human." To continue: Pump relay
+panel -> tick "I checked why it stopped and it is safe to restart" -> **Restart
+after safe stop**. Seen on the bench 2026-10-28 23:21 (isolated 23:20, trip
+23:21:06).
+
 ## What to say
 
 1. "Every sensor gets a live trust score. Watch current."
