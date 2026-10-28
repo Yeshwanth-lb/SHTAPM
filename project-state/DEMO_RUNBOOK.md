@@ -10,6 +10,27 @@ backup.
 `telemetry_count` climbing (4 → 24), and the dashboard returned HTTP 200 on
 port 5173. Path A still needs rehearsing on the Pi.
 
+## Presentation day: checklist
+
+The baseline is learned on this bench, so bring it unchanged:
+
+- [ ] Same motor with the ADXL taped exactly as recorded (do not re-tape),
+      same phone charger and cut cable, joint taped (a loose joint makes the
+      motor stutter for 1-5 s when plugged in).
+- [ ] Same phone hotspot for the Pi and the laptop (not venue Wi-Fi).
+- [ ] Bench on a solid table. Room temperature, humidity and pressure do not
+      matter: each window is min-max normalised before the detector sees it.
+
+T-20 min:
+
+1. Power the Pi with the motor unplugged and the bench still (ADXL zero
+   point). Laptop: backend + dashboard (Path A, steps 5-9).
+2. Pre-flight check (section below); every line OK or WARN.
+3. Motor off 3 min, then on/off twice: master caution stays **NORMAL**, trust
+   bars stay grey/green.
+4. Anything wrong and no time to fix it: switch to the recorded-session
+   profile (Fallback section) and say so when presenting.
+
 ---
 
 ## Path A: real Pi, real sensors
@@ -38,8 +59,11 @@ port 5173. Path A still needs rehearsing on the Pi.
 
 ### On the laptop
 
-5. Laptop and Pi must be on the **same Wi-Fi or hotspot**.
-6. In `.env`, set `MQTT_HOST=` to the Pi IP from step 4. Change only that line.
+5. Laptop and Pi must be on the **same Wi-Fi or hotspot**. Use the phone
+   hotspot the bench was set up on: venue/college Wi-Fi often stops devices
+   from seeing each other, and then `shtapm-pi.local` is not found.
+6. In `.env`, `MQTT_HOST=shtapm-pi.local` (the hostname survives IP changes).
+   Only if the name does not resolve, set it to the Pi IP from step 4.
 7. Terminal 1, the backend:
    ```
    cd backend
@@ -60,8 +84,8 @@ port 5173. Path A still needs rehearsing on the Pi.
    Do NOT run `npm install`. `node_modules` already exists, and install
    rewrites the protected `package-lock.json`.
 
-**During the demo, keep the motor OFF** while showing the live dashboard,
-until the motor EMI fix is in (see T3).
+The motor can run during the demo: the DHT22's 2-3 s dropouts when it starts
+are held at the last good value and never reported as dead (D045, D047; see T3).
 
 ---
 
@@ -142,12 +166,23 @@ setup. On the Pi, with `shtapm` running:
    ```
    Idle: vibration ~0.05-0.15 g, current ~0 A. Running: vibration ~0.5 g or
    more, current ~0.7-1.1 A.
-2. Record at least 60 minutes (70 recommended) while cycling the motor:
-   2 minutes off, then 30 s on / 90 s off. Do not touch the bench or the ADXL
-   mounting. `setsid nohup` keeps it running if SSH drops:
+2. Tape the ADXL with turns all the way around the motor (on 2026-10-28 it
+   shifted on the first motor run and 70 minutes were lost). Restart `shtapm`
+   with the motor off and the bench still: the ADXL takes its zero point from
+   its first read. Then record **45 minutes** (35-70 min gave the same hold-out
+   quality on the 2026-10-27 capture) while switching the motor at random:
+   every ON and OFF at least 30 s, no ON over 2 min, and at least two 1-2 min
+   ON runs in the last 10 minutes (the hold-out). Do not touch the bench or
+   the ADXL mounting. `setsid nohup` keeps it running if SSH drops:
    ```
    cd ~/SHTAPM
    setsid nohup timeout 4200 mosquitto_sub -h localhost -t 'shtapm/pump-01/telemetry' > cycling_baseline.jsonl 2>/dev/null &
+   ```
+   At minute 5 and minute 35, check it: idle vibration must stay near
+   0.1 g and running stand clearly above it (any `PROBLEM:` line -> stop and
+   fix). Stop at minute 45 with `pkill -f mosquitto_sub`.
+   ```
+   .venv/bin/python scripts/capture_check.py cycling_baseline.jsonl
    ```
 3. Build it. Keep the previous baseline. The hold-out check should show
    "channels isolated at the end: none" and no WARNING about clean trust
@@ -230,9 +265,10 @@ If a sensor or the motor misbehaves, the Pi can replay a recorded clean
 session through the identical pipeline: same dashboard, same injection,
 detection, trust, self-heal and ledger. Only the numbers come from a file.
 
-Arm it once (any clean telemetry capture works; the 70-min baseline is ideal):
+Arm it once (any clean telemetry capture works; the baseline recording is
+ideal, here the 2026-10-28 `final_baseline.jsonl`):
 ```
-mkdir -p ~/SHTAPM/data/replay && cp ~/SHTAPM/cycling_baseline.jsonl ~/SHTAPM/data/replay/session.jsonl
+mkdir -p ~/SHTAPM/data/replay && cp ~/SHTAPM/final_baseline.jsonl ~/SHTAPM/data/replay/session.jsonl
 ```
 Switch to it, and back:
 ```
@@ -307,7 +343,7 @@ systemd unit (it exists only on the Pi). From PowerShell on the laptop:
 mkdir pi-backup
 scp -r shtapm@shtapm-pi.local:~/SHTAPM/models pi-backup/
 scp shtapm@shtapm-pi.local:~/SHTAPM/.env pi-backup/pi.env
-scp shtapm@shtapm-pi.local:~/SHTAPM/cycling_baseline.jsonl pi-backup/
+scp shtapm@shtapm-pi.local:~/SHTAPM/final_baseline.jsonl pi-backup/
 ssh shtapm@shtapm-pi.local "systemctl cat shtapm; ls /etc/systemd/system/shtapm.service.d 2>/dev/null" > pi-backup/shtapm.service.txt
 ```
 
@@ -357,8 +393,10 @@ libraries, so it reports working sensors as failed.
 **T3. The dashboard goes silent when the motor runs**
 Motor sparking interference knocks out the DHT22, and a frame only publishes
 when all 6 channels are healthy.
-- For the demo: keep the motor OFF during the live dashboard part.
-- Fix: a 0.1 µF ceramic capacitor across the motor terminals; twist the motor
+- Fixed in software (D045, D047): a failed read holds the last good value and
+  a channel is reported dead only after 5 s of failure. The 2026-10-28 70-min
+  recording had two dropouts (~8 s and ~3 s), both recovered, no frame gaps.
+- If it ever stays dead: a 0.1 µF ceramic capacitor across the motor terminals; twist the motor
   wires; keep the DHT22 wire away from the motor; power the motor from a
   separate supply.
 
