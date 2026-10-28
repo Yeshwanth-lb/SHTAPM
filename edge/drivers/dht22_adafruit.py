@@ -76,6 +76,7 @@ window always attempts a genuinely fresh measurement, same as before.
 
 from __future__ import annotations
 
+import logging
 import time
 from collections.abc import Callable
 
@@ -88,7 +89,18 @@ except ImportError:
 
 from edge.drivers.base import RawRead, Sensor, SensorDriver
 
+log = logging.getLogger("shtapm.edge.dht22")
+
 _DEFAULT_PIN = 17
+
+# STUCK-READER RESET (D051). Measured on the bench 2026-10-28: the edge's
+# DHT22 reader failed continuously from 16:12 and never recovered on its own,
+# while a fresh process read the same sensor 5/5 at once -- the long-lived
+# adafruit_dht device object was stuck, not the sensor. After this long of
+# continuous failure the device object is released and re-created, the same
+# thing a service restart did by hand. Short blips (2-3 s at motor start)
+# recover on their own and never reach it.
+_RESET_AFTER_S = 10.0
 
 # DHT22 datasheet / adafruit_dht's own internal throttle: minimum seconds
 # between physical measurements -- already relied on by this module's own
@@ -130,6 +142,7 @@ class DHT22AdafruitReader:
         self._monotonic = monotonic
         self._last_attempt_at: float | None = None
         self._last_error: OSError | None = None
+        self._failing_since: float | None = None
 
     def _ensure_device(self) -> object:
         if adafruit_dht is None or board is None:
@@ -159,10 +172,28 @@ class DHT22AdafruitReader:
     def _record_success(self) -> None:
         self._last_attempt_at = self._monotonic()
         self._last_error = None
+        self._failing_since = None
 
     def _record_failure(self, error: OSError) -> None:
-        self._last_attempt_at = self._monotonic()
+        now = self._monotonic()
+        self._last_attempt_at = now
         self._last_error = error
+        if self._failing_since is None:
+            self._failing_since = now
+        elif now - self._failing_since >= _RESET_AFTER_S and self._device is not None:
+            self._reset_device(now - self._failing_since)
+            self._failing_since = now  # next reset only after another full period
+
+    def _reset_device(self, failing_for: float) -> None:
+        """Release the stuck device object; the next read re-creates it."""
+        device, self._device = self._device, None
+        try:
+            device.exit()  # type: ignore[attr-defined]  # frees the GPIO line
+        except Exception:
+            pass
+        log.warning(
+            "DHT22 (GPIO%d) failing for %.0f s: re-opening the sensor", self._pin, failing_for
+        )
 
     def _sibling_value(self, device: object, attribute: str) -> float | None:
         """Best-effort read of the OTHER channel from the same measurement.

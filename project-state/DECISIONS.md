@@ -3499,3 +3499,16 @@ does not authorize any wiring or actuation.
   the recovery. At the next isolation (15:49) the stale episode gave 17
   minutes of "substitution" and Safe Pump-Stop tripped one second after the
   isolation -- the wrong action for an attack the twin was covering.
+
+### D051 — APPROVED (bug fix): a DHT22 reader stuck for 10 s re-opens the sensor
+- **Date:** 2026-10-28
+- **Decision:** ``DHT22AdafruitReader`` releases (``exit()``) and re-creates
+  its ``adafruit_dht`` device object after 10 s of continuous failure, then at
+  most once per further 10 s. Short dropouts (2-3 s at motor start, D047) never
+  reach it.
+- **Why (bench, 2026-10-28):** during the rehearsal the edge's DHT22 failed
+  continuously from 16:12 (SENSOR DEAD, last value held, D045). The kernel
+  module reload did nothing (the edge does not use the IIO driver); with the
+  service stopped, a fresh process read the sensor 5/5 at once. The sensor
+  was fine; the long-lived device object was stuck, and only a service
+  restart cleared it. The driver now does that itself.

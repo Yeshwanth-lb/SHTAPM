@@ -552,3 +552,39 @@ def test_driver_reports_unhealthy_instead_of_publishing_the_zero_pair(patched_li
     temperature_reading = DHT22AdafruitTemperatureDriver().read()
     assert temperature_reading.healthy is False
     assert temperature_reading.value is None
+
+
+def test_a_reader_stuck_for_10s_reopens_the_sensor(patched_library, fake_device):
+    """D051 (bench 2026-10-28): the edge's reader failed from 16:12 onward
+    while a fresh process read the sensor at once. After 10 s of continuous
+    failure the device object is released (exit) and re-created."""
+    exits = []
+    fake_device.exit = lambda: exits.append(True)
+    fake_device._script = [RuntimeError("timed out")] * 7 + [47.0]
+    clock = _FakeMonotonic()
+    reader = DHT22AdafruitReader(monotonic=clock)
+    for _ in range(6):  # 0, 2.1, ... 10.5 s: still the same object until 10 s
+        with pytest.raises(OSError):
+            reader.read_humidity_percent()
+        clock.now += 2.1
+    assert exits == [True] and patched_library.call_count == 1
+    with pytest.raises(OSError):
+        reader.read_humidity_percent()  # re-created device, still failing once
+    clock.now += 2.1
+    assert reader.read_humidity_percent() == pytest.approx(47.0)
+    assert patched_library.call_count == 2
+
+
+def test_short_blips_never_reopen_the_sensor(patched_library, fake_device):
+    """A 2-3 s dropout at motor start recovers on its own (D047)."""
+    fake_device.exit = lambda: pytest.fail("must not reopen on a short blip")
+    fake_device._script = [RuntimeError("timed out"), RuntimeError("timed out"), 47.0] * 3
+    clock = _FakeMonotonic()
+    reader = DHT22AdafruitReader(monotonic=clock)
+    for _ in range(9):
+        try:
+            reader.read_humidity_percent()
+        except OSError:
+            pass
+        clock.now += 2.1
+    assert patched_library.call_count == 1
