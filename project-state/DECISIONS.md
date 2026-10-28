@@ -3443,3 +3443,21 @@ does not authorize any wiring or actuation.
   switch-on made it miss reads for 2-3 s twice in 20 s of running, recovering
   on its own each time. Reporting every blip would flash SENSOR DEAD and chain
   a ledger event pair on every motor start -- noise that buries a real failure.
+
+### D048 — APPROVED: the Control Room shows a FAULT only when it holds 5 of the last 10 decisions
+- **Date:** 2026-10-28
+- **Decision:** the Control Room displays the newest decision, except that a
+  ``fault`` attribution is shown (master caution FAULT, annunciator, instrument
+  tag) only when faults or attacks were attributed in at least 5 of the last
+  10 decisions (``displayedDecision``, ``features/controlroom/model.ts``) --
+  the rule the backend condition rollup already applies (D043). An attack is
+  never delayed. Trust, isolation, VIRTUAL and SENSOR DEAD are unchanged.
+  Presentation only: the edge, the ledger and the stored decisions are
+  untouched.
+- **Why (measured 2026-10-28):** the final baseline's clean hold-out (493
+  decisions, live composition) attributed ``fault`` in 69 (14%), and the raw
+  lamp changed state 63 times in 8 minutes -- a flickering caution an operator
+  learns to ignore (ISA-18.2 treats it as a chattering alarm; on-delay is
+  its standard remedy). With this rule: 5 FAULT episodes of 6-16 s, mostly
+  around motor switching (32 of the 69 raw faults had a motor switch inside
+  their window). The same data had 0 false attacks, so attacks need no delay.

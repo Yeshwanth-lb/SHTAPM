@@ -21,6 +21,8 @@ import {
   cautionState,
   channelState,
   describeEvent,
+  displayedDecision,
+  FAULT_WINDOW,
   type LedgerEvent,
 } from "../features/controlroom/model";
 import {
@@ -54,8 +56,8 @@ export function ControlRoomPage() {
 
   const { latest, history, connection } = useDeviceTelemetry(DEVICE_ID, accessToken);
   const { channels } = useChannels(DEVICE_ID, accessToken);
-  const decisions = useDecisions(DEVICE_ID, accessToken, 1, LIVE_DECISION_POLL_MS);
-  const decision = decisions.data?.[0] ?? null;
+  const decisions = useDecisions(DEVICE_ID, accessToken, FAULT_WINDOW, LIVE_DECISION_POLL_MS);
+  const decision = displayedDecision(decisions.data);
   const sensorHealth = useApiResource<SensorHealthOut>(
     () => getSensorHealth(DEVICE_ID, accessToken!),
     [accessToken],

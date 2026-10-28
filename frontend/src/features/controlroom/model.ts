@@ -49,6 +49,25 @@ const CAUSE_TEXT: Record<string, string> = {
   watchdog: "watchdog",
 };
 
+// FAULT on-delay (D048), the same rule as the backend condition rollup (D043,
+// backend/app/services/condition.py): a fault is shown only when faults or
+// attacks were attributed in MAJORITY of the last WINDOW decisions. On clean
+// held-out bench data (2026-10-28) the raw label lit FAULT in 14% of decisions
+// and changed 63 times in 8 minutes; with this rule, 5 episodes. An attack is
+// never delayed (0 false attacks on the same data).
+export const FAULT_WINDOW = 10;
+export const FAULT_MAJORITY = 5;
+
+/** The decision to display, from the recent ones (newest first). */
+export function displayedDecision(recent: DecisionOut[] | null | undefined): DecisionOut | null {
+  const latest = recent?.[0] ?? null;
+  if (!latest || latest.attribution !== "fault") return latest;
+  const abnormal = recent!
+    .slice(0, FAULT_WINDOW)
+    .filter((d) => d.attribution === "fault" || d.attribution === "attack").length;
+  return abnormal >= FAULT_MAJORITY ? latest : { ...latest, attribution: "none", reason: null };
+}
+
 export interface CautionState {
   severity: Severity;
   lamp: string;

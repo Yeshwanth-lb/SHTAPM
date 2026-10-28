@@ -8,6 +8,7 @@ import {
   channelsInReason,
   channelState,
   describeEvent,
+  displayedDecision,
   formatEventTime,
   parseServerTime,
   trustTone,
@@ -91,6 +92,41 @@ describe("master caution", () => {
     const stopped = { ...RELAY_TRIP, cause: "command" as const, latched: false };
     const s = cautionState({ decision: decision(), stale: {}, relay: stopped, streamOpen: true });
     expect(s.severity).toBe("normal");
+  });
+});
+
+describe("fault on-delay (D048)", () => {
+  const fault = decision({ attribution: "fault", reason: "vibration: anomaly" });
+  const clean = decision();
+
+  it("hides a fault seen in fewer than 5 of the last 10 decisions", () => {
+    const shown = displayedDecision([fault, fault, clean, fault, clean, fault, clean, clean]);
+    expect([shown?.attribution, shown?.reason]).toEqual(["none", null]);
+    expect(cautionState({ decision: shown, stale: {}, relay: null, streamOpen: true }).lamp).toBe(
+      "NORMAL",
+    );
+  });
+
+  it("shows a fault once it holds the majority", () => {
+    const recent = [fault, fault, clean, fault, fault, fault, clean, clean, clean, clean];
+    expect(displayedDecision(recent)?.attribution).toBe("fault");
+  });
+
+  it("only counts the last 10 decisions", () => {
+    const recent = [fault, ...Array(9).fill(clean), fault, fault, fault, fault];
+    expect(displayedDecision(recent)?.attribution).toBe("none");
+  });
+
+  it("never delays an attack, and keeps isolation and trust", () => {
+    expect(displayedDecision([ATTACK, clean, clean])).toBe(ATTACK);
+    const isolatedFault = { ...fault, isolated_channels: ["current"], trust_current: 0.3 };
+    const shown = displayedDecision([isolatedFault, clean]);
+    expect([shown?.isolated_channels, shown?.trust_current]).toEqual([["current"], 0.3]);
+  });
+
+  it("passes through an empty list", () => {
+    expect(displayedDecision([])).toBeNull();
+    expect(displayedDecision(null)).toBeNull();
   });
 });
 
