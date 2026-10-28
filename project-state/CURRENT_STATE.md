@@ -25,10 +25,20 @@ INA219, ADXL335 real; gas simulated (placeholder, D044). Motor only, no relay.
 - `scripts/capture_check.py`: checks a recording while it runs.
 - Runbook: presentation-day checklist, 45-min baseline procedure.
 
-## Next
-1. Install the baseline on the Pi from `final_baseline.jsonl` and arm the
-   replay fallback with it (runbook).
-2. Pre-flight; rehearse the adapted demo script twice (AC8).
+## Later on 2026-10-28 (all pushed)
+- Final baseline installed on the Pi; replay fallback armed with it.
+- Rehearsal found and fixed: D049 running band too tight (spoof missed),
+  D050 stale 60 s clock (false Safe Pump-Stop), D051 stuck DHT22 reader.
+- Bench-rehearsed and working: spoof current->0 (motor on) ATTACK, bias +0.8
+  (motor off) ATTACK, stuck current FAULT, 60 s Safe Pump-Stop, ledger verify.
+  Spike/drift on the live injector are in-state shifts: not shown (DEMO_CARD).
+- D048 FAULT on-delay, NO DATA after 10 s, D052 premium UI on every page +
+  sensor detail drawer, D053 alerts producer + acknowledge.
+
+## Next (presentation 2026-10-30)
+1. User's pending UI change requests (2026-10-29).
+2. Rehearse the backup demo (replay mode) and two full timed runs (AC8).
+3. Optional: show the twin's value on the VIRTUAL tile (needs a wire field).
 
 ---
 
