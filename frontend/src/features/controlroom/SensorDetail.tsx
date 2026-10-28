@@ -44,6 +44,7 @@ const SEVERITY_COLOR = {
 function fmt(v: number | null | undefined, digits = 3): string {
   if (v === null || v === undefined || !Number.isFinite(v)) return "—";
   const abs = Math.abs(v);
+  if (abs < 0.5 * 10 ** -digits) return (0).toFixed(digits); // never "-0.000"
   return abs >= 100 ? v.toFixed(1) : abs >= 1 ? v.toFixed(2) : v.toFixed(digits);
 }
 

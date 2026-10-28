@@ -164,7 +164,6 @@ export function TrendChart({
           strokeWidth="1.6"
           strokeLinejoin="round"
           vectorEffect="non-scaling-stroke"
-          pathLength={1}
         />
         <text x={PAD.left} y={height - 6} className="trend__tick">
           {timeLabel(points[0].ts)}

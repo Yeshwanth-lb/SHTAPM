@@ -107,6 +107,7 @@ function CautionGlyph({ severity }: { severity: Severity }) {
 function formatValue(value: number | null | undefined): string {
   if (value === null || value === undefined || Number.isNaN(value)) return "—";
   const abs = Math.abs(value);
+  if (abs < 0.0005) return (0).toFixed(3); // never show "-0.000"
   return abs >= 100 ? value.toFixed(1) : abs >= 1 ? value.toFixed(2) : value.toFixed(3);
 }
 

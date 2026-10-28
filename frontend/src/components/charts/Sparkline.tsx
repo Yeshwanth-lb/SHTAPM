@@ -79,7 +79,7 @@ export function Sparkline({
     >
       <defs>
         <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={color} stopOpacity="0.28" />
+          <stop offset="0%" stopColor={color} stopOpacity="0.14" />
           <stop offset="100%" stopColor={color} stopOpacity="0" />
         </linearGradient>
       </defs>
@@ -92,7 +92,6 @@ export function Sparkline({
         strokeWidth="1.5"
         strokeLinejoin="round"
         vectorEffect="non-scaling-stroke"
-        pathLength={1}
       />
       {/* Newest point, breathing (Doc04 §04.5): the live edge of the data. */}
       <circle

@@ -37,4 +37,21 @@ describe("useAnimatedNumber (D052)", () => {
     rerender({ v: null });
     expect(result.current).toBeNull();
   });
+
+  it("stays between the old and new value even if a frame time precedes the start", () => {
+    const frames: FrameRequestCallback[] = [];
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((cb) => {
+      frames.push(cb);
+      return frames.length;
+    });
+    vi.spyOn(performance, "now").mockReturnValue(10_000);
+    const { result, rerender } = renderHook(({ v }) => useAnimatedNumber(v, 100), {
+      initialProps: { v: 1 as number | null },
+    });
+    rerender({ v: 2 });
+    act(() => frames.at(-1)?.(5_000)); // 5 s BEFORE the recorded start
+    expect(result.current).toBeGreaterThanOrEqual(1);
+    expect(result.current).toBeLessThanOrEqual(2);
+    vi.restoreAllMocks();
+  });
 });

@@ -603,20 +603,21 @@ body {
   overflow: visible;
 }
 
+.spark {
+  animation: chart-reveal 900ms var(--ease-out) both;
+}
+
 .spark__line {
-  stroke-dasharray: 1;
-  stroke-dashoffset: 0;
-  animation: spark-draw 900ms var(--ease-out) both;
   transition: stroke 300ms var(--ease-out);
 }
 
-.spark__area {
-  animation: fade-in 900ms var(--ease-out) both;
-}
-
-@keyframes spark-draw {
+/* Charts draw in left to right once, when they first appear. */
+@keyframes chart-reveal {
   from {
-    stroke-dashoffset: 1;
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
   }
 }
 
@@ -982,15 +983,12 @@ body {
   opacity: 0.85;
 }
 
-.trend__line {
-  stroke-dasharray: 1;
-  stroke-dashoffset: 0;
-  animation: spark-draw 1s var(--ease-out) both;
-  transition: stroke 300ms var(--ease-out);
+.trend__svg {
+  animation: chart-reveal 1s var(--ease-out) both;
 }
 
-.trend__area {
-  animation: fade-in 1s var(--ease-out) both;
+.trend__line {
+  transition: stroke 300ms var(--ease-out);
 }
 
 .trend__crosshair {
@@ -1189,6 +1187,18 @@ body {
     grid-template-columns: 1fr;
   }
   .login__hero {
+    display: none;
+  }
+}
+
+/* Reduced motion: the breathing ring has no static meaning -- hide it. */
+:root[data-motion="reduce"] .spark__pulse,
+:root[data-motion="off"] .spark__pulse {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spark__pulse {
     display: none;
   }
 }

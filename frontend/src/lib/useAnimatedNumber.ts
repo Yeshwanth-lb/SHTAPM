@@ -31,7 +31,10 @@ export function useAnimatedNumber(target: number | null, durationMs = DURATION_M
     }
     const start = performance.now();
     const step = (now: number) => {
-      const t = Math.min(1, (now - start) / durationMs);
+      // Clamp BOTH ends: a frame timestamp can precede ``start`` (it marks the
+      // frame's beginning), and an unclamped negative t extrapolates the
+      // easing far outside [from, target] -- seen as 3.3e9 g in a capture.
+      const t = Math.max(0, Math.min(1, (now - start) / durationMs));
       const value = t >= 1 ? target : from + (target - from) * easeOutCubic(t);
       fromRef.current = value;
       setShown(value);
