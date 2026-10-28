@@ -511,11 +511,15 @@ def main(argv: list[str] | None = None) -> int:
         evaluate_stream("idle (7.2 h capture)", load_stream(args.idle), 0.1, args.idle_onsets, out)
     if args.cycling.is_file():
         evaluate_stream(
-            "cycling (motor ON/OFF)", load_stream(args.cycling), 0.5, args.cycling_onsets, out
+            f"cycling ({args.cycling.name})",
+            load_stream(args.cycling),
+            0.5,
+            args.cycling_onsets,
+            out,
         )
     if args.running.is_file():
         evaluate_stream(
-            "running (2026-10-26 capture)",
+            f"running ({args.running.name})",
             load_stream(args.running),
             0.35,
             args.running_onsets,
@@ -528,7 +532,7 @@ def main(argv: list[str] | None = None) -> int:
     report(out)
     print(
         "\nNOTE: magnitudes are evaluation fixtures; episodes are real bench data with "
-        "synthetic injections. Running-state coverage is limited to the 19-min cycling capture."
+        "synthetic injections."
     )
     return 0
 

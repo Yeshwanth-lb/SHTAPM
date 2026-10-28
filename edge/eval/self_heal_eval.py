@@ -251,7 +251,7 @@ def main(argv: list[str] | None = None) -> int:
         )
     if args.running.is_file():
         evaluate(
-            "running (2026-10-26 capture)",
+            f"running ({args.running.name})",
             load_stream(args.running),
             0.35,
             args.onsets,
@@ -265,8 +265,8 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     report(out)
     print(
-        "\nNOTE: injected falsifications on real bench data; the twin was trained on 2026-09-18 "
-        "data, so other captures include distribution shift. 1 sample ~ 1.2 s on this bench."
+        "\nNOTE: injected falsifications on real bench data; a capture the twin was not trained "
+        "on (see trained_on in its .json) includes distribution shift. 1 sample ~ 1.2 s."
     )
     return 0
 

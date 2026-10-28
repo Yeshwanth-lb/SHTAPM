@@ -186,7 +186,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.idle.is_file():
         evaluate("idle (7.2 h capture)", load_stream(args.idle), 0.1, args.onsets, 240, 2400, out)
     if args.running.is_file():
-        evaluate("running (2026-10-26 capture)", load_stream(args.running), 0.35, 10, 60, 400, out)
+        evaluate(
+            f"running ({args.running.name})", load_stream(args.running), 0.35, 10, 60, 400, out
+        )
     if not out:
         print("no capture files found", file=sys.stderr)
         return 1

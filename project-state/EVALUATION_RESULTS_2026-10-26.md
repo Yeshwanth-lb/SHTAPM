@@ -259,3 +259,81 @@ separately for physically distinguishable scenarios (cross-state attacks and
 faults) and for in-state ones, and state the limit, rather than a single
 blended number. No in-state rule was added: a 0.6 A threshold rule would
 catch only gross spoofs while adding a new false-alarm source.
+
+---
+
+## 9. Final baseline with the real DHT22 (2026-10-28)
+
+All six channels as they will be demonstrated: DHT22, BMP280, INA219, ADXL335
+real; gas simulated (labelled placeholder, D044). Motor switched at random by
+hand (each ON/OFF >= 30 s, ON <= ~3.5 min). Capture `final_baseline.jsonl`
+(gitignored; a copy is the Pi's replay fallback) + `final_decisions.jsonl`.
+`python scripts/final_eval.py final_baseline.jsonl`, reports in
+`results/final_baseline/`. Nothing tuned.
+
+**A first 70-min recording was discarded.** The ADXL shifted on the first motor
+run (idle read ~2.7 g instead of ~0.05 g, running the same 2.7 g), so the
+motor-state rule could not tell on from off: 21% of clean channel-windows were
+attributed `attack` and the learned bands were nonsense (idle <= 4.1 g).
+`scripts/capture_check.py` now checks a recording at minute 5. The DHT22 lasted
+that whole session with the motor cycling: two dropouts (~8 s, ~3 s), held at
+the last good value (D045), no frame gaps.
+
+**Capture.** 51.4 min, 2609 frames, no gaps over 2 s, 21 motor runs (on 47% of
+the time); idle vibration 0.02-0.10 g, running 0.54-0.69 g per 5-min block;
+one DHT22 dropout of 3 s. Running current ripples: 10-20% of samples in every
+run read ~0.27 A against a 0.69 A median.
+
+**Baseline hold-out** (fit on the first 80%, scored the last 493 clean
+windows; installed on the Pi from this file):
+
+| | value |
+|---|---|
+| windows anomaly-flagged (IF, threshold 0.90) | 98/493 (19.9%) |
+| channel-windows attributed Malicious | 0 on every channel |
+| channels isolated at the end | none |
+| median clean trust | 0.75-0.83 (all >= 0.7, so every channel can be released, D037) |
+| learned vibration bands | idle <= 0.142 g, running >= 0.487 g |
+| band coverage, whole capture | idle 100% of 1055 steady windows, running 90% of 93 |
+
+(The hold-out tail had no fully steady running window, because of the current
+ripple above, so its running coverage is reported over the whole capture.)
+
+**Attribution on this capture** (deployed D034-36 rule, 10 injections per
+scenario on real data):
+
+| | result |
+|---|---|
+| clean control: false `attack` | **0 / 2552 channel-windows (0.0%)**; false `fault` 170 (6.7%) |
+| faults (spike, stuck-at, drift), settled | 24/27 (89%) |
+| cross-state attacks (constant spoof, bias, replay), settled / episode | 27/44 (61%) / 31/44 (70%) |
+| in-state attacks (spoof, bias, stealth) | 0/23 (physical limit, section 8) |
+| ramp FDI | 3/9 (same waveform as a drift fault) |
+
+**Self-heal on this capture** (current twin of D039, NOT trained on this
+capture, so out of sample; 12 onsets each):
+
+| | bias (cross state) | constant spoof (cross state) |
+|---|---|---|
+| isolated | 10/12 | 10/12 |
+| time to isolate, median | 17.5 samples (~21 s) | 15 samples (~18 s) |
+| share of attack served VIRTUAL, median | 52% | 74% |
+| error without healing, median | 0.60 A | 0.57 A |
+| twin error (healed), median | **0.079 A** | **0.12 A** |
+| time to release, median | 38.5 samples | 38.5 samples |
+| clean control | 0 false isolations | |
+
+The twin removes 80-87% of the substitution error out of sample, so it was
+not retrained (retraining on this capture would only make these numbers in
+sample).
+
+**Detector on this capture** (`detector_bench_eval`, running stream): the
+deployed `if_identity` detects every injected fault (60/60) and attack
+(120/120) at its 0.95 threshold, median delay 6 samples, at a 21.8%
+window-level clean flag rate. Window flags alone are not alarms: attribution
+and trust turn them into the 0% false-attack rate above.
+
+Compared with section 8's figures on the 2026-10-27 capture (simulated DHT):
+false attacks on clean data stay at zero and faults improve, while
+cross-state attack attribution is lower (61-70% vs 75-99%) on this shorter
+capture with longer motor runs.

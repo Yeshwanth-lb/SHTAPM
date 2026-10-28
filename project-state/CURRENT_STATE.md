@@ -6,6 +6,32 @@
 
 ---
 
+# ⚠️ CURRENT STATE — 2026-10-28 (read this section first)
+
+Sections below are history; this one wins where they disagree.
+
+## Bench
+All six channels as demonstrated: DHT22 REAL again (D045 hold-last-good + D047
+5 s dead debounce make its 2-3 s motor-start dropouts invisible), BMP280,
+INA219, ADXL335 real; gas simulated (placeholder, D044). Motor only, no relay.
+
+## Landed 2026-10-28 (all pushed)
+- D047 sensor reported dead only after 5 s of continuous failure.
+- Final baseline recorded with the real DHT22 (51 min, random motor switching)
+  and evaluated: EVALUATION_RESULTS_2026-10-26.md section 9. 0% false attacks
+  on clean data, clean trust 0.75-0.83, twin error 0.08-0.12 A out of sample
+  (twin kept, not retrained). A first 70-min recording was discarded (ADXL
+  shifted on the first motor run).
+- `scripts/capture_check.py`: checks a recording while it runs.
+- Runbook: presentation-day checklist, 45-min baseline procedure.
+
+## Next
+1. Install the baseline on the Pi from `final_baseline.jsonl` and arm the
+   replay fallback with it (runbook).
+2. Pre-flight; rehearse the adapted demo script twice (AC8).
+
+---
+
 # ⚠️ CURRENT STATE — 2026-10-27 (read this section first)
 
 Sections below are history; this one wins where they disagree.

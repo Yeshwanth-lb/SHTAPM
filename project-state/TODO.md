@@ -7,6 +7,20 @@
 
 ---
 
+## ⚠️ STATUS AS OF 2026-10-28 — newest first
+
+Changes since 2026-10-27: AC1 DHT22 real again (D045/D047), final baseline
+recorded and evaluated (EVALUATION_RESULTS section 9). Other rows unchanged.
+
+| | criterion | status |
+|---|---|---|
+| AC1 | 6 channels live | 🟡 5 real sensors incl. DHT22; gas placeholder (driver ready, D044) |
+
+Open: [ ] install the final baseline on the Pi · [ ] rehearse twice (AC8) ·
+[ ] relay (optional) · [ ] MQ-135 wiring (optional, D044).
+
+---
+
 ## ⚠️ STATUS AS OF 2026-10-27 — newest first
 
 | | criterion | status |
