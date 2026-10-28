@@ -1,6 +1,7 @@
 // Control-room instruments (D046): master caution, instrument tile,
 // annunciator and event log. Presentation only -- state comes from model.ts.
 import { Sparkline } from "../../components/charts/Sparkline";
+import { useAnimatedNumber } from "../../lib/useAnimatedNumber";
 import type { ChannelPoint } from "../telemetry/useDeviceTelemetry";
 import {
   type AnnunciatorWindow,
@@ -48,7 +49,8 @@ export function MasterCaution({
       data-severity={state.severity}
     >
       <div className="caution__lamp" data-testid="caution-lamp">
-        {state.lamp}
+        <CautionGlyph severity={state.severity} />
+        <span>{state.lamp}</span>
       </div>
       <div className="caution__text">
         <strong data-testid="caution-title">{state.title}</strong>
@@ -69,9 +71,43 @@ export function MasterCaution({
   );
 }
 
+/** Shape carries the state too, never colour alone (Doc04 accessibility). */
+function CautionGlyph({ severity }: { severity: Severity }) {
+  const common = { width: 14, height: 14, viewBox: "0 0 16 16", "aria-hidden": true } as const;
+  if (severity === "alarm")
+    return (
+      <svg {...common} className="caution__glyph">
+        <path d="M8 1.5 15 14H1z" fill="currentColor" />
+        <path d="M8 6v3.6M8 11.4v.6" stroke="var(--caution-glyph-ink)" strokeWidth="1.6" />
+      </svg>
+    );
+  if (severity === "caution" || severity === "virtual")
+    return (
+      <svg {...common} className="caution__glyph">
+        <rect
+          x="2"
+          y="2"
+          width="12"
+          height="12"
+          rx="2"
+          transform="rotate(45 8 8)"
+          fill="currentColor"
+        />
+        <path d="M8 5v3.6M8 10.4v.6" stroke="var(--caution-glyph-ink)" strokeWidth="1.6" />
+      </svg>
+    );
+  return (
+    <svg {...common} className="caution__glyph">
+      <circle cx="8" cy="8" r="5" fill="none" stroke="currentColor" strokeWidth="1.6" />
+      <path d="m5.6 8.2 1.6 1.6 3.2-3.4" fill="none" stroke="currentColor" strokeWidth="1.6" />
+    </svg>
+  );
+}
+
 function formatValue(value: number | null | undefined): string {
   if (value === null || value === undefined || Number.isNaN(value)) return "—";
   const abs = Math.abs(value);
+  if (abs < 0.0005) return (0).toFixed(3); // never show "-0.000"
   return abs >= 100 ? value.toFixed(1) : abs >= 1 ? value.toFixed(2) : value.toFixed(3);
 }
 
@@ -82,6 +118,7 @@ export function Instrument({
   points,
   trust,
   state,
+  onOpen,
 }: {
   channel: string;
   value: number | null;
@@ -89,24 +126,46 @@ export function Instrument({
   points: ChannelPoint[];
   trust: number | null;
   state: ChannelState;
+  /** Opens the sensor detail panel; makes the tile a button (D052). */
+  onOpen?: () => void;
 }) {
   const tone = TONE_CLASS[state.severity];
   const trustSeverity = trustTone(trust);
+  const shownValue = useAnimatedNumber(value);
+  const shownTrust = useAnimatedNumber(trust);
   return (
     <article
-      className={`instrument${tone ? ` instrument--${tone}` : ""}`}
+      className={`instrument${tone ? ` instrument--${tone}` : ""}${onOpen ? " instrument--clickable" : ""}`}
       data-testid={`instrument-${channel}`}
       data-severity={state.severity}
+      role={onOpen ? "button" : undefined}
+      tabIndex={onOpen ? 0 : undefined}
+      aria-label={onOpen ? `${channel}: open details` : undefined}
+      onClick={onOpen}
+      onKeyDown={
+        onOpen
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onOpen();
+              }
+            }
+          : undefined
+      }
     >
       <header className="instrument__head">
         <span className="t-label">{channel}</span>
-        <span className="t-muted mono" style={{ fontSize: 11 }}>
-          {points.length > 0 ? `${points.length} pts` : ""}
-        </span>
+        {onOpen ? (
+          <span className="instrument__open">Details →</span>
+        ) : (
+          <span className="t-muted mono" style={{ fontSize: 11 }}>
+            {points.length > 0 ? `${points.length} pts` : ""}
+          </span>
+        )}
       </header>
       <div className="instrument__value tabular">
         <span className="t-metric" data-testid={`instrument-value-${channel}`}>
-          {formatValue(value)}
+          {formatValue(value === null ? null : shownValue)}
         </span>
         <span className="instrument__unit">{unit}</span>
       </div>
@@ -126,7 +185,9 @@ export function Instrument({
             style={{ width: `${Math.round((trust ?? 0) * 100)}%` }}
           />
         </span>
-        <span className="tabular">{trust === null ? "—" : trust.toFixed(2)}</span>
+        <span className="tabular">
+          {trust === null || shownTrust === null ? "—" : shownTrust.toFixed(2)}
+        </span>
       </div>
       <div className="instrument__tags">
         {state.tags.map((tag) => (

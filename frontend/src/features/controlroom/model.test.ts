@@ -5,12 +5,17 @@ import type { DecisionOut } from "../decisions/useDecisions";
 import {
   annunciatorWindows,
   cautionState,
+  channelEvents,
   channelsInReason,
+  channelStats,
+  channelVerdicts,
   channelState,
   describeEvent,
   displayedDecision,
   formatEventTime,
+  lastSeconds,
   parseServerTime,
+  trustSeries,
   trustTone,
 } from "./model";
 
@@ -203,5 +208,48 @@ describe("event times", () => {
     const now = new Date("2026-10-27T15:05:00Z");
     expect(formatEventTime("2026-10-27T15:00:33", now)).not.toMatch(/Oct/);
     expect(formatEventTime("2026-10-25T15:14:26", now)).toMatch(/Oct/);
+  });
+});
+
+describe("sensor detail helpers (D052)", () => {
+  const pts = (values: number[]) =>
+    values.map((value, i) => ({
+      ts: `2026-10-28T10:00:${String(i * 10).padStart(2, "0")}Z`,
+      value,
+    }));
+
+  it("summarises exactly the samples given", () => {
+    const s = channelStats(pts([1, 2, 3, 4]));
+    expect([s.n, s.now, s.min, s.max, s.mean]).toEqual([4, 4, 1, 4, 2.5]);
+    expect(s.std).toBeCloseTo(Math.sqrt(1.25));
+    expect(channelStats([]).mean).toBeNull();
+  });
+
+  it("keeps only the last N seconds", () => {
+    expect(lastSeconds(pts([1, 2, 3, 4, 5, 6]), 20).map((p) => p.value)).toEqual([4, 5, 6]);
+  });
+
+  it("filters ledger events to one channel, newest first", () => {
+    const ev = (i: number, channel: string) => ({
+      block_index: i,
+      ts: "2026-10-28T10:00:00Z",
+      event_type: "isolate",
+      payload: { channel },
+    });
+    const lines = channelEvents(
+      [ev(1, "current"), ev(2, "vibration"), ev(3, "current")],
+      "current",
+    );
+    expect(lines.map((l) => l.key)).toEqual([3, 1]);
+  });
+
+  it("counts verdicts that name the channel and builds its trust series", () => {
+    const rows = [
+      ATTACK,
+      decision({ attribution: "fault", reason: "current: anomaly", trust_current: 0.6 }),
+      decision({ attribution: "fault", reason: "gas: anomaly" }),
+    ];
+    expect(channelVerdicts(rows, "current")).toEqual({ attack: 1, fault: 1, total: 3 });
+    expect(trustSeries(rows, "current").map((p) => p.value)).toEqual([0.9, 0.6, 0.31]);
   });
 });

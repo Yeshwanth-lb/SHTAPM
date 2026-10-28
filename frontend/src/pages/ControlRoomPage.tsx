@@ -25,6 +25,7 @@ import {
   FAULT_WINDOW,
   type LedgerEvent,
 } from "../features/controlroom/model";
+import { SensorDetail } from "../features/controlroom/SensorDetail";
 import {
   LIVE_DECISION_POLL_MS,
   trustScores,
@@ -67,6 +68,7 @@ export function ControlRoomPage() {
   const receiving =
     connection === "open" && lastFrameAt !== null && now - lastFrameAt < NO_DATA_AFTER_MS;
   const { channels } = useChannels(DEVICE_ID, accessToken);
+  const [openChannel, setOpenChannel] = useState<string | null>(null);
   const decisions = useDecisions(DEVICE_ID, accessToken, FAULT_WINDOW, LIVE_DECISION_POLL_MS);
   const decision = displayedDecision(decisions.data);
   const sensorHealth = useApiResource<SensorHealthOut>(
@@ -129,6 +131,7 @@ export function ControlRoomPage() {
               points={history[channel]}
               trust={scores[channel]}
               state={channelState(channel, decision, stale)}
+              onOpen={() => setOpenChannel(channel)}
             />
           ))}
         </div>
@@ -165,6 +168,18 @@ export function ControlRoomPage() {
           <EventLog lines={lines} />
         )}
       </GlassTile>
+      {openChannel && (
+        <SensorDetail
+          deviceId={DEVICE_ID}
+          accessToken={accessToken}
+          channel={openChannel}
+          unit={units[openChannel] ?? ""}
+          provenance={channels.find((c) => c.channel === openChannel)}
+          state={channelState(openChannel, decision, stale)}
+          trust={scores[openChannel as keyof typeof scores] ?? null}
+          onClose={() => setOpenChannel(null)}
+        />
+      )}
     </div>
   );
 }

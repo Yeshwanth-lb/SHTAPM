@@ -6,6 +6,7 @@
 // specific — being "helpful" here would leak which accounts exist.
 import { useEffect, useState, type FormEvent } from "react";
 
+import { BrandMark } from "../../app/icons";
 import { navigate, peekReturnPath, takeReturnPath } from "../../app/router";
 import { GlassTile } from "../../components/aurora/GlassTile";
 import { apiBase, describeRequestFailure, isApiError } from "../../lib/api";
@@ -50,10 +51,44 @@ export function LoginScreen() {
 
   return (
     <main className="login">
+      <section className="login__hero" aria-hidden="true">
+        <div className="login__hero-mark">
+          <BrandMark size={56} />
+        </div>
+        <h2 className="login__hero-title">
+          Every sensor earns its trust.
+          <br />
+          <span>Every attack leaves physics behind.</span>
+        </h2>
+        <ul className="login__pillars">
+          <li>
+            <span className="login__pillar-dot login__pillar-dot--info" />
+            Live trust score for each of six sensors
+          </li>
+          <li>
+            <span className="login__pillar-dot login__pillar-dot--alarm" />
+            Attack vs fault, decided by the pump&apos;s own physics
+          </li>
+          <li>
+            <span className="login__pillar-dot login__pillar-dot--virtual" />
+            Self-healing digital twin, tamper-evident ledger
+          </li>
+        </ul>
+        <svg className="login__wave" viewBox="0 0 600 120" preserveAspectRatio="none">
+          <path d="M0 80 C 80 40, 140 110, 220 70 S 360 20, 440 64 S 560 100, 600 50" />
+          <path d="M0 96 C 100 70, 160 120, 260 88 S 400 50, 480 82 S 570 110, 600 76" />
+        </svg>
+      </section>
+
       <GlassTile className="login__card">
         <div className="login__brand">
-          <h1 className="t-h1">SHTAPM</h1>
-          <p className="t-label">Self-Healing Trust-Aware Pump Monitoring</p>
+          <span className="login__brand-mark">
+            <BrandMark size={28} />
+          </span>
+          <div>
+            <h1 className="t-h1">SHTAPM</h1>
+            <p className="t-label">Self-Healing Trust-Aware Pump Monitoring</p>
+          </div>
         </div>
 
         {returnTo && (

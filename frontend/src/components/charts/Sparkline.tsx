@@ -7,6 +7,7 @@
 // Renders only what it is given. A flat line means the values really are flat
 // (a placeholder constant looks exactly like that, deliberately); no point is
 // interpolated or smoothed.
+import { useId } from "react";
 
 export interface SparklinePoint {
   ts: string;
@@ -49,6 +50,7 @@ export function Sparkline({
   height = 44,
   label,
 }: SparklineProps) {
+  const gradientId = `spark-fill-${useId().replace(/:/g, "")}`;
   if (points.length === 0) {
     return (
       <div className="spark spark--empty t-muted" data-testid="sparkline-empty">
@@ -59,6 +61,11 @@ export function Sparkline({
 
   const path = buildPath(points, width, height);
   const last = points[points.length - 1];
+  const cursorY = Number(path.split(/[ ,]/).slice(-1)[0]);
+  // Area under the line (D052): the same points, closed to the baseline --
+  // depth for the eye, no extra data.
+  const firstX = path.slice(1).split(",")[0];
+  const area = `${path} L${width - 2},${height} L${firstX},${height} Z`;
 
   return (
     <svg
@@ -70,15 +77,32 @@ export function Sparkline({
       data-testid="sparkline"
       data-points={points.length}
     >
-      <path d={path} fill="none" stroke={color} strokeWidth="1.5" strokeLinejoin="round" />
-      {/* Newest point, gently glowing — §04.5's "breathing" cursor, static here. */}
+      <defs>
+        <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity="0.14" />
+          <stop offset="100%" stopColor={color} stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <path className="spark__area" d={area} fill={`url(#${gradientId})`} stroke="none" />
+      <path
+        className="spark__line"
+        d={path}
+        fill="none"
+        stroke={color}
+        strokeWidth="1.5"
+        strokeLinejoin="round"
+        vectorEffect="non-scaling-stroke"
+      />
+      {/* Newest point, breathing (Doc04 §04.5): the live edge of the data. */}
       <circle
+        className="spark__pulse"
         cx={width - 2}
-        cy={Number(path.split(/[ ,]/).slice(-1)[0])}
-        r="2.5"
+        cy={cursorY}
+        r="5"
         fill={color}
-        data-testid="sparkline-cursor"
-      >
+        aria-hidden="true"
+      />
+      <circle cx={width - 2} cy={cursorY} r="2.5" fill={color} data-testid="sparkline-cursor">
         <title>{`${last.value} at ${last.ts}`}</title>
       </circle>
     </svg>

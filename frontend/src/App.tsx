@@ -22,6 +22,8 @@ import "./styles/fonts.css";
 import "./styles/aurora.css";
 // Industrial HMI theme (D046): redefines the shared tokens; loaded last.
 import "./styles/hmi.css";
+// Premium finish over the HMI (D052): depth, type and state-driven motion.
+import "./styles/premium.css";
 
 /** Route table. Every entry here is a page backed by real API data; anything
  *  not listed renders an honest "not found" rather than an empty shell. */

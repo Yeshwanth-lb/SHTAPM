@@ -10,6 +10,7 @@ import { useAuth } from "../features/auth/AuthContext";
 import { apiGet, type DeviceOut } from "../lib/api";
 import { roleFromToken } from "../lib/token";
 import { useApiResource } from "../lib/useApiResource";
+import { BrandMark, NavIcon } from "./icons";
 import { navigate, useRoute } from "./router";
 import "./shell.css";
 
@@ -41,9 +42,11 @@ function StatusBar({ onSignOut }: { onSignOut: () => void }) {
 
   return (
     <>
-      <span className="hmi-top__title">SHTAPM</span>
-      <span className="hmi-top__item mono">{DEVICE_ID}</span>
-      <span className="hmi-top__item" data-testid="condition">
+      <span className="hmi-top__item mono hmi-top__device">{DEVICE_ID}</span>
+      <span
+        className={`hmi-top__item hmi-condition${condition ? ` hmi-condition--${CONDITION_DOT[condition]}` : ""}`}
+        data-testid="condition"
+      >
         <span className={`hmi-dot${condition ? ` hmi-dot--${CONDITION_DOT[condition]}` : ""}`} />
         {condition ? condition.toUpperCase() : "CONDITION —"}
       </span>
@@ -89,7 +92,13 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="shell">
       <nav className="shell__rail glass" aria-label="Primary">
-        <div className="shell__brand t-label">SHTAPM</div>
+        <div className="shell__brand">
+          <BrandMark />
+          <span className="shell__brand-text">
+            <strong>SHTAPM</strong>
+            <span>Trust-aware pump monitoring</span>
+          </span>
+        </div>
         <ul className="shell__nav">
           {NAV.map((item) => {
             const active = path === item.path;
@@ -103,7 +112,10 @@ export function AppShell({ children }: { children: ReactNode }) {
                   onClick={() => !item.phase && navigate(item.path)}
                   data-testid={`nav-${item.label.toLowerCase().replace(/\s+/g, "-")}`}
                 >
-                  {item.label}
+                  <span className="shell__link-label">
+                    <NavIcon path={item.path} />
+                    {item.label}
+                  </span>
                   {item.phase && <span className="shell__phase">{item.phase}</span>}
                 </button>
               </li>
@@ -116,7 +128,10 @@ export function AppShell({ children }: { children: ReactNode }) {
         <header className="shell__top glass">
           <StatusBar onSignOut={() => void signOut().then(() => navigate("/login"))} />
         </header>
-        <div className="shell__content">{children}</div>
+        {/* Keyed by route: each page enters with the same short rise (D052). */}
+        <div className="shell__content page-enter" key={path}>
+          {children}
+        </div>
       </div>
     </div>
   );
