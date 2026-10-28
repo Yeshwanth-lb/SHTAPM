@@ -166,7 +166,12 @@ def calibrate_vibration_bands(
     idle_p999 = _percentile(idle_medians, 0.999)
     idle_max = IDLE_MARGIN * idle_p999
     if len(running_medians) >= MIN_RUNNING_WINDOWS:
-        running_min = _percentile(running_medians, 0.05)
+        # Midway between the idle band and the baseline's quietest steady
+        # running windows (D049), not AT those windows: running vibration
+        # drifts between sessions. Live on 2026-10-28 it ran at 0.45-0.47 g
+        # against a running_min of 0.487 g (the baseline's p5), so the rule
+        # read "unclear" and missed a full 40 s spoof of current to 0 A.
+        running_min = (idle_max + _percentile(running_medians, 0.05)) / 2
     else:
         running_min = RUNNING_FACTOR * idle_p999
     return StateBands(idle_max=idle_max, running_min=max(running_min, GAP_FACTOR * idle_max))

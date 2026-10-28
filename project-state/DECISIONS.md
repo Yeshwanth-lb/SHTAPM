@@ -3461,3 +3461,27 @@ does not authorize any wiring or actuation.
   its standard remedy). With this rule: 5 FAULT episodes of 6-16 s, mostly
   around motor switching (32 of the 69 raw faults had a motor switch inside
   their window). The same data had 0 false attacks, so attacks need no delay.
+
+### D049 — APPROVED: the vibration running band sits midway between idle and the baseline's quietest running windows
+- **Date:** 2026-10-28
+- **Decision:** with enough steady running windows, ``calibrate_vibration_bands``
+  sets ``running_min = (idle_max + p5 of steady running medians) / 2`` (still
+  at least ``GAP_FACTOR`` x ``idle_max``) instead of the p5 itself. Computed at
+  edge startup from the persisted baseline, so no baseline refit is needed.
+- **Why (measured 2026-10-28, first demo rehearsal):** a constant spoof of
+  current to 0 A for 40 s with the motor running was NOT detected: 0 attack
+  decisions, current never isolated, master caution NORMAL. Live running
+  vibration window medians were 0.45-0.47 g (all running windows that
+  afternoon: median 0.475 g) against ``running_min`` 0.487 g, the p5 of the
+  final baseline's steady running windows (that recording ran at 0.54-0.69 g
+  per 5-minute block). Vibration read UNCLEAR, so the motor-state rule never
+  saw the contradiction. Running vibration drifts between sessions; a band
+  placed at the baseline's own lower edge cannot absorb that.
+- **Evidence (same code, replayed):** today's live session (988 decisions,
+  incl. motor on/off tests): deployed 0 attack decisions during the spoof;
+  D049 31 attack decisions, current isolated in 28, 0 false attacks outside
+  it. Final baseline (bands 0.142 / 0.314 g): hold-out 0 Malicious, no
+  isolation, clean trust 0.75-0.83; attribution clean control 0 false
+  attacks of 2552; cross-state attacks settled 66% (was 61%), episode 73%
+  (was 70%); faults 85% (was 89%). 2026-10-27 capture (bands 0.201 /
+  0.352 g): hold-out 0 Malicious, running coverage 100%.

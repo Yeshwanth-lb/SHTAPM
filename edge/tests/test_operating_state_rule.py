@@ -239,7 +239,19 @@ def test_calibration_uses_running_windows_when_the_baseline_has_them():
     cur = [0.0001] * 100 + [0.8] * n_run
     vib = [0.1] * 100 + [0.6] * n_run
     bands = calibrate_vibration_bands([(cur, vib)], window=N)
-    assert bands.running_min == pytest.approx(0.6)
+    # D049: midway between idle_max (1.5 x 0.1) and the running p5 (0.6)
+    assert bands.running_min == pytest.approx((0.15 + 0.6) / 2)
+    assert bands.classify(0.46) == RUNNING  # running drifted 23% below the baseline
+
+
+def test_relaxed_running_band_still_respects_the_gap():
+    from edge.anomaly.operating_state_rule import MIN_RUNNING_WINDOWS, calibrate_vibration_bands
+
+    n_run = MIN_RUNNING_WINDOWS + N + 10
+    cur = [0.0001] * 100 + [0.8] * n_run
+    vib = [0.1] * 100 + [0.16] * n_run  # running barely above idle
+    bands = calibrate_vibration_bands([(cur, vib)], window=N)
+    assert bands.running_min == pytest.approx(1.2 * 0.15)
 
 
 def test_calibration_without_idle_data_falls_back_to_bench_bands():
