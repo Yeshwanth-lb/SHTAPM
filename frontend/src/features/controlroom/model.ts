@@ -269,3 +269,73 @@ export function formatEventTime(ts: string, now: Date = new Date()): string {
     ? time
     : `${at.toLocaleDateString(undefined, { day: "numeric", month: "short" })} ${time}`;
 }
+
+// ---- Sensor detail panel (D052) --------------------------------------------
+
+export interface ChannelStats {
+  n: number;
+  now: number | null;
+  min: number | null;
+  max: number | null;
+  mean: number | null;
+  std: number | null;
+}
+
+/** Summary of exactly the samples given (population standard deviation). */
+export function channelStats(points: { value: number }[]): ChannelStats {
+  const values = points.map((p) => p.value).filter((v) => Number.isFinite(v));
+  const n = values.length;
+  if (n === 0) return { n: 0, now: null, min: null, max: null, mean: null, std: null };
+  const mean = values.reduce((a, b) => a + b, 0) / n;
+  const variance = values.reduce((a, v) => a + (v - mean) ** 2, 0) / n;
+  return {
+    n,
+    now: values[n - 1],
+    min: Math.min(...values),
+    max: Math.max(...values),
+    mean,
+    std: Math.sqrt(variance),
+  };
+}
+
+/** Points no older than ``seconds`` before the newest one. */
+export function lastSeconds<T extends { ts: string }>(points: T[], seconds: number): T[] {
+  if (points.length === 0) return points;
+  const newest = parseServerTime(points[points.length - 1].ts).getTime();
+  return points.filter((p) => newest - parseServerTime(p.ts).getTime() <= seconds * 1000);
+}
+
+/** Ledger events that concern one channel, newest first. */
+export function channelEvents(events: LedgerEvent[], channel: string): LogLine[] {
+  return events
+    .filter((e) => e.payload?.channel === channel)
+    .sort((a, b) => b.block_index - a.block_index)
+    .map(describeEvent);
+}
+
+/** How many of these decisions labelled ``channel`` an attack / a fault. */
+export function channelVerdicts(
+  decisions: DecisionOut[],
+  channel: string,
+): { attack: number; fault: number; total: number } {
+  let attack = 0;
+  let fault = 0;
+  for (const d of decisions) {
+    if (!channelsInReason(d.reason).has(channel)) continue;
+    if (d.attribution === "attack") attack += 1;
+    else if (d.attribution === "fault") fault += 1;
+  }
+  return { attack, fault, total: decisions.length };
+}
+
+/** Trust history of one channel, oldest first, from decisions (newest first). */
+export function trustSeries(
+  decisions: DecisionOut[],
+  channel: string,
+): { ts: string; value: number }[] {
+  const key = `trust_${channel}` as keyof DecisionOut;
+  return decisions
+    .map((d) => ({ ts: d.ts, value: d[key] }))
+    .filter((p): p is { ts: string; value: number } => typeof p.value === "number")
+    .reverse();
+}

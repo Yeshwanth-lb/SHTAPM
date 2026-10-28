@@ -156,4 +156,18 @@ describe("ControlRoomPage (D046)", () => {
     });
     await waitFor(() => expect(screen.getByTestId("caution-lamp")).toHaveTextContent("NORMAL"));
   });
+
+  it("opens a sensor's detail panel from its instrument and closes it with Escape", async () => {
+    renderPage();
+    const tile = await screen.findByTestId("instrument-current");
+    fireEvent.click(tile);
+    const panel = await screen.findByTestId("sensor-detail");
+    expect(panel).toHaveTextContent("current");
+    expect(screen.getByTestId("sensor-stats")).toHaveTextContent("Std dev");
+    expect(screen.getByTestId("sensor-verdicts")).toHaveTextContent("attack verdicts");
+    fireEvent.click(screen.getByTestId("sensor-range-60"));
+    expect(screen.getByTestId("sensor-range-60")).toHaveAttribute("aria-selected", "true");
+    fireEvent.keyDown(window, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByTestId("sensor-detail")).toBeNull());
+  });
 });
