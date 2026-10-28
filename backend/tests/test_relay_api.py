@@ -301,3 +301,18 @@ def test_injection_commands_still_use_the_advisory_topic(mqtt):
         )
     )
     assert mqtt.published[-1][0] == "shtapm/pump-01/command"
+
+
+def test_a_safe_stop_raises_a_critical_alert_and_a_command_does_not(session_factory):
+    """D053: an autonomous stop is an operator alert; an operator's own stop is not."""
+    from app.models import Alert
+
+    recorder = ActuationLedgerRecorder(session_factory)
+    recorder.record(_status(ts="2026-10-27T10:01:00.000Z", relay="off", cause="command"))
+    recorder.record(
+        _status(ts="2026-10-27T10:02:00.000Z", cause="safe_stop", latched=True, reason="60 s")
+    )
+    with session_factory() as db:
+        alerts = db.query(Alert).all()
+        assert [(a.type.value, a.severity.value) for a in alerts] == [("system", "critical")]
+        assert "Safe Pump-Stop" in alerts[0].message

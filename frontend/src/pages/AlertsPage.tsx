@@ -1,15 +1,17 @@
 // Alerts — GET /api/alerts (api/alerts.py), real rows only.
 //
-// The endpoint exists and works; nothing in the system publishes an alert yet
-// (no producer writes the `alerts` table). So this page will be empty, and the
-// empty state says WHY — an operator must not read "no alerts" as "no faults
-// detected" when nothing is currently capable of detecting one.
+// Alerts are raised by the backend at the moments the ledger records an
+// incident (D053): a trust collapse (typed attack / fault / unexplained by the
+// edge's attribution), a Safe Pump-Stop, a dead sensor. One incident, one
+// alert; recoveries are in the ledger. Each alert can be acknowledged
+// (POST /api/alerts/{id}/ack), which records who and when.
 import { useState } from "react";
 
 import { GlassTile } from "../components/aurora/GlassTile";
 import { StateBlock, StatusPill } from "../components/aurora/StateBlock";
 import { useAuth } from "../features/auth/AuthContext";
-import { apiGet, type AlertOut } from "../lib/api";
+import { formatEventTime } from "../features/controlroom/model";
+import { apiGet, apiPost, describeRequestFailure, type AlertOut } from "../lib/api";
 import { useApiResource } from "../lib/useApiResource";
 import "./pages.css";
 
@@ -29,6 +31,8 @@ export function AlertsPage() {
   const { tokens } = useAuth();
   const accessToken = tokens?.accessToken ?? null;
   const [status, setStatus] = useState<string>("open");
+  const [acking, setAcking] = useState<string | null>(null);
+  const [ackError, setAckError] = useState<string | null>(null);
 
   const alerts = useApiResource<AlertOut[]>(
     () =>
@@ -37,8 +41,21 @@ export function AlertsPage() {
         accessToken!,
       ),
     [accessToken, status],
-    { enabled: accessToken !== null },
+    { enabled: accessToken !== null, pollMs: 5_000 },
   );
+
+  async function acknowledge(id: string) {
+    setAcking(id);
+    setAckError(null);
+    try {
+      await apiPost(`/api/alerts/${encodeURIComponent(id)}/ack`, {}, accessToken!);
+      alerts.refresh();
+    } catch (err) {
+      setAckError(`Could not acknowledge: ${describeRequestFailure(err)}`);
+    } finally {
+      setAcking(null);
+    }
+  }
 
   return (
     <div className="page">
@@ -70,11 +87,18 @@ export function AlertsPage() {
         )}
 
         {alerts.status === "ready" && (alerts.data?.length ?? 0) === 0 && (
-          <StateBlock kind="empty" title="No alerts">
-            This is not the same as no faults. No component in SHTAPM writes to the alerts table yet
-            — anomaly detection currently runs with a null detector that never flags, by design.
-            This page will populate once a real producer exists.
+          <StateBlock kind="empty" title={status === "open" ? "No open alerts" : "No alerts"}>
+            An alert is raised when a sensor&apos;s trust collapses (labelled attack, fault or
+            unexplained), when the pump is stopped automatically, or when a sensor stops answering.
+            Nothing of that kind is {status === "acknowledged" ? "acknowledged" : "waiting"} right
+            now.
           </StateBlock>
+        )}
+
+        {ackError && (
+          <p className="login__error" role="alert">
+            {ackError}
+          </p>
         )}
 
         {(alerts.data?.length ?? 0) > 0 && (
@@ -84,9 +108,8 @@ export function AlertsPage() {
                 <tr>
                   <th>Severity</th>
                   <th>Type</th>
-                  <th>Device</th>
                   <th>Channel</th>
-                  <th>Message</th>
+                  <th>What happened</th>
                   <th>Raised</th>
                   <th>Status</th>
                 </tr>
@@ -97,12 +120,36 @@ export function AlertsPage() {
                     <td>
                       <StatusPill tone={tone(a.severity)}>{a.severity}</StatusPill>
                     </td>
-                    <td>{a.type}</td>
-                    <td className="mono">{a.device_id}</td>
+                    <td>
+                      <span
+                        className={`tag tag--${a.type === "attack" ? "alarm" : a.type === "fault" ? "caution" : "info"}`}
+                      >
+                        {a.type.toUpperCase()}
+                      </span>
+                    </td>
                     <td>{a.channel ?? "—"}</td>
-                    <td>{a.message}</td>
-                    <td className="mono">{a.ts}</td>
-                    <td>{a.acknowledged_at ? "acknowledged" : "open"}</td>
+                    <td>
+                      {a.message}
+                      {a.reason && <div className="t-muted alerts__reason">{a.reason}</div>}
+                    </td>
+                    <td className="mono">{formatEventTime(a.ts)}</td>
+                    <td>
+                      {a.acknowledged_at ? (
+                        <span className="t-muted">
+                          acknowledged {formatEventTime(a.acknowledged_at)}
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          className="toolbar__btn"
+                          disabled={acking === a.id}
+                          onClick={() => void acknowledge(a.id)}
+                          data-testid={`alert-ack-${a.id}`}
+                        >
+                          {acking === a.id ? "Acknowledging…" : "Acknowledge"}
+                        </button>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>

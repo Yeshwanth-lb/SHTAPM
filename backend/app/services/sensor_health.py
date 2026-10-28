@@ -19,7 +19,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.models import Device
+from app.models.enums import AlertSeverity, AlertType
 from app.schemas.decision_diagnostic import DecisionDiagnosticMessage
+from app.services import alerts as alert_service
 from app.services import ledger as ledger_service
 
 log = logging.getLogger("shtapm.services.sensor_health")
@@ -77,6 +79,16 @@ class SensorHealthLedger:
                             event_type=event,
                             payload={"channel": ch, "ts": message.ts},
                         )
+                        if event == EVENT_SENSOR_DEAD:
+                            alert_service.raise_alert(
+                                db,
+                                device_id=device.id,
+                                severity=AlertSeverity.warning,
+                                type=AlertType.fault,
+                                channel=ch,
+                                message=f"{ch} sensor not responding",
+                                reason="holding its last good reading (D045)",
+                            )
             self._stale[message.device_id] = stale
         except Exception:
             log.warning("sensor health ledger write failed", exc_info=False)

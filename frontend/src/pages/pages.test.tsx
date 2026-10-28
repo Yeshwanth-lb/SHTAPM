@@ -64,7 +64,7 @@ describe("AlertsPage", () => {
     vi.spyOn(api, "apiGet").mockResolvedValue([] as never);
     withAuth(<AlertsPage />);
     await waitFor(() => expect(screen.getByTestId("state-empty")).toBeInTheDocument());
-    expect(screen.getByTestId("state-empty")).toHaveTextContent("not the same as no faults");
+    expect(screen.getByTestId("state-empty")).toHaveTextContent("trust collapses");
   });
 
   it("renders a real alert row when one exists", async () => {
@@ -82,8 +82,11 @@ describe("AlertsPage", () => {
         acknowledged_at: null,
       },
     ] as never);
+    const post = vi.spyOn(api, "apiPost").mockResolvedValue({} as never);
     withAuth(<AlertsPage />);
     await waitFor(() => expect(screen.getByTestId("alert-row-a1")).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId("alert-ack-a1"));
+    await waitFor(() => expect(post).toHaveBeenCalledWith("/api/alerts/a1/ack", {}, "acc"));
   });
 });
 

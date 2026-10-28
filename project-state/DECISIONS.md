@@ -3531,3 +3531,16 @@ does not authorize any wiring or actuation.
 - **Verified:** 249 frontend tests; headless screenshots of login, normal,
   attack and drawer states (they caught an easing overshoot to 3.3e9 g, fixed
   with a clamp and a test).
+
+### D053 — APPROVED: the backend raises operator alerts when the ledger records an incident
+- **Date:** 2026-10-28
+- **Decision:** ``app/services/alerts.py`` writes the Doc05 ``alerts`` table at
+  the same edge-triggered moments the ledger already chains: a trust drop
+  (critical; ``attack`` / ``fault`` from the edge's attribution of that channel,
+  ``system`` when unexplained), a Safe Pump-Stop (critical ``system``) and a
+  dead sensor (warning ``fault``). One incident, one alert; recoveries stay in
+  the ledger. The Alerts page shows them with local times and an Acknowledge
+  button (existing ``POST /api/alerts/{id}/ack``).
+- **Why:** the alerts API existed with acknowledgement but had no producer, so
+  the page was always empty and still claimed detection "never flags" -- false
+  since P2. A failed alert write never blocks the ledger write.

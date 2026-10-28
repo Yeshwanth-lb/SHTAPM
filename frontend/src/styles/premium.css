@@ -1202,3 +1202,10 @@ body {
     display: none;
   }
 }
+
+/* ---- Alerts (D053) ------------------------------------------------------- */
+.alerts__reason {
+  margin-top: 3px;
+  font-size: 11.5px;
+  line-height: 1.4;
+}

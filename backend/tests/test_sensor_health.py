@@ -85,3 +85,17 @@ def test_a_dead_sensor_is_a_warning_condition():
     assert rollup.level("pump-01") == HealthState.warning
     rollup.on_decision(_decision(i=1))
     assert rollup.level("pump-01") == HealthState.healthy
+
+
+def test_a_dead_sensor_raises_one_warning_alert(factory):
+    """D053: one alert per death, none for the recovery."""
+    from app.models import Alert
+
+    recorder = SensorHealthLedger(factory)
+    for i, stale in enumerate([[], ["pressure"], ["pressure"], []]):
+        recorder.record(_decision(stale=stale, i=i))
+    with factory() as db:
+        alerts = db.query(Alert).all()
+        assert [(a.type.value, a.severity.value, a.channel) for a in alerts] == [
+            ("fault", "warning", "pressure")
+        ]

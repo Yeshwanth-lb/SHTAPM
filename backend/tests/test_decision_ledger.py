@@ -227,3 +227,39 @@ def test_ledger_failure_never_raises_into_ingestion(session_factory):
 
     recorder = DecisionLedgerRecorder(_Exploding())
     recorder.record(_message(candidates=["current"], trust=0.2))  # must not raise
+
+
+def _alerts(session_factory):
+    from app.models import Alert
+
+    with session_factory() as db:
+        return db.query(Alert).order_by(Alert.ts).all()
+
+
+def test_a_trust_drop_raises_one_alert_typed_by_the_edge_attribution(recorder, session_factory):
+    """D053: the Alerts page had no producer; a trust collapse is one alert."""
+    attack = dict(_NONE_ATTRIBUTION)
+    attack["current"] = ChannelAttribution(
+        attribution=Attribution.attack, reason="physics violation: current says idle"
+    )
+    message = _message(candidates=["current"], trust=0.2, seq=1).model_copy(
+        update={"attribution": attack}
+    )
+    recorder.record(message)
+    recorder.record(message.model_copy(update={"sample_seq": 2}))  # still dropped: no new alert
+
+    alerts = _alerts(session_factory)
+    assert len(alerts) == 1
+    assert (alerts[0].type.value, alerts[0].severity.value, alerts[0].channel) == (
+        "attack",
+        "critical",
+        "current",
+    )
+    assert "Attack on current" in alerts[0].message
+    assert alerts[0].acknowledged_at is None
+
+
+def test_an_unexplained_trust_drop_is_a_system_alert(recorder, session_factory):
+    recorder.record(_message(candidates=["pressure"], trust=0.2, seq=1))
+    (alert,) = _alerts(session_factory)
+    assert alert.type.value == "system" and "pressure" in alert.message

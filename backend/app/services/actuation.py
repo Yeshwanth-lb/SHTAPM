@@ -20,7 +20,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.models import Device
+from app.models.enums import AlertSeverity, AlertType
 from app.schemas.actuation import AUTONOMOUS_CAUSES, ActuationStatus
+from app.services import alerts as alert_service
 from app.services import ledger as ledger_service
 
 log = logging.getLogger("shtapm.services.actuation")
@@ -66,12 +68,22 @@ class ActuationLedgerRecorder:
                 if device is None:
                     log.warning("actuation status for unknown device %s", status.device_id)
                     return
+                event = event_type_for(status)
                 ledger_service.append(
                     db,
                     device_id=device.id,
-                    event_type=event_type_for(status),
+                    event_type=event,
                     payload=status.model_dump(mode="json"),
                 )
+                if event == EVENT_SAFE_STOP:
+                    alert_service.raise_alert(
+                        db,
+                        device_id=device.id,
+                        severity=AlertSeverity.critical,
+                        type=AlertType.system,
+                        message=f"Safe Pump-Stop ({status.cause}): pump stopped automatically",
+                        reason=status.reason,
+                    )
             self._last[status.device_id] = key
         except Exception:
             log.warning("actuation ledger write failed", exc_info=False)

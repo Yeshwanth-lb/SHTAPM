@@ -54,6 +54,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.models import Device
 from app.schemas.decision_diagnostic import DecisionDiagnosticMessage
+from app.services import alerts as alert_service
 from app.services import ledger as ledger_service
 
 log = logging.getLogger("shtapm.decision_ledger")
@@ -138,6 +139,15 @@ class DecisionLedgerRecorder:
                         "anomaly_flag": message.anomaly_flag,
                         "anomaly_severity": message.anomaly_severity,
                     },
+                )
+                verdict = message.attribution.get(channel)
+                alert_service.trust_drop_alert(
+                    db,
+                    device_uuid,
+                    channel,
+                    verdict.attribution.value if verdict else "none",
+                    verdict.reason if verdict else "",
+                    getattr(message.trust, channel, None),
                 )
             for channel in sorted(newly_substituted):
                 self._append(
