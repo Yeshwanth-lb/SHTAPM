@@ -81,7 +81,7 @@ def test_without_degraded_mode_the_old_behaviour_is_unchanged():
 
 def test_health_board_tracks_dead_sensors_and_since_when():
     t = {"now": 0.0}
-    board = ChannelHealthBoard(clock=lambda: t["now"])
+    board = ChannelHealthBoard(clock=lambda: t["now"], dead_after_s=0.0)
     s = _sampler(current=[0.75, OSError("i2c"), OSError("i2c"), 0.76])
     board.update(s.sample_once())
     assert board.stale() == frozenset()
@@ -91,6 +91,30 @@ def test_health_board_tracks_dead_sensors_and_since_when():
     assert board.stale() == frozenset({"current"}) and board.dead_for("current") == 4.0
     board.update(s.sample_once())
     assert board.stale() == frozenset() and board.dead_for("current") is None
+
+
+def test_a_short_blip_is_not_reported_dead():
+    """D047: the DHT22 misses 2-3 s of reads when the motor starts; that must
+    not flash SENSOR DEAD (the value is still held)."""
+    t = {"now": 0.0}
+    board = ChannelHealthBoard(clock=lambda: t["now"])  # default 5 s
+    s = _sampler(humidity=[50.0, OSError("dht"), OSError("dht"), OSError("dht"), 50.2])
+    for second in range(5):
+        t["now"] = float(second)
+        board.update(s.sample_once())
+        assert board.stale() == frozenset()
+
+
+def test_a_sustained_failure_is_reported_after_five_seconds():
+    t = {"now": 0.0}
+    board = ChannelHealthBoard(clock=lambda: t["now"])
+    s = _sampler(humidity=[50.0] + [OSError("dht")] * 10)
+    seen = []
+    for second in range(8):
+        t["now"] = float(second)
+        board.update(s.sample_once())
+        seen.append("humidity" in board.stale())
+    assert seen == [False, False, False, False, False, False, True, True]
 
 
 def test_a_dead_current_sensor_stops_a_running_pump():

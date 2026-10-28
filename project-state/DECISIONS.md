@@ -3430,3 +3430,16 @@ does not authorize any wiring or actuation.
   edge and backend reported.
 - **Supersedes:** Doc04's visual language (palette, glass, aurora field). AC10
   rows tied to it (P6-8 orb budget, P6-1/P6-8 glow fps) become N/A by design.
+
+### D047 — APPROVED: a sensor is reported dead only after 5 s of continuous failure
+- **Date:** 2026-10-28
+- **Decision:** ``ChannelHealthBoard`` reports a channel in ``stale_channels``
+  ("SENSOR DEAD", ``sensor_dead`` ledger event, warning condition) only after
+  it has failed continuously for 5 s (``DEAD_AFTER_S``). The sampler still
+  holds the last good value from the first failed read (D045) -- only the
+  report waits. A dead CURRENT sensor therefore stops a running pump after
+  5 s + the 10 s watchdog.
+- **Why:** measured on the bench 2026-10-28: with the real DHT22 the motor's
+  switch-on made it miss reads for 2-3 s twice in 20 s of running, recovering
+  on its own each time. Reporting every blip would flash SENSOR DEAD and chain
+  a ledger event pair on every motor start -- noise that buries a real failure.
