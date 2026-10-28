@@ -56,6 +56,8 @@ export interface DeviceTelemetryState {
   historyError: string | null;
   /** Frames received over the socket this session (not rows from history). */
   liveFrameCount: number;
+  /** This computer's clock (ms) when the newest live frame arrived; null before any. */
+  lastFrameAt: number | null;
   /** True when the socket was rejected for auth and will NOT be retried. */
   sessionExpired: boolean;
 }
@@ -100,6 +102,7 @@ export function useDeviceTelemetry(
   { window: windowSize = 120 }: UseDeviceTelemetryOptions = {},
 ): DeviceTelemetryState {
   const [latest, setLatest] = useState<TelemetryMessage | null>(null);
+  const [lastFrameAt, setLastFrameAt] = useState<number | null>(null);
   const [history, setHistory] = useState<Record<Channel, ChannelPoint[]>>(emptyHistory);
   const [connection, setConnection] = useState<ConnStatus>("connecting");
   const [historyStatus, setHistoryStatus] = useState<HistoryStatus>("loading");
@@ -211,6 +214,7 @@ export function useDeviceTelemetry(
           sample_seq: frame.sample_seq,
         };
         setLatest(message);
+        setLastFrameAt(Date.now());
         setLiveFrameCount((n) => n + 1);
         setHistory((prev) => appendFrame(prev, message, windowSize));
       };
@@ -254,9 +258,19 @@ export function useDeviceTelemetry(
       historyStatus,
       historyError,
       liveFrameCount,
+      lastFrameAt,
       sessionExpired,
     }),
-    [latest, history, connection, historyStatus, historyError, liveFrameCount, sessionExpired],
+    [
+      latest,
+      history,
+      connection,
+      historyStatus,
+      historyError,
+      liveFrameCount,
+      lastFrameAt,
+      sessionExpired,
+    ],
   );
 }
 

@@ -48,13 +48,24 @@ const DEVICE_ID = import.meta.env.VITE_DEVICE_ID ?? "pump-01";
 const LEDGER_POLL_MS = 3_000;
 const HEALTH_POLL_MS = 5_000;
 const LOG_LINES = 40;
+// No live frame for this long -> NO DATA, even with the socket open (the
+// backend can lose the broker while the dashboard socket stays up). Measured
+// on this computer's clock, so it works without Pi/laptop time sync.
+const NO_DATA_AFTER_MS = 10_000;
 
 export function ControlRoomPage() {
   const { tokens } = useAuth();
   const accessToken = tokens?.accessToken ?? null;
   const enabled = accessToken !== null;
 
-  const { latest, history, connection } = useDeviceTelemetry(DEVICE_ID, accessToken);
+  const { latest, history, connection, lastFrameAt } = useDeviceTelemetry(DEVICE_ID, accessToken);
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), 1_000);
+    return () => window.clearInterval(id);
+  }, []);
+  const receiving =
+    connection === "open" && lastFrameAt !== null && now - lastFrameAt < NO_DATA_AFTER_MS;
   const { channels } = useChannels(DEVICE_ID, accessToken);
   const decisions = useDecisions(DEVICE_ID, accessToken, FAULT_WINDOW, LIVE_DECISION_POLL_MS);
   const decision = displayedDecision(decisions.data);
@@ -83,7 +94,7 @@ export function ControlRoomPage() {
     decision,
     stale,
     relay: relay.data?.status ?? null,
-    streamOpen: connection === "open",
+    streamOpen: receiving,
   });
 
   // Acknowledgement is per alarm: a NEW alarm (different title) flashes again.

@@ -128,8 +128,8 @@ export function cautionState(input: {
     return {
       severity: "caution",
       lamp: "NO DATA",
-      title: "Live stream disconnected",
-      detail: "Reconnecting automatically; values shown are the last received.",
+      title: "No live readings",
+      detail: "Nothing received for 10 s: values shown are the last received, not live.",
     };
   }
   return { severity: "normal", lamp: "NORMAL", title: "All systems normal", detail: "" };

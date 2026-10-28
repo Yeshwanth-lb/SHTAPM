@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AuthProvider } from "../features/auth/AuthContext";
@@ -106,5 +106,54 @@ describe("ControlRoomPage (D046)", () => {
       expect(screen.getByTestId("eventlog")).toHaveTextContent("current isolated"),
     );
     await waitFor(() => expect(screen.getByTestId("transport")).toHaveTextContent("Frames 42"));
+  });
+
+  it("says NO DATA while the socket is open but no reading arrives, NORMAL once one does", async () => {
+    const sockets: OpenSocket[] = [];
+    class OpenSocket extends FakeWebSocket {
+      constructor() {
+        super();
+        sockets.push(this);
+        setTimeout(() => this.onopen?.(), 0);
+      }
+    }
+    vi.stubGlobal("WebSocket", OpenSocket);
+    vi.spyOn(api, "getSensorHealth").mockResolvedValue({ device_id: "pump-01", stale: {} });
+    vi.spyOn(api, "apiGet").mockImplementation((path: string) =>
+      Promise.resolve(
+        (path.includes("/decisions")
+          ? [
+              {
+                ...ATTACK_DECISION,
+                attribution: "none",
+                reason: null,
+                isolated_channels: [],
+                substituted_channels: [],
+                trust_current: 0.9,
+              },
+            ]
+          : []) as never,
+      ),
+    );
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("caution-lamp")).toHaveTextContent("NO DATA"));
+    const frame = {
+      type: "telemetry",
+      device_id: "pump-01",
+      ts: "2026-10-28T10:00:00Z",
+      sample_seq: 1,
+      sensors: {
+        temperature: 27,
+        vibration: 0.02,
+        pressure: 913,
+        humidity: 50,
+        gas: 150,
+        current: 0,
+      },
+    };
+    await act(async () => {
+      sockets.at(-1)?.onmessage?.({ data: JSON.stringify(frame) } as MessageEvent);
+    });
+    await waitFor(() => expect(screen.getByTestId("caution-lamp")).toHaveTextContent("NORMAL"));
   });
 });
