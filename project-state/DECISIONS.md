@@ -3485,3 +3485,17 @@ does not authorize any wiring or actuation.
   attacks of 2552; cross-state attacks settled 66% (was 61%), episode 73%
   (was 70%); faults 85% (was 89%). 2026-10-27 capture (bands 0.201 /
   0.352 g): hold-out 0 Malicious, running coverage 100%.
+
+### D050 — APPROVED (bug fix): a released channel restarts the 60 s substitution clock
+- **Date:** 2026-10-28
+- **Decision:** when the isolation tracker no longer lists a channel, the
+  self-heal runtime ends that channel's substitution episode
+  (``SelfHealOrchestrator.end_episode``); ``edge/main.py`` now calls the
+  runtime every cycle, including when nothing is isolated. D018's rule is
+  unchanged: Safe Pump-Stop after 60 s of continuous substitution.
+- **Why (bench, 2026-10-28):** current was isolated at 15:32 and released
+  after the attack. The episode ended only when the engine itself saw trust
+  >= 0.7, but the engine is only called for isolated channels, so it never saw
+  the recovery. At the next isolation (15:49) the stale episode gave 17
+  minutes of "substitution" and Safe Pump-Stop tripped one second after the
+  isolation -- the wrong action for an attack the twin was covering.

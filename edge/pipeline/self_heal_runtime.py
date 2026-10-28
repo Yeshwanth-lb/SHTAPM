@@ -175,6 +175,8 @@ class SelfHealRuntime:
         """
         target = self._bundle.channel
         if target not in isolated_channels:
+            # Released (or never isolated): reset its 60 s clock (D050).
+            self._orchestrator.end_episode(target)
             return []
 
         window = self._scaled_window(frames)

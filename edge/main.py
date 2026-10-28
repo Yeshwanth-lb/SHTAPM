@@ -531,8 +531,8 @@ def _run_self_heal(
     """
     if self_heal is None or recent_frames is None:
         return []
-    if not tracked.tracked_channels:
-        return []
+    # Called with an empty set too: that is how a release resets the 60 s
+    # substitution clock (D050).
     try:
         reports = self_heal.substitute(
             outcome, frozenset(tracked.tracked_channels), list(recent_frames)

@@ -137,6 +137,14 @@ class SelfHealOrchestrator:
         self._clock = clock
         self._episodes: dict[str, _Episode] = {}
 
+    def end_episode(self, channel: str) -> None:
+        """The channel is no longer isolated: its next isolation starts the
+        60 s substitution clock from zero (D050). The isolation tracker
+        releases a channel on its own, so the caller must report that here --
+        ``process_isolated_channel`` is only called for isolated channels and
+        would otherwise never see the recovery."""
+        self._episodes.pop(channel, None)
+
     def process_isolated_channel(
         self, channel: str, window: Window, raw_value: float, trust: float
     ) -> SelfHealOutcome:

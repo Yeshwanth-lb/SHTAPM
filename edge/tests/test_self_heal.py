@@ -594,3 +594,22 @@ def test_episode_state_stores_no_raw_value():
     episode = orchestrator._episodes["temperature"]
     stored_values = vars(episode).values()
     assert distinctive_raw_value not in stored_values
+
+
+def test_a_released_channel_restarts_the_60s_clock_on_its_next_isolation():
+    """D050 (bench 2026-10-28): current was isolated at 15:32, released by the
+    tracker (so the engine never saw trust recover), then isolated again at
+    15:49 -- and tripped Safe Pump-Stop at once, 17 minutes of 'substitution'
+    having accumulated on the stale episode."""
+    clock = ManualClock()
+    orchestrator, calls = _make_orchestrator(clock=clock)
+    orchestrator.process_isolated_channel("current", _empty_window(), raw_value=0.0, trust=0.2)
+    clock.advance(30.0)
+    orchestrator.end_episode("current")  # the tracker released it
+    clock.advance(17 * 60.0)
+    outcome = orchestrator.process_isolated_channel(
+        "current", _empty_window(), raw_value=0.0, trust=0.2
+    )
+    assert outcome.escalated is False and outcome.substituted is True
+    assert outcome.uncertainty == pytest.approx(0.0)
+    assert calls["n"] == 0

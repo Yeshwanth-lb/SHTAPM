@@ -157,3 +157,13 @@ def test_substitution_never_mutates_the_telemetry_frame():
     frames = _frames(current=0.77)
     runtime.substitute(_outcome(trust=0.1), frozenset({"current"}), frames)
     assert frames[-1].sensors.current == pytest.approx(0.77)
+
+
+def test_a_release_resets_the_substitution_clock():
+    """D050: when the tracker no longer lists the channel, the runtime ends its
+    episode, so the next isolation starts the 60 s clock from zero."""
+    runtime = SelfHealRuntime(_bundle(), window_size=WINDOW_SIZE)
+    runtime.substitute(_outcome(trust=0.1), frozenset({"current"}), _frames())
+    assert "current" in runtime._orchestrator._episodes
+    runtime.substitute(_outcome(trust=0.9), frozenset(), _frames())
+    assert "current" not in runtime._orchestrator._episodes
