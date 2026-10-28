@@ -131,8 +131,8 @@ export function Instrument({
 }) {
   const tone = TONE_CLASS[state.severity];
   const trustSeverity = trustTone(trust);
-  const shownValue = useAnimatedNumber(value);
-  const shownTrust = useAnimatedNumber(trust);
+  const shownValue = useAnimatedNumber(value, undefined, { countUp: true });
+  const shownTrust = useAnimatedNumber(trust, undefined, { countUp: true });
   return (
     <article
       className={`instrument${tone ? ` instrument--${tone}` : ""}${onOpen ? " instrument--clickable" : ""}`}

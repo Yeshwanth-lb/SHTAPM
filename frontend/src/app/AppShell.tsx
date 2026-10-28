@@ -11,6 +11,7 @@ import { apiGet, type DeviceOut } from "../lib/api";
 import { roleFromToken } from "../lib/token";
 import { useApiResource } from "../lib/useApiResource";
 import { BrandMark, NavIcon } from "./icons";
+import { PageBoundary } from "./PageBoundary";
 import { navigate, useRoute } from "./router";
 import "./shell.css";
 
@@ -130,7 +131,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </header>
         {/* Keyed by route: each page enters with the same short rise (D052). */}
         <div className="shell__content page-enter" key={path}>
-          {children}
+          <PageBoundary>{children}</PageBoundary>
         </div>
       </div>
     </div>

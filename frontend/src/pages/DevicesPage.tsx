@@ -9,6 +9,7 @@ import { useAuth } from "../features/auth/AuthContext";
 import { apiGet, type DeviceOut } from "../lib/api";
 import { useApiResource } from "../lib/useApiResource";
 import "./pages.css";
+import { formatEventTime } from "../features/controlroom/model";
 
 function statusTone(status: DeviceOut["status"]) {
   if (status === "online") return "healthy" as const;
@@ -82,7 +83,9 @@ export function DevicesPage() {
                       {/* Condition rollup (D043), not a prognosis. */}
                       <StatusPill tone={healthTone(d.health_state)}>{d.health_state}</StatusPill>
                     </td>
-                    <td className="mono">{d.last_seen_at ?? "never"}</td>
+                    <td className="mono">
+                      {d.last_seen_at ? formatEventTime(d.last_seen_at) : "never"}
+                    </td>
                     <td className="tabular">{d.sample_rate_hz} Hz</td>
                     <td>
                       <button className="link-btn" onClick={() => navigate("/device")}>

@@ -6,13 +6,14 @@
 // exposing it does not need the threshold-editing workflow that was previously
 // blocking this page.
 //
-// The ledger will normally be EMPTY here, because the only producer is a
-// threshold PATCH and the UI does not expose threshold editing. That is stated
-// in the empty state rather than left to look like a fault.
+// Producers (D041-D045, D050): trust drops, isolations, recoveries, scenario
+// injections, relay commands, Safe Pump-Stops, sensor failures. Shown newest
+// first, in local time and operator words (D052); hashes stay one hover away.
 import { useState } from "react";
 
 import { GlassTile } from "../components/aurora/GlassTile";
 import { StateBlock } from "../components/aurora/StateBlock";
+import { describeEvent, formatEventTime } from "../features/controlroom/model";
 import { useAuth } from "../features/auth/AuthContext";
 import { apiBase, apiGet, ApiError } from "../lib/api";
 import { useApiResource } from "../lib/useApiResource";
@@ -35,6 +36,22 @@ interface LedgerBlockOut {
 interface VerifyOut {
   valid: boolean;
   broken_at: number | null;
+}
+
+function LedgerEventCell({ block }: { block: LedgerBlockOut }) {
+  const line = describeEvent(block);
+  return (
+    <span className="ledger-event">
+      <span
+        className={`eventlog__mark${line.severity === "normal" ? "" : ` eventlog__mark--${line.severity}`}`}
+        aria-hidden="true"
+      />
+      <span>
+        {line.text}
+        <span className="mono t-muted ledger-event__type">{block.event_type}</span>
+      </span>
+    </span>
+  );
 }
 
 /** Middle-truncate a hash for display (Doc04 §04.3). Full value on hover. */
@@ -75,7 +92,7 @@ export function LedgerPage() {
     }
   }
 
-  const rows = blocks.data ?? [];
+  const rows = [...(blocks.data ?? [])].sort((a, b) => b.block_index - a.block_index);
 
   return (
     <div className="page">
@@ -95,16 +112,23 @@ export function LedgerPage() {
       </header>
 
       {verify && (
-        <StateBlock
-          kind={verify.valid ? "notice" : "error"}
-          title={verify.valid ? "Chain intact" : "Chain broken"}
+        <div
+          className={`verify-banner${verify.valid ? " verify-banner--ok" : " verify-banner--bad"}`}
+          role="status"
         >
-          <span data-testid="verify-result">
-            {verify.valid
-              ? `All ${rows.length} blocks hash-verify against their predecessors.`
-              : `Verification failed at block ${verify.broken_at}. Every block from there on is untrustworthy.`}
-          </span>
-        </StateBlock>
+          <svg className="verify-banner__icon" viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="12" cy="12" r="10" />
+            {verify.valid ? <path d="m7 12.5 3.2 3.2L17 9" /> : <path d="M8 8l8 8M16 8l-8 8" />}
+          </svg>
+          <div>
+            <strong>{verify.valid ? "Chain intact" : "Chain broken"}</strong>
+            <span data-testid="verify-result">
+              {verify.valid
+                ? `All ${rows.length} blocks hash-verify against their predecessors.`
+                : `Verification failed at block ${verify.broken_at}. Every block from there on is untrustworthy.`}
+            </span>
+          </div>
+        </div>
       )}
       {verifyError && (
         <StateBlock kind="error" title="Could not verify">
@@ -129,12 +153,9 @@ export function LedgerPage() {
         )}
 
         {blocks.status === "ready" && rows.length === 0 && (
-          <StateBlock kind="empty" title="No ledger blocks">
-            The chain is empty because nothing has written to it. Its only producer today is a
-            threshold change, and threshold editing is deliberately not exposed in this UI — it
-            alters safety behaviour and needs a confirmation flow first. Isolation and safe-stop
-            events would also be chained here, but neither is executed: the live edge path is
-            observe-only.
+          <StateBlock kind="empty" title="No ledger blocks yet">
+            Trust drops, isolations, recoveries, test injections, pump commands, Safe Pump-Stops and
+            sensor failures are chained here as they happen.
           </StateBlock>
         )}
 
@@ -144,7 +165,7 @@ export function LedgerPage() {
               <thead>
                 <tr>
                   <th>#</th>
-                  <th>Timestamp</th>
+                  <th>Time</th>
                   <th>Event</th>
                   <th>Payload hash</th>
                   <th>Prev</th>
@@ -155,8 +176,10 @@ export function LedgerPage() {
                 {rows.map((b) => (
                   <tr key={b.block_index} data-testid={`ledger-row-${b.block_index}`}>
                     <td className="tabular">{b.block_index}</td>
-                    <td className="mono">{b.ts}</td>
-                    <td>{b.event_type}</td>
+                    <td className="mono">{formatEventTime(b.ts)}</td>
+                    <td>
+                      <LedgerEventCell block={b} />
+                    </td>
                     <td className="mono" title={b.payload_hash}>
                       {shortHash(b.payload_hash)}
                     </td>

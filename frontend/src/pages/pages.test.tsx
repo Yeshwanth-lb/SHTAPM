@@ -297,7 +297,7 @@ describe("LedgerPage", () => {
     vi.spyOn(api, "apiGet").mockResolvedValue([] as never);
     withAuth(<LedgerPage />);
     await waitFor(() => expect(screen.getByTestId("state-empty")).toBeInTheDocument());
-    expect(screen.getByTestId("state-empty")).toHaveTextContent("threshold change");
+    expect(screen.getByTestId("state-empty")).toHaveTextContent("chained here as they happen");
   });
 
   it("treats 403 as RBAC working, not as an error", async () => {
