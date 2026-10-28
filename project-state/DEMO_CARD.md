@@ -11,10 +11,11 @@ Only that pair is physically linked on this bench.
 |---|---|---|---|---|---|---|
 | 1 | **ON** (30 s first) | Constant spoof | current | 40 | Spoofed value **0** | **ATTACK**: "current says idle, vibration says running"; CURR ATTACK; current ISOLATED + VIRTUAL; trust red |
 | 2 | **OFF** (wait NORMAL) | Bias injection | current | 40 | Offset **0.8** (no minus) | **ATTACK**: "current says running, vibration says idle" |
-| 3 | **ON** (30 s first) | Stuck sensor | vibration | 40 | -- | amber **FAULT** (not attack): anomaly the physics explains |
+| 3 | **ON** (30 s first) | Stuck sensor | current | 40 | -- | amber **FAULT** (not attack): current frozen at a running value, vibration agrees the motor runs |
 
-Measured: scenario 1 isolated in 23 s, scenario 2 in 19 s. Scenario 3 still
-to be rehearsed.
+Rehearsed on the bench 2026-10-28: all three work (scenario 1 isolated in 23 s,
+scenario 2 in 19 s). A stuck VIBRATION sensor does not reliably show FAULT --
+use current, the channel the bench evaluation tested.
 
 After each attack: **Acknowledge**, wait for **NORMAL** (about 1-2 min), then
 the next one. Finish with **Ledger -> Verify**.
