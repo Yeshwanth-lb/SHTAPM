@@ -3512,3 +3512,22 @@ does not authorize any wiring or actuation.
   service stopped, a fresh process read the sensor 5/5 at once. The sensor
   was fine; the long-lived device object was stuck, and only a service
   restart cleared it. The driver now does that itself.
+
+### D052 — APPROVED (user direction): premium finish over the industrial HMI; sensor detail panel
+- **Date:** 2026-10-28
+- **Decision:** at the user's direction ("the best of both"), D046's control-room
+  rules stay (calm normal, colour only for abnormal, every state also a word or
+  shape) and ``styles/premium.css`` adds depth, type and state-driven motion:
+  values and trust glide to new readings (``useAnimatedNumber``), an alarm
+  arrives (lamp lights, unacknowledged ring pulses, the affected instrument grows
+  a state rail), charts draw in with a breathing live edge, pages and tiles rise
+  in once. Clicking an instrument opens a sensor detail drawer: large chart with
+  hover readout (1/5/20 min), now/min/max/mean/std/samples, trust history with
+  the 0.70/0.40 bands, attack/fault verdict counts, the sensor's ledger events
+  and its provenance -- all from existing endpoints. Login redesigned.
+- **No new dependency:** framer-motion was considered and not added; CSS +
+  ``requestAnimationFrame`` cover it without touching ``package-lock.json``.
+  Reduced motion (OS or Settings) removes all of it.
+- **Verified:** 249 frontend tests; headless screenshots of login, normal,
+  attack and drawer states (they caught an easing overshoot to 3.3e9 g, fixed
+  with a clamp and a test).
