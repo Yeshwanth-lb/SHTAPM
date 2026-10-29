@@ -26,7 +26,6 @@ import {
   FAULT_WINDOW,
   type LedgerEvent,
 } from "../features/controlroom/model";
-import { DemoPresets } from "../features/controlroom/DemoPresets";
 import { IncidentTimeline } from "../features/controlroom/IncidentTimeline";
 import { PhysicsPanel } from "../features/controlroom/PhysicsPanel";
 import { SensorDetail } from "../features/controlroom/SensorDetail";
@@ -48,7 +47,6 @@ import {
   type RelayOut,
   type SensorHealthOut,
 } from "../lib/api";
-import { canInject, roleFromToken } from "../lib/token";
 import { useApiResource } from "../lib/useApiResource";
 import { CHANNELS } from "../types/contracts";
 
@@ -158,9 +156,6 @@ export function ControlRoomPage() {
         </div>
         <div className="cr" style={{ alignContent: "start" }}>
           <PhysicsPanel live={live.data ?? null} />
-          {accessToken && canInject(roleFromToken(accessToken)) && (
-            <DemoPresets deviceId={DEVICE_ID} accessToken={accessToken} live={live.data ?? null} />
-          )}
           <RelayPanel deviceId={DEVICE_ID} accessToken={accessToken} />
           <GlassTile title="Transport">
             <div className="transport" data-testid="transport">

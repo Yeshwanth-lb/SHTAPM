@@ -1,9 +1,7 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import * as api from "../../lib/api";
 import { Instrument } from "./components";
-import { DemoPresets } from "./DemoPresets";
 import { PhysicsPanel, physicsVerdict } from "./PhysicsPanel";
 
 const S = (state: "idle" | "running" | "unclear", median: number) => ({
@@ -36,31 +34,6 @@ describe("physics panel (D054)", () => {
     expect(screen.getByTestId("physics-current")).toHaveTextContent("IDLE");
     expect(screen.getByTestId("physics-vibration")).toHaveTextContent("RUNNING");
     expect(screen.getByTestId("physics-verdict")).toHaveTextContent("Physically impossible");
-  });
-});
-
-describe("demo presets (D056)", () => {
-  it("only allows the scenarios the motor state makes meaningful, and sends the rehearsed values", async () => {
-    vi.spyOn(api, "getActiveInjection").mockResolvedValue(null);
-    const inject = vi.spyOn(api, "injectScenario").mockResolvedValue({} as never);
-    render(
-      <DemoPresets
-        deviceId="pump-01"
-        accessToken="acc"
-        live={live(S("running", 0.7), S("running", 0.6))}
-      />,
-    );
-    await waitFor(() => expect(screen.getByTestId("preset-spoof")).not.toBeDisabled());
-    expect(screen.getByTestId("preset-bias")).toBeDisabled(); // needs the motor OFF
-    expect(screen.getByTestId("preset-bias")).toHaveTextContent("Switch the motor OFF first");
-    fireEvent.click(screen.getByTestId("preset-spoof"));
-    await waitFor(() =>
-      expect(inject).toHaveBeenCalledWith(
-        "pump-01",
-        { scenario: "constant_spoof", channel: "current", duration_s: 40, params: { value: 0 } },
-        "acc",
-      ),
-    );
   });
 });
 
