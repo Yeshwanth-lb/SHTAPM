@@ -29,7 +29,7 @@
 
 .sensor-card__meta {
   margin: 0;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 /* No reading yet: dim the whole card so it cannot be mistaken for live data. */
@@ -52,7 +52,7 @@
   height: 44px;
   display: flex;
   align-items: center;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 /* VIRTUAL: the channel was isolated and the digital twin is reconstructing it

@@ -133,6 +133,12 @@ export function ControlRoomPage() {
 
       <Annunciator windows={annunciatorWindows(decision, stale)} />
 
+      <PhysicsPanel
+        live={live.data ?? null}
+        current={history.current}
+        vibration={history.vibration}
+      />
+
       <div className="cr__row cr__row--main">
         <div className="cr" style={{ alignContent: "start" }}>
           <div className="instruments">
@@ -157,7 +163,6 @@ export function ControlRoomPage() {
           <IncidentTimeline incident={lastIncident(ledger.data ?? [])} />
         </div>
         <div className="cr" style={{ alignContent: "start" }}>
-          <PhysicsPanel live={live.data ?? null} />
           {accessToken && canInject(roleFromToken(accessToken)) && (
             <DemoPresets deviceId={DEVICE_ID} accessToken={accessToken} live={live.data ?? null} />
           )}

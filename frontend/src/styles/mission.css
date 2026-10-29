@@ -1,0 +1,978 @@
+/* Mission control (D061) -- the committed world, loaded last.
+ *
+ * The world lends four things only (Impeccable, Operate mode): type, palette,
+ * density and one signature move. Navigation, tables and controls stay the
+ * standard ones. Signature: the "Two witnesses" coupling trace (physics
+ * check), full width under the master caution.
+ *
+ *   type     Barlow for UI, Barlow Semi Condensed for numerals and headings
+ *   palette  space-navy ground, a solid mission-blue rail, warm-white type,
+ *            one blue accent; red/amber/green/violet only for state
+ *   motion   Emil Kowalski's rules: ease-out, under 300 ms in the UI, nothing
+ *            that does not convey a change; no springs
+ */
+
+body {
+  background: var(--void);
+  font-family: var(--font-display);
+  font-size: 15px;
+  letter-spacing: 0;
+  color: var(--text-primary);
+  font-feature-settings: "tnum" 1;
+}
+
+::selection {
+  background: rgba(79, 140, 255, 0.4);
+  color: #fff;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.t-label {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--text-secondary);
+}
+
+.t-metric {
+  font-family: var(--font-numeric);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text-hero);
+}
+
+.t-muted {
+  color: var(--text-muted);
+}
+
+/* Surfaces: flat navy panels, 1px hairline, soft offset shadow. No glass. */
+.glass,
+.instrument,
+.caution,
+.physics,
+.presets,
+.incident,
+.drawer__section,
+.history-trend,
+.verify-banner {
+  background: var(--glass-1);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--shadow-1);
+}
+
+/* ---- Shell: the mission-blue rail is the committed colour --------------- */
+.shell {
+  grid-template-columns: 232px 1fr;
+  gap: var(--hmi-gap);
+  padding: var(--hmi-gap);
+}
+
+.shell__rail {
+  background: linear-gradient(180deg, var(--rail), var(--rail-2));
+  border: 0;
+  box-shadow: 0 18px 40px -20px rgba(8, 24, 68, 0.9);
+  border-radius: 12px;
+}
+
+.shell__brand {
+  color: #fff;
+  border-bottom-color: rgba(255, 255, 255, 0.14);
+}
+
+.shell__brand-text strong {
+  font-family: var(--font-numeric);
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: #fff;
+}
+
+.shell__brand-text span {
+  color: rgba(225, 235, 255, 0.78);
+  font-size: 12px;
+}
+
+.shell__link {
+  color: rgba(225, 235, 255, 0.82);
+  font-size: 14px;
+  font-weight: 500;
+  padding: 9px 12px;
+  border-radius: 8px;
+  transition:
+    background-color 160ms var(--ease-out),
+    color 160ms var(--ease-out);
+}
+
+.shell__link:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
+.shell__link .nav-icon {
+  opacity: 0.85;
+}
+
+.shell__link.is-active {
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+  box-shadow: none;
+}
+
+.shell__link.is-active::before {
+  left: -10px;
+  background: #fff;
+}
+
+.shell__link.is-active .nav-icon {
+  color: #fff;
+  opacity: 1;
+}
+
+.shell__top {
+  padding: 12px 18px;
+  border-radius: 12px;
+}
+
+.hmi-top__device {
+  font-family: var(--font-numeric);
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text-hero);
+}
+
+.hmi-top__item {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.hmi-condition {
+  font-size: 12px;
+}
+
+/* Product UI loads into a task: one short fade, no choreography. */
+.page-enter {
+  animation: fade-in 180ms var(--ease-out) both;
+}
+
+.cr > *,
+.instruments > *,
+.page > *,
+.drawer__panel > *,
+.arch__node,
+.data-table tbody tr,
+.eventlog__row,
+.incident__step,
+.state,
+.kv__value,
+.pill {
+  animation: none;
+}
+
+/* ---- Master caution: the first read ---------------------------------- */
+.caution {
+  padding: 16px 20px;
+  border-radius: 12px;
+}
+
+.caution__lamp {
+  min-width: 168px;
+  padding: 10px 14px;
+  font-family: var(--font-numeric);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+
+.caution__text strong {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-hero);
+}
+
+.caution__text span {
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.caution--alarm {
+  background: linear-gradient(90deg, rgba(255, 77, 94, 0.18), rgba(255, 77, 94, 0.04) 60%),
+    var(--glass-1);
+}
+
+.caution--caution {
+  background: linear-gradient(90deg, rgba(251, 191, 36, 0.14), rgba(251, 191, 36, 0.03) 60%),
+    var(--glass-1);
+}
+
+.caution::after {
+  display: none;
+}
+
+/* ---- Annunciator ------------------------------------------------------ */
+.annunciator__window {
+  padding: 10px 6px;
+  font-family: var(--font-numeric);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  background: var(--glass-1);
+  border-color: var(--glass-border);
+}
+
+/* ---- Physics check: the signature ----------------------------------- */
+.physics {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.9fr) minmax(250px, 1fr) minmax(0, 2.6fr);
+  gap: 0;
+  padding: 0;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.physics > * {
+  padding: 18px 20px;
+}
+
+.physics__verdict {
+  display: grid;
+  align-content: center;
+  gap: 6px;
+  border: 0;
+  border-right: 1px solid var(--glass-border);
+  background: rgba(52, 211, 153, 0.06);
+  transition: background-color 240ms var(--ease-out);
+}
+
+.physics__label {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.physics__verdict strong {
+  font-family: var(--font-numeric);
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--text-hero);
+}
+
+.physics__verdict span:last-child {
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--text-secondary);
+}
+
+.physics--agree .physics__verdict strong {
+  color: var(--status-healthy);
+}
+
+.physics--conflict .physics__verdict {
+  background: rgba(255, 77, 94, 0.14);
+}
+
+.physics--conflict .physics__verdict strong {
+  color: var(--status-critical);
+}
+
+.physics--unclear .physics__verdict,
+.physics--unknown .physics__verdict {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.physics--conflict {
+  border-color: rgba(255, 77, 94, 0.55);
+}
+
+.physics--agree {
+  border-color: var(--glass-border);
+}
+
+.physics__witnesses {
+  display: grid;
+  align-content: center;
+  gap: 14px;
+  border-right: 1px solid var(--glass-border);
+}
+
+.witness {
+  display: grid;
+  gap: 2px;
+}
+
+.witness__name {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.witness__key {
+  width: 14px;
+  height: 3px;
+  border-radius: 2px;
+}
+
+.witness--current .witness__key {
+  background: var(--accent);
+}
+
+.witness--vibration .witness__key {
+  background: #e7ecf7;
+}
+
+.witness__state {
+  font-family: var(--font-numeric);
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--text-hero);
+  transition: color 200ms var(--ease-out);
+}
+
+.witness__state--running {
+  color: var(--text-hero);
+}
+
+.witness__state--idle {
+  color: var(--text-secondary);
+}
+
+.witness__state--unclear,
+.witness__state--unknown {
+  color: var(--text-muted);
+}
+
+.physics--conflict .witness__state {
+  color: var(--status-critical);
+}
+
+.witness__reading {
+  display: grid;
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.witness__bands {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.physics__trace {
+  display: grid;
+  align-content: center;
+  padding-left: 14px;
+}
+
+.coupling {
+  position: relative;
+  padding-left: 74px;
+}
+
+.coupling--empty {
+  padding: 26px 0;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+.coupling__svg {
+  width: 100%;
+  height: 150px;
+  display: block;
+  overflow: visible;
+}
+
+.coupling__lanes span {
+  position: absolute;
+  left: 0;
+  transform: translateY(-50%);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+}
+
+.coupling__band--run {
+  fill: rgba(79, 140, 255, 0.07);
+}
+
+.coupling__band--idle {
+  fill: rgba(255, 255, 255, 0.025);
+}
+
+.coupling__rule {
+  stroke: var(--glass-border-strong);
+  stroke-width: 1;
+  stroke-dasharray: 3 5;
+  vector-effect: non-scaling-stroke;
+}
+
+.coupling__conflict {
+  fill: rgba(255, 77, 94, 0.28);
+}
+
+.coupling__line {
+  fill: none;
+  stroke-width: 2.2;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.coupling__line--current {
+  stroke: var(--accent);
+}
+
+.coupling__line--vibration {
+  stroke: #e7ecf7;
+  opacity: 0.85;
+}
+
+.coupling__head--current {
+  fill: var(--accent);
+}
+
+.coupling__head--vibration {
+  fill: #e7ecf7;
+}
+
+@media (max-width: 1250px) {
+  .physics {
+    grid-template-columns: 1fr 1fr;
+  }
+  .physics__trace {
+    grid-column: 1 / -1;
+    border-top: 1px solid var(--glass-border);
+  }
+}
+
+@media (max-width: 720px) {
+  .physics {
+    grid-template-columns: 1fr;
+  }
+  .physics__verdict,
+  .physics__witnesses {
+    border-right: 0;
+    border-bottom: 1px solid var(--glass-border);
+  }
+}
+
+/* ---- Instruments: big numerals, state as a full tint, no side stripes -- */
+.instrument {
+  border-radius: 12px;
+  padding: 16px 18px 14px;
+  gap: 12px;
+}
+
+.instrument::before {
+  display: none;
+}
+
+.instrument__head .t-label {
+  font-size: 13px;
+  letter-spacing: 0.08em;
+}
+
+.instrument__value .t-metric {
+  font-size: 38px;
+  line-height: 1;
+}
+
+.instrument__unit {
+  font-size: 15px;
+  color: var(--text-secondary);
+}
+
+.instrument--alarm {
+  border-color: rgba(255, 77, 94, 0.6);
+  background: linear-gradient(180deg, rgba(255, 77, 94, 0.14), rgba(255, 77, 94, 0.02) 70%),
+    var(--glass-1);
+}
+
+.instrument--caution {
+  border-color: rgba(251, 191, 36, 0.5);
+  background: linear-gradient(180deg, rgba(251, 191, 36, 0.1), rgba(251, 191, 36, 0.02) 70%),
+    var(--glass-1);
+}
+
+.instrument--virtual {
+  border-color: rgba(185, 140, 255, 0.5);
+}
+
+.instrument--clickable:hover {
+  transform: none;
+  border-color: var(--glass-border-strong);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .instrument--clickable:hover {
+    background-color: var(--glass-2);
+  }
+}
+
+.instrument--clickable:active {
+  transform: scale(0.99);
+}
+
+.instrument__open {
+  font-size: 12px;
+  color: var(--accent);
+}
+
+.trustbar {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--text-secondary);
+}
+
+.trustbar__track {
+  height: 6px;
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.trustbar__fill {
+  background: var(--text-secondary);
+}
+
+.trustbar__fill--caution {
+  background: var(--status-warning);
+}
+
+.trustbar__fill--alarm {
+  background: var(--status-critical);
+}
+
+.tag {
+  font-size: 12px;
+  padding: 3px 8px;
+  letter-spacing: 0.06em;
+}
+
+.instrument__twin {
+  font-size: 12px;
+}
+
+.instrument__sensor-reads {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* ---- Side column ------------------------------------------------------ */
+.presets,
+.incident {
+  border-radius: 12px;
+}
+
+.preset {
+  border-left-width: 1px;
+  background: var(--glass-inset);
+}
+
+.preset strong {
+  font-size: 14px;
+}
+
+.preset span {
+  font-size: 12.5px;
+}
+
+.preset--alarm strong::before,
+.preset--caution strong::before {
+  content: "";
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 8px;
+  border-radius: 50%;
+  vertical-align: 1px;
+}
+
+.preset--alarm strong::before {
+  background: var(--status-critical);
+}
+
+.preset--caution strong::before {
+  background: var(--status-warning);
+}
+
+.preset:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+/* ---- Incident timeline: one panel, flat steps (no cards in cards) ------ */
+.incident__steps {
+  gap: 0;
+  border-top: 1px solid var(--glass-border);
+}
+
+.incident__step {
+  background: none;
+  border: 0;
+  border-radius: 0;
+  border-right: 1px solid var(--glass-border);
+  padding: 12px 14px;
+  font-size: 13px;
+}
+
+.incident__step:last-child {
+  border-right: 0;
+}
+
+.incident__offset {
+  font-family: var(--font-numeric);
+  font-size: 20px;
+}
+
+/* ---- Architecture view: nodes sit on the page, not in a second card ---- */
+.arch {
+  background: none;
+  border: 0;
+  box-shadow: none;
+  padding: 0;
+}
+
+.arch__node {
+  background: var(--glass-1);
+  box-shadow: var(--shadow-1);
+}
+
+.arch__label {
+  font-size: 12px;
+}
+
+.arch__node ul {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* ---- Tables and data pages ------------------------------------------- */
+.data-table th {
+  font-size: 12px;
+  background: var(--glass-2);
+  color: var(--text-secondary);
+}
+
+.data-table td {
+  font-size: 14px;
+}
+
+.page__head h1,
+.page__head .t-h1 {
+  font-family: var(--font-numeric);
+  font-size: 28px;
+  font-weight: 700;
+}
+
+.toolbar__btn {
+  font-size: 13px;
+}
+
+.toolbar__btn.is-active {
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
+  color: #fff;
+}
+
+.segmented__btn.is-active {
+  background: var(--accent-strong);
+  color: #fff;
+}
+
+.legend-chip {
+  font-size: 12.5px;
+}
+
+.eventlog__row {
+  font-size: 14px;
+}
+
+/* ---- Buttons: pressed feedback (Emil) -------------------------------- */
+.btn:active:not(:disabled),
+.toolbar__btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.login .btn {
+  background: var(--accent-strong);
+  color: #fff;
+  box-shadow: 0 10px 24px -12px rgba(47, 111, 239, 0.9);
+}
+
+.login .btn:hover:not(:disabled) {
+  background: var(--accent);
+}
+
+.login__hero-mark,
+.login__brand-mark {
+  color: #fff;
+  background: var(--rail);
+  border-color: transparent;
+}
+
+.login__hero-title {
+  font-family: var(--font-numeric);
+  font-weight: 700;
+}
+
+/* Annunciator windows keep their state fills (order after the base skin). */
+.annunciator__window--caution {
+  background: var(--status-warning);
+  border-color: var(--status-warning);
+  color: #1a1204;
+}
+
+.annunciator__window--alarm {
+  background: var(--status-critical);
+  border-color: var(--status-critical);
+  color: #fff;
+}
+
+.annunciator__window--virtual {
+  background: var(--status-virtual);
+  border-color: var(--status-virtual);
+  color: #160b26;
+}
+
+/* Two witnesses stay distinguishable where they agree: vibration is a wide,
+ * pale band; current is the bright line inside it. */
+.coupling__line--vibration {
+  stroke: rgba(231, 236, 247, 0.32);
+  stroke-width: 9;
+  stroke-linecap: round;
+  opacity: 1;
+}
+
+.coupling__head--vibration {
+  fill: rgba(231, 236, 247, 0.55);
+}
+
+.witness--vibration .witness__key {
+  height: 7px;
+  background: rgba(231, 236, 247, 0.45);
+}
+
+/* Filled alarm surfaces carrying white text use a deeper red (5.0:1). */
+.caution--alarm .caution__lamp,
+.annunciator__window--alarm {
+  background: #d4283a;
+  border-color: #d4283a;
+  color: #fff;
+  box-shadow: none;
+}
+
+.annunciator__window--caution {
+  box-shadow: none;
+}
+
+/* Relay: the status sits on the panel as a row, not a card in a card. */
+.relay__status {
+  border: 0;
+  border-radius: 0;
+  background: none;
+  padding: 4px 0 2px;
+  box-shadow: none;
+}
+
+.relay__chip {
+  padding: 4px 8px;
+}
+
+/* Key-value readouts and trust nodes are cells of their panel, not cards
+ * inside it: one hairline grid instead of a box per value. */
+.kv {
+  gap: 0;
+  border-top: 1px solid var(--glass-border);
+}
+
+.kv__item,
+.trust__node {
+  background: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  border-right: 1px solid var(--glass-border);
+  border-bottom: 1px solid var(--glass-border);
+  padding: 14px 16px;
+}
+
+.kv__value {
+  font-family: var(--font-numeric);
+  font-size: 22px;
+  font-weight: 600;
+}
+
+.trust__ring {
+  gap: 0 !important;
+  border-top: 1px solid var(--glass-border);
+}
+
+.trust__score {
+  font-family: var(--font-numeric);
+  font-size: 26px;
+  font-weight: 600;
+}
+
+.page__footnote,
+.trust__caveat {
+  color: var(--text-muted);
+  opacity: 1;
+  max-width: 78ch;
+}
+
+.page__lede,
+.state__body {
+  max-width: 62ch;
+}
+
+.prov--placeholder {
+  color: var(--text-muted);
+}
+
+/* Device page: sensor readouts are cells of the status panel. */
+.glass .sensor-card.glass {
+  background: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  border-right: 1px solid var(--glass-border);
+  border-bottom: 1px solid var(--glass-border);
+}
+
+.sensor-card__virtual {
+  font-size: 12px;
+}
+
+.sensor-card__virtual-dot {
+  animation: none;
+}
+
+/* Notices inside a panel are text on the panel, not another card. */
+.glass .state {
+  background: none;
+  border: 0;
+  box-shadow: none;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+/* Phone / narrow: the rail becomes a horizontal strip above the content. */
+@media (max-width: 900px) {
+  .shell {
+    grid-template-columns: 1fr;
+  }
+
+  .shell__rail {
+    position: static;
+    min-height: 0;
+    padding: 10px;
+  }
+
+  .shell__brand {
+    padding-bottom: 10px;
+  }
+
+  .shell__nav {
+    grid-auto-flow: column;
+    grid-auto-columns: max-content;
+    overflow-x: auto;
+  }
+
+  .shell__link.is-active::before {
+    display: none;
+  }
+
+  .cr__row--main,
+  .cr__row--top {
+    grid-template-columns: 1fr;
+  }
+
+  .instruments {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .annunciator {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .caution {
+    grid-template-columns: 1fr;
+  }
+
+  .incident__steps {
+    grid-template-columns: 1fr;
+  }
+
+  .incident__step {
+    border-right: 0;
+    border-bottom: 1px solid var(--glass-border);
+  }
+}
+
+.spark {
+  width: 100%;
+  min-width: 0;
+}
+
+.shell__main,
+.shell__content,
+.cr,
+.cr__row > * {
+  min-width: 0;
+}
+
+@media (max-width: 600px) {
+  .shell {
+    padding: 10px;
+    gap: 10px;
+  }
+
+  .instruments {
+    grid-template-columns: 1fr;
+  }
+
+  .shell__top {
+    flex-wrap: wrap;
+    gap: 8px 12px;
+  }
+
+  .hmi-top__spacer {
+    display: none;
+  }
+
+  .caution__lamp {
+    min-width: 0;
+  }
+
+  .physics > * {
+    padding: 14px 16px;
+  }
+
+  .coupling {
+    padding-left: 64px;
+  }
+}
+
+@media (max-width: 900px) {
+  /* minmax(0, 1fr): the nav strip scrolls inside the column instead of
+   * widening the whole page to the length of every link. */
+  .shell {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .shell__rail,
+  .shell__nav {
+    min-width: 0;
+  }
+}

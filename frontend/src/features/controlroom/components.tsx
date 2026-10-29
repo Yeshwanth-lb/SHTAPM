@@ -162,7 +162,7 @@ export function Instrument({
         {onOpen ? (
           <span className="instrument__open">Details →</span>
         ) : (
-          <span className="t-muted mono" style={{ fontSize: 11 }}>
+          <span className="t-muted mono" style={{ fontSize: 12 }}>
             {points.length > 0 ? `${points.length} pts` : ""}
           </span>
         )}
