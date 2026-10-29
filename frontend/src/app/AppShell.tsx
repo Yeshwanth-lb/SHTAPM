@@ -10,6 +10,7 @@ import { useAuth } from "../features/auth/AuthContext";
 import { apiGet, type DeviceOut } from "../lib/api";
 import { roleFromToken } from "../lib/token";
 import { useApiResource } from "../lib/useApiResource";
+import { AlertToasts } from "./AlertToasts";
 import { BrandMark, NavIcon } from "./icons";
 import { PageBoundary } from "./PageBoundary";
 import { navigate, useRoute } from "./router";
@@ -88,7 +89,7 @@ const NAV: NavItem[] = [
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { path } = useRoute();
-  const { signOut } = useAuth();
+  const { signOut, tokens } = useAuth();
 
   return (
     <div className="shell">
@@ -133,6 +134,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div className="shell__content page-enter" key={path}>
           <PageBoundary>{children}</PageBoundary>
         </div>
+        <AlertToasts accessToken={tokens?.accessToken ?? null} />
       </div>
     </div>
   );
