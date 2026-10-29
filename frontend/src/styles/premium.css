@@ -1832,3 +1832,152 @@ body {
   font-size: 12px;
   color: var(--status-critical);
 }
+
+/* ---- Incident timeline (D057) --------------------------------------------- */
+.incident {
+  display: grid;
+  gap: 14px;
+  padding: 16px 18px;
+  border-radius: var(--hmi-radius);
+  border: 1px solid var(--glass-border);
+  background: var(--glass-1);
+  box-shadow: var(--shadow-1);
+}
+
+.incident__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.incident__head > div {
+  display: grid;
+  gap: 2px;
+}
+
+.incident__title {
+  font-size: 15px;
+  color: var(--text-hero);
+  text-transform: capitalize;
+}
+
+.incident__status {
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--status-healthy);
+  border: 1px solid rgba(76, 195, 138, 0.4);
+  background: rgba(76, 195, 138, 0.08);
+}
+
+.incident__status--open {
+  color: var(--status-critical);
+  border-color: rgba(240, 80, 90, 0.45);
+  background: rgba(240, 80, 90, 0.08);
+  animation: dot-breathe-soft 1.6s ease-in-out infinite;
+}
+
+@keyframes dot-breathe-soft {
+  50% {
+    opacity: 0.6;
+  }
+}
+
+.incident__track {
+  position: relative;
+  height: 14px;
+  margin: 0 7px;
+}
+
+.incident__line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 6px;
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(
+    90deg,
+    var(--status-warning),
+    var(--status-critical),
+    var(--status-virtual),
+    var(--status-healthy)
+  );
+  transform-origin: left;
+  animation: incident-draw 900ms var(--ease-out) both;
+}
+
+@keyframes incident-draw {
+  from {
+    transform: scaleX(0);
+  }
+}
+
+.incident__dot {
+  position: absolute;
+  top: 1px;
+  width: 12px;
+  height: 12px;
+  margin-left: -6px;
+  border-radius: 50%;
+  border: 2px solid var(--void);
+  background: var(--text-secondary);
+  animation: tag-in 420ms var(--ease-spring) both;
+  animation-delay: 300ms;
+}
+
+.incident__dot--caution {
+  background: var(--status-warning);
+}
+.incident__dot--alarm {
+  background: var(--status-critical);
+}
+.incident__dot--virtual {
+  background: var(--status-virtual);
+}
+.incident__dot--normal {
+  background: var(--status-healthy);
+}
+
+.incident__steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px;
+}
+
+.incident__step {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 8px;
+  align-items: baseline;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--glass-inset);
+  border: 1px solid var(--glass-border);
+  font-size: 12px;
+  animation: row-in 420ms var(--ease-out) both;
+}
+
+.incident__step .eventlog__mark {
+  grid-row: span 3;
+  align-self: center;
+}
+
+.incident__step-label {
+  color: var(--text-primary);
+}
+
+.incident__offset {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-hero);
+}
+
+.eventlog__mark--normal {
+  background: var(--status-healthy);
+}

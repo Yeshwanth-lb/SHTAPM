@@ -19,7 +19,9 @@ const live = (current: ReturnType<typeof S>, vibration: ReturnType<typeof S>) =>
   twin_values: {},
 });
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe("physics panel (D054)", () => {
   it("calls agreement, contradiction, transition and absence by name", () => {

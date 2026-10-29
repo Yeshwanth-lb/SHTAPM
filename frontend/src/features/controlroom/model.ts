@@ -339,3 +339,79 @@ export function trustSeries(
     .filter((p): p is { ts: string; value: number } => typeof p.value === "number")
     .reverse();
 }
+
+// ---- Incident timeline (D057) ----------------------------------------------
+
+export interface IncidentStep {
+  label: string;
+  ts: string;
+  offsetS: number;
+  severity: Severity | "info";
+}
+
+export interface Incident {
+  channel: string | null;
+  title: string;
+  start: string;
+  steps: IncidentStep[];
+  /** Seconds from the first step to recovery; null while still open. */
+  resolvedAfterS: number | null;
+}
+
+const STEP_LABEL: Record<string, { label: string; severity: Severity | "info" }> = {
+  scenario_inject: { label: "Injected", severity: "caution" },
+  trust_drop: { label: "Detected (trust < 0.40)", severity: "alarm" },
+  isolate: { label: "Isolated · twin took over", severity: "virtual" },
+  safe_stop: { label: "Safe Pump-Stop", severity: "alarm" },
+  sensor_dead: { label: "Sensor stopped answering", severity: "caution" },
+  recover: { label: "Recovered", severity: "normal" },
+  sensor_recovered: { label: "Sensor answering again", severity: "normal" },
+};
+
+/** The newest incident in the ledger, as measured steps from its start:
+ *  an injection (or, without one, the first trust drop / dead sensor), then
+ *  that channel's detection, isolation, safe stop and recovery. Every offset
+ *  is a difference of two ledger timestamps -- nothing is estimated. */
+export function lastIncident(events: LedgerEvent[]): Incident | null {
+  const ordered = [...events].sort((a, b) => a.block_index - b.block_index);
+  const starters = ["scenario_inject", "trust_drop", "sensor_dead"];
+  let startIdx = -1;
+  for (let i = ordered.length - 1; i >= 0; i -= 1) {
+    if (starters.includes(ordered[i].event_type)) {
+      startIdx = i;
+      // A trust drop that follows an injection belongs to that injection.
+      for (let j = i - 1; j >= 0; j -= 1) {
+        const prev = ordered[j];
+        const gap =
+          (parseServerTime(ordered[i].ts).getTime() - parseServerTime(prev.ts).getTime()) / 1000;
+        if (gap > 120) break;
+        if (prev.event_type === "scenario_inject") startIdx = j;
+      }
+      break;
+    }
+  }
+  if (startIdx < 0) return null;
+  const first = ordered[startIdx];
+  const channel = typeof first.payload?.channel === "string" ? first.payload.channel : null;
+  const t0 = parseServerTime(first.ts).getTime();
+  const steps: IncidentStep[] = [];
+  let resolvedAfterS: number | null = null;
+  for (const e of ordered.slice(startIdx)) {
+    const meta = STEP_LABEL[e.event_type];
+    if (!meta) continue;
+    const ch = typeof e.payload?.channel === "string" ? e.payload.channel : null;
+    if (ch !== null && channel !== null && ch !== channel) continue;
+    if (steps.some((s) => s.label === meta.label)) continue; // first occurrence only
+    const offsetS = Math.max(0, (parseServerTime(e.ts).getTime() - t0) / 1000);
+    steps.push({ label: meta.label, ts: e.ts, offsetS, severity: meta.severity });
+    if (e.event_type === "recover" || e.event_type === "sensor_recovered") {
+      resolvedAfterS = offsetS;
+      break;
+    }
+  }
+  const scenario = typeof first.payload?.scenario === "string" ? first.payload.scenario : null;
+  const title = scenario
+    ? `${scenario.replace(/_/g, " ")} on ${channel ?? "a sensor"}`
+    : `${channel ?? "sensor"} incident`;
+  return { channel, title, start: first.ts, steps, resolvedAfterS };
+}

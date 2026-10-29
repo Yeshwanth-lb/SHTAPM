@@ -13,6 +13,7 @@ import {
   describeEvent,
   displayedDecision,
   formatEventTime,
+  lastIncident,
   lastSeconds,
   parseServerTime,
   trustSeries,
@@ -251,5 +252,39 @@ describe("sensor detail helpers (D052)", () => {
     ];
     expect(channelVerdicts(rows, "current")).toEqual({ attack: 1, fault: 1, total: 3 });
     expect(trustSeries(rows, "current").map((p) => p.value)).toEqual([0.9, 0.6, 0.31]);
+  });
+});
+
+describe("incident timeline (D057)", () => {
+  const ev = (block_index: number, sec: number, event_type: string, payload = {}) => ({
+    block_index,
+    ts: `2026-10-28T09:32:${String(sec).padStart(2, "0")}Z`,
+    event_type,
+    payload,
+  });
+
+  it("measures each step from the injection, on that channel only", () => {
+    const incident = lastIncident([
+      ev(1, 0, "relay_command", { state: "on" }),
+      ev(2, 11, "scenario_inject", { scenario: "constant_spoof", channel: "current" }),
+      ev(3, 29, "trust_drop", { channel: "current" }),
+      ev(4, 34, "isolate", { channel: "current" }),
+      ev(5, 35, "trust_drop", { channel: "pressure" }),
+      ev(6, 58, "recover", { channel: "current" }),
+    ]);
+    expect(incident?.title).toBe("constant spoof on current");
+    expect(incident?.steps.map((s) => [s.label, s.offsetS])).toEqual([
+      ["Injected", 0],
+      ["Detected (trust < 0.40)", 18],
+      ["Isolated · twin took over", 23],
+      ["Recovered", 47],
+    ]);
+    expect(incident?.resolvedAfterS).toBe(47);
+  });
+
+  it("is open until recovery and absent without incidents", () => {
+    const open = lastIncident([ev(1, 0, "trust_drop", { channel: "current" })]);
+    expect(open?.resolvedAfterS).toBeNull();
+    expect(lastIncident([ev(1, 0, "relay_command", {})])).toBeNull();
   });
 });

@@ -22,10 +22,12 @@ import {
   channelState,
   describeEvent,
   displayedDecision,
+  lastIncident,
   FAULT_WINDOW,
   type LedgerEvent,
 } from "../features/controlroom/model";
 import { DemoPresets } from "../features/controlroom/DemoPresets";
+import { IncidentTimeline } from "../features/controlroom/IncidentTimeline";
 import { PhysicsPanel } from "../features/controlroom/PhysicsPanel";
 import { SensorDetail } from "../features/controlroom/SensorDetail";
 import {
@@ -175,6 +177,8 @@ export function ControlRoomPage() {
           </GlassTile>
         </div>
       </div>
+
+      <IncidentTimeline incident={lastIncident(ledger.data ?? [])} />
 
       <GlassTile title="Event log (audit ledger)">
         {ledger.status === "error" ? (
