@@ -96,7 +96,8 @@ export function SensorDetail({
   const liveValue =
     latest !== null ? latest.sensors[channel as keyof typeof latest.sensors] ?? null : stats.now;
   const shown = useAnimatedNumber(liveValue);
-  const rows = decisions.data ?? [];
+  // Oldest first from the API; the helpers take newest first.
+  const rows = [...(decisions.data ?? [])].reverse();
   const trustPts = trustSeries(rows, channel);
   const verdicts = channelVerdicts(rows, channel);
   const events = channelEvents(ledger.data ?? [], channel).slice(0, 12);

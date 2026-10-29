@@ -77,7 +77,8 @@ export function ControlRoomPage() {
   const { channels } = useChannels(DEVICE_ID, accessToken);
   const [openChannel, setOpenChannel] = useState<string | null>(null);
   const decisions = useDecisions(DEVICE_ID, accessToken, FAULT_WINDOW, LIVE_DECISION_POLL_MS);
-  const decision = displayedDecision(decisions.data);
+  // The API returns decisions oldest first; the display rules want newest first.
+  const decision = displayedDecision(decisions.data ? [...decisions.data].reverse() : null);
   const sensorHealth = useApiResource<SensorHealthOut>(
     () => getSensorHealth(DEVICE_ID, accessToken!),
     [accessToken],

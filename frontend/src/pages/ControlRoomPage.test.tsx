@@ -170,4 +170,22 @@ describe("ControlRoomPage (D046)", () => {
     fireEvent.keyDown(window, { key: "Escape" });
     await waitFor(() => expect(screen.queryByTestId("sensor-detail")).toBeNull());
   });
+
+  it("shows the NEWEST decision: the API returns them oldest first", async () => {
+    const clean = {
+      ...ATTACK_DECISION,
+      attribution: "none",
+      reason: null,
+      isolated_channels: [],
+      substituted_channels: [],
+      trust_current: 0.9,
+    };
+    vi.spyOn(api, "apiGet").mockImplementation((path: string) =>
+      Promise.resolve(
+        (path.includes("/decisions") ? [...Array(9).fill(clean), ATTACK_DECISION] : []) as never,
+      ),
+    );
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("caution-lamp")).toHaveTextContent("ATTACK"));
+  });
 });
