@@ -2078,3 +2078,145 @@ body {
     transform: scaleX(0);
   }
 }
+
+/* ---- Live architecture diagram (D059) ------------------------------------ */
+.arch {
+  display: grid;
+  grid-template-columns: 1fr 80px 1fr 80px 1fr 80px 1fr 80px 1fr;
+  align-items: stretch;
+  padding: 18px;
+  border-radius: var(--hmi-radius);
+  border: 1px solid var(--glass-border);
+  background: radial-gradient(600px 160px at 50% 0%, rgba(78, 168, 222, 0.06), transparent 70%),
+    var(--glass-1);
+  box-shadow: var(--shadow-1);
+}
+
+.arch__node {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid var(--glass-border);
+  background: var(--glass-inset);
+  transition:
+    border-color 300ms var(--ease-out),
+    box-shadow 300ms var(--ease-out),
+    transform 220ms var(--ease-out);
+  animation: tile-rise 520ms var(--ease-out) both;
+}
+
+.arch__node:nth-of-type(2) {
+  animation-delay: 80ms;
+}
+.arch__node:nth-of-type(3) {
+  animation-delay: 160ms;
+}
+.arch__node:nth-of-type(4) {
+  animation-delay: 240ms;
+}
+.arch__node:nth-of-type(5) {
+  animation-delay: 320ms;
+}
+
+.arch__node:hover {
+  transform: translateY(-2px);
+}
+
+.arch__node--ok {
+  border-color: rgba(76, 195, 138, 0.35);
+}
+
+.arch__node--alarm {
+  border-color: rgba(240, 80, 90, 0.55);
+  box-shadow: 0 0 20px -8px rgba(240, 80, 90, 0.6);
+}
+
+.arch__node--warn {
+  border-color: rgba(240, 169, 43, 0.45);
+}
+
+.arch__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.arch__title strong {
+  font-size: 13px;
+  color: var(--text-hero);
+}
+
+.arch__sub {
+  font-size: 11.5px;
+  color: var(--text-secondary);
+}
+
+.arch__node ul {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.arch__link {
+  display: grid;
+  align-content: center;
+  gap: 6px;
+  padding: 0 6px;
+}
+
+.arch__label {
+  font-size: 10px;
+  text-align: center;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+.arch__wire {
+  height: 3px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.arch__link--live .arch__wire {
+  background: repeating-linear-gradient(90deg, var(--status-info) 0 8px, transparent 8px 16px);
+  background-size: 32px 3px;
+  animation: data-flow 0.9s linear infinite;
+}
+
+.arch__link--live .arch__label {
+  color: var(--status-info);
+}
+
+.arch__link--down .arch__wire {
+  background: repeating-linear-gradient(90deg, var(--status-critical) 0 4px, transparent 4px 10px);
+}
+
+@keyframes data-flow {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: 32px 0;
+  }
+}
+
+@media (max-width: 1200px) {
+  .arch {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+  .arch__link {
+    padding: 4px 0;
+  }
+  .arch__wire {
+    width: 3px;
+    height: 22px;
+    margin: 0 auto;
+  }
+}

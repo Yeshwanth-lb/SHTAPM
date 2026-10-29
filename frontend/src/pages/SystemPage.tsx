@@ -20,6 +20,7 @@ import { ChannelProvenanceBadge } from "../components/panels/ChannelProvenanceBa
 import { useBrowserLatency } from "../features/telemetry/useBrowserLatency";
 import { apiGet, getHealthz, type HealthzOut, type SystemHealthOut } from "../lib/api";
 import type { LatencySnapshot } from "../lib/latency";
+import { SystemDiagram } from "../features/system/SystemDiagram";
 import { useApiResource } from "../lib/useApiResource";
 import "./pages.css";
 
@@ -49,6 +50,13 @@ export function SystemPage() {
         <h1 className="t-h1">System</h1>
         <span className="t-label">polled every {POLL_MS / 1000}s</span>
       </header>
+
+      <SystemDiagram
+        health={health.data ?? null}
+        system={system.data ?? null}
+        channels={channels}
+        browser={browserLatency}
+      />
 
       <GlassTile title="Service health">
         {health.status === "loading" && <StateBlock kind="loading" />}
