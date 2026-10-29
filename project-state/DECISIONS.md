@@ -3585,3 +3585,23 @@ does not authorize any wiring or actuation.
   countdown and Stop. Uses the existing inject/cancel endpoints.
 - **Why:** on 2026-10-28 two rehearsal runs failed only because a value was
   typed with the wrong sign or in the wrong motor state.
+
+### D057-D060 — APPROVED (user request "do all the things one by one"): incident timeline, alert pop-ups, live architecture view, decisions timeline
+- **Date:** 2026-10-29
+- **D057 Incident timeline** (Control Room): the newest incident from the
+  ledger -- injection (or first trust drop / dead sensor), then that channel's
+  detection, isolation, Safe Pump-Stop and recovery -- each at its real offset
+  (difference of two ledger timestamps); "ongoing" or "recovered after N s".
+- **D058 Alert pop-ups** (every page): a newly raised open alert slides in at
+  the top right (alerts present at page load are not re-announced), with View.
+- **D059 Live architecture view** (System page): sensors -> Pi -> MQTT ->
+  backend -> dashboard, each stage lit from its own signal (frame count rising
+  on this computer's clock, MQTT/DB connected, socket open) with the measured
+  link latencies; healthy links animate, broken links turn red.
+- **D060 Decisions timeline** (Decisions page): all six trust scores on one
+  chart with the 0.70/0.40 bands, legend toggles and hover readout, and a strip
+  of what each of the last 120 decisions concluded.
+- **Fix found while building D060:** the decisions API is oldest-first; D048's
+  displayed decision took the oldest of the last 10 (ATTACK up to ~10 s late)
+  and the sensor panel's trust chart ran backwards. Both reverse the order now,
+  with a regression test in the real order.

@@ -13,6 +13,7 @@ import { StateBlock, StatusPill } from "../components/aurora/StateBlock";
 import { TrustConstellation } from "../components/panels/TrustConstellation";
 import { useAuth } from "../features/auth/AuthContext";
 import { useChannels } from "../features/channels/useChannels";
+import { TrustTimeline } from "../features/decisions/TrustTimeline";
 import {
   LIVE_DECISION_POLL_MS,
   UNCOMPUTED_DECISION_FIELDS,
@@ -77,6 +78,10 @@ export function DecisionsPage() {
           </p>
         </GlassTile>
       )}
+
+      <GlassTile title={`Trust over the last ${rows.length} decisions`}>
+        <TrustTimeline rows={rows} />
+      </GlassTile>
 
       <GlassTile
         title="Channel trust"

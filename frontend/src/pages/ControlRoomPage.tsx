@@ -134,24 +134,27 @@ export function ControlRoomPage() {
       <Annunciator windows={annunciatorWindows(decision, stale)} />
 
       <div className="cr__row cr__row--main">
-        <div className="instruments">
-          {CHANNELS.map((channel) => (
-            <Instrument
-              key={channel}
-              channel={channel}
-              value={latest ? latest.sensors[channel] : null}
-              unit={units[channel] ?? ""}
-              points={history[channel]}
-              trust={scores[channel]}
-              state={channelState(channel, decision, stale)}
-              onOpen={() => setOpenChannel(channel)}
-              twinValue={
-                decision?.substituted_channels?.includes(channel)
-                  ? live.data?.twin_values[channel] ?? null
-                  : null
-              }
-            />
-          ))}
+        <div className="cr" style={{ alignContent: "start" }}>
+          <div className="instruments">
+            {CHANNELS.map((channel) => (
+              <Instrument
+                key={channel}
+                channel={channel}
+                value={latest ? latest.sensors[channel] : null}
+                unit={units[channel] ?? ""}
+                points={history[channel]}
+                trust={scores[channel]}
+                state={channelState(channel, decision, stale)}
+                onOpen={() => setOpenChannel(channel)}
+                twinValue={
+                  decision?.substituted_channels?.includes(channel)
+                    ? live.data?.twin_values[channel] ?? null
+                    : null
+                }
+              />
+            ))}
+          </div>
+          <IncidentTimeline incident={lastIncident(ledger.data ?? [])} />
         </div>
         <div className="cr" style={{ alignContent: "start" }}>
           <PhysicsPanel live={live.data ?? null} />
@@ -178,8 +181,6 @@ export function ControlRoomPage() {
           </GlassTile>
         </div>
       </div>
-
-      <IncidentTimeline incident={lastIncident(ledger.data ?? [])} />
 
       <GlassTile title="Event log (audit ledger)">
         {ledger.status === "error" ? (
