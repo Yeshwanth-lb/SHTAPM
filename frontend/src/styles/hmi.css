@@ -48,7 +48,7 @@
   --status-info-glow: transparent;
 
   --aurora-teal: var(--status-info);
-  --font-display: "Barlow", system-ui, sans-serif;
+  --font-display: Geist, "Inter", system-ui, sans-serif;
 
   --hmi-radius: 4px;
   --hmi-gap: 10px;
@@ -82,7 +82,7 @@ body {
 }
 
 .t-label {
-  font-size: 12px;
+  font-size: 11px;
   letter-spacing: 0.08em;
   font-weight: 600;
 }
@@ -257,6 +257,7 @@ body {
   border-radius: var(--hmi-radius);
   background: var(--glass-1);
   border: 1px solid var(--glass-border);
+  border-left: 3px solid var(--glass-border-strong);
 }
 
 .instrument--caution {
@@ -300,7 +301,7 @@ body {
   display: inline-block;
   padding: 2px 6px;
   border-radius: 3px;
-  font-size: 12px;
+  font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.06em;
   border: 1px solid currentColor;
@@ -331,7 +332,7 @@ body {
   grid-template-columns: auto 1fr auto;
   align-items: center;
   gap: 8px;
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-secondary);
 }
 
@@ -367,7 +368,7 @@ body {
 .annunciator__window {
   padding: 8px 4px;
   text-align: center;
-  font-size: 12px;
+  font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.06em;
   border-radius: 3px;

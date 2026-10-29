@@ -12,44 +12,32 @@
  */
 
 :root {
-  /* Mission control (D061): deep space-navy ground, warm-white type, one
-   * mission-blue accent; red/amber/green/violet only for state. Contrast:
-   * primary 15:1, secondary 8.9:1, muted 5.0:1 on the panel colour. */
-  --void: #070b14;
-  --void-2: #0b1120;
-  --glass-1: #0f172a;
-  --glass-2: #16213a;
-  --glass-inset: #0a1020;
-  --glass-border: #1e2a44;
-  --glass-border-strong: #2c3d61;
+  --void: #0d1015;
+  --void-2: #11151b;
+  --glass-1: #161a21;
+  --glass-2: #1d222b;
+  --glass-inset: #0f1217;
+  --glass-border: rgba(255, 255, 255, 0.07);
+  --glass-border-strong: rgba(255, 255, 255, 0.13);
 
-  --text-hero: #f6f8fc;
-  --text-primary: #dfe6f3;
-  --text-secondary: #a7b4cf;
-  --text-muted: #8392b2;
+  --text-hero: #f2f5f8;
+  --text-primary: #d5dbe2;
+  --text-secondary: #8d97a3;
+  --text-muted: #5b6470;
 
-  --accent: #4f8cff;
-  --accent-strong: #2f6fef;
-  --rail: #11306f;
-  --rail-2: #0c2456;
+  --status-healthy: #4cc38a;
+  --status-warning: #f0a92b;
+  --status-critical: #f0505a;
+  --status-virtual: #b678f0;
+  --status-info: #4ea8de;
 
-  --status-healthy: #34d399;
-  --status-warning: #fbbf24;
-  --status-critical: #ff4d5e;
-  --status-virtual: #b98cff;
-  --status-info: #4f8cff;
-
-  --font-display: "Barlow", system-ui, sans-serif;
-  --font-numeric: "Barlow Semi Condensed", "Barlow", system-ui, sans-serif;
-
-  --hmi-radius: 8px;
-  --hmi-gap: 14px;
-  --shadow-1: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 1px 2px rgba(0, 0, 0, 0.35),
-    0 10px 24px -14px rgba(0, 0, 0, 0.7);
-  --shadow-2: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 16px 40px -16px rgba(0, 0, 0, 0.85);
-  /* Emil Kowalski's strong ease-out for every UI transition; no springs. */
-  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
-  --caution-glyph-ink: #0b1120;
+  --hmi-radius: 10px;
+  --hmi-gap: 12px;
+  --shadow-1: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 1px 2px rgba(0, 0, 0, 0.3),
+    0 8px 24px -12px rgba(0, 0, 0, 0.55);
+  --shadow-2: 0 1px 0 rgba(255, 255, 255, 0.05) inset, 0 12px 40px -12px rgba(0, 0, 0, 0.7);
+  --ease-spring: cubic-bezier(0.22, 1.2, 0.36, 1);
+  --caution-glyph-ink: #14171c;
 }
 
 body {
@@ -102,7 +90,7 @@ body {
 }
 
 .t-label {
-  font-size: 12px;
+  font-size: 10.5px;
   letter-spacing: 0.1em;
   color: var(--text-secondary);
 }
@@ -168,7 +156,7 @@ body {
 
 .shell__brand-text span {
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: 10.5px;
 }
 
 .brand-mark__rotor {
@@ -200,7 +188,7 @@ body {
   opacity: 0.75;
   transition:
     opacity 160ms var(--ease-out),
-    transform 220ms var(--ease-out);
+    transform 220ms var(--ease-spring);
 }
 
 .shell__link:hover:not(:disabled) .nav-icon {
@@ -223,7 +211,7 @@ body {
   width: 3px;
   border-radius: 0 3px 3px 0;
   background: var(--status-info);
-  animation: nav-indicator 260ms var(--ease-out);
+  animation: nav-indicator 260ms var(--ease-spring);
 }
 
 .shell__link.is-active .nav-icon {
@@ -255,7 +243,7 @@ body {
   background: var(--glass-inset);
   font-weight: 600;
   letter-spacing: 0.06em;
-  font-size: 12px;
+  font-size: 11px;
   transition:
     color 300ms var(--ease-out),
     border-color 300ms var(--ease-out),
@@ -419,12 +407,12 @@ body {
     background 300ms var(--ease-out),
     color 300ms var(--ease-out),
     border-color 300ms var(--ease-out),
-    transform 300ms var(--ease-out);
+    transform 300ms var(--ease-spring);
 }
 
 .caution--caution .caution__lamp,
 .caution--alarm .caution__lamp {
-  animation: lamp-on 420ms var(--ease-out);
+  animation: lamp-on 420ms var(--ease-spring);
 }
 
 @keyframes lamp-on {
@@ -462,7 +450,7 @@ body {
 .annunciator__window--caution,
 .annunciator__window--alarm,
 .annunciator__window--virtual {
-  animation: lamp-on 420ms var(--ease-out);
+  animation: lamp-on 420ms var(--ease-spring);
 }
 
 .annunciator__window--alarm {
@@ -499,7 +487,7 @@ body {
   transform: scaleY(0);
   transform-origin: top;
   transition:
-    transform 360ms var(--ease-out),
+    transform 360ms var(--ease-spring),
     background 300ms var(--ease-out);
 }
 
@@ -546,13 +534,13 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 12px;
+  font-size: 10.5px;
   color: var(--text-muted);
   opacity: 0;
   transform: translateX(-4px);
   transition:
     opacity 180ms var(--ease-out),
-    transform 220ms var(--ease-out);
+    transform 220ms var(--ease-spring);
 }
 
 .instrument--clickable:hover .instrument__open,
@@ -590,7 +578,7 @@ body {
 .tag {
   border-radius: 5px;
   padding: 2px 7px;
-  animation: tag-in 300ms var(--ease-out);
+  animation: tag-in 300ms var(--ease-spring);
 }
 
 .tag--alarm {
@@ -717,7 +705,7 @@ body {
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 30%), var(--void-2);
   border-left: 1px solid var(--glass-border-strong);
   box-shadow: -30px 0 60px -20px rgba(0, 0, 0, 0.8);
-  animation: drawer-in 420ms var(--ease-out) both;
+  animation: drawer-in 420ms var(--ease-spring) both;
 }
 
 .drawer__panel[data-severity="alarm"] {
@@ -803,7 +791,7 @@ body {
   transition:
     background 160ms var(--ease-out),
     color 160ms var(--ease-out),
-    transform 220ms var(--ease-out);
+    transform 220ms var(--ease-spring);
 }
 
 .drawer__close:hover {
@@ -979,7 +967,7 @@ body {
 .trend__tick {
   fill: var(--text-muted);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 10px;
 }
 
 .trend__ref {
@@ -990,7 +978,7 @@ body {
 }
 
 .trend__ref-label {
-  font-size: 12px;
+  font-size: 10px;
   font-family: var(--font-mono);
   opacity: 0.85;
 }
@@ -1148,7 +1136,7 @@ body {
   padding: 34px 32px 28px;
   border-radius: 16px;
   box-shadow: var(--shadow-2);
-  animation: drawer-in 600ms var(--ease-out) both;
+  animation: drawer-in 600ms var(--ease-spring) both;
 }
 
 .login__brand {
@@ -1218,7 +1206,7 @@ body {
 /* ---- Alerts (D053) ------------------------------------------------------- */
 .alerts__reason {
   margin-top: 3px;
-  font-size: 12px;
+  font-size: 11.5px;
   line-height: 1.4;
 }
 
@@ -1346,7 +1334,7 @@ body {
   top: 0;
   z-index: 1;
   background: var(--glass-2);
-  font-size: 12px;
+  font-size: 10.5px;
   letter-spacing: 0.08em;
   color: var(--text-secondary);
   border-bottom: 1px solid var(--glass-border-strong);
@@ -1405,11 +1393,11 @@ body {
 }
 
 .kv__value {
-  animation: tag-in 420ms var(--ease-out) both;
+  animation: tag-in 420ms var(--ease-spring) both;
 }
 
 .pill {
-  animation: tag-in 360ms var(--ease-out) both;
+  animation: tag-in 360ms var(--ease-spring) both;
 }
 
 /* Empty / error / notice blocks. */
@@ -1431,7 +1419,7 @@ body {
 
 .ledger-event__type {
   margin-left: 8px;
-  font-size: 12px;
+  font-size: 10.5px;
 }
 
 .verify-banner {
@@ -1442,7 +1430,7 @@ body {
   border-radius: var(--hmi-radius);
   border: 1px solid var(--glass-border);
   background: var(--glass-1);
-  animation: tile-rise 420ms var(--ease-out) both;
+  animation: tile-rise 420ms var(--ease-spring) both;
 }
 
 .verify-banner div {
@@ -1610,7 +1598,7 @@ body {
 
 .physics--conflict .physics__state {
   color: var(--status-critical);
-  animation: lamp-on 420ms var(--ease-out);
+  animation: lamp-on 420ms var(--ease-spring);
 }
 
 .physics__bar {
@@ -1649,7 +1637,7 @@ body {
 }
 
 .physics__reading {
-  font-size: 12px;
+  font-size: 11.5px;
   color: var(--text-primary);
 }
 
@@ -1716,18 +1704,18 @@ body {
   align-self: center;
   padding: 1px 6px;
   border-radius: 4px;
-  font-size: 12px;
+  font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--status-virtual);
   border: 1px solid rgba(182, 120, 240, 0.5);
-  animation: tag-in 300ms var(--ease-out);
+  animation: tag-in 300ms var(--ease-spring);
 }
 
 .instrument__sensor-reads {
   margin-top: -6px;
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-muted);
   text-decoration: line-through;
   text-decoration-color: rgba(240, 80, 90, 0.6);
@@ -1751,7 +1739,7 @@ body {
 }
 
 .presets__motor {
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .presets__motor-state--running {
@@ -1774,7 +1762,7 @@ body {
   padding: 10px 12px;
   border-radius: 8px;
   border: 1px solid var(--glass-border);
-  border-left: 1px solid var(--glass-border);
+  border-left: 3px solid var(--glass-border-strong);
   background: var(--glass-inset);
   color: var(--text-primary);
   font: inherit;
@@ -1792,7 +1780,7 @@ body {
 }
 
 .preset span {
-  font-size: 12px;
+  font-size: 11.5px;
   color: var(--text-secondary);
 }
 
@@ -1880,7 +1868,7 @@ body {
 .incident__status {
   padding: 3px 10px;
   border-radius: 999px;
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 600;
   color: var(--status-healthy);
   border: 1px solid rgba(76, 195, 138, 0.4);
@@ -1939,7 +1927,7 @@ body {
   border-radius: 50%;
   border: 2px solid var(--void);
   background: var(--text-secondary);
-  animation: tag-in 420ms var(--ease-out) both;
+  animation: tag-in 420ms var(--ease-spring) both;
   animation-delay: 300ms;
 }
 
@@ -2021,7 +2009,7 @@ body {
   backdrop-filter: blur(10px);
   box-shadow: 0 18px 40px -12px rgba(0, 0, 0, 0.8);
   overflow: hidden;
-  animation: toast-in 420ms var(--ease-out) both;
+  animation: toast-in 420ms var(--ease-spring) both;
 }
 
 .toast--critical {
@@ -2051,7 +2039,7 @@ body {
 }
 
 .toast__body span {
-  font-size: 12px;
+  font-size: 11.5px;
   color: var(--text-secondary);
 }
 
@@ -2164,7 +2152,7 @@ body {
 }
 
 .arch__sub {
-  font-size: 12px;
+  font-size: 11.5px;
   color: var(--text-secondary);
 }
 
@@ -2174,7 +2162,7 @@ body {
   padding: 0;
   display: grid;
   gap: 2px;
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-muted);
 }
 
@@ -2186,7 +2174,7 @@ body {
 }
 
 .arch__label {
-  font-size: 12px;
+  font-size: 10px;
   text-align: center;
   color: var(--text-muted);
   font-family: var(--font-mono);
@@ -2258,7 +2246,7 @@ body {
   background: var(--glass-inset);
   color: var(--text-primary);
   font: inherit;
-  font-size: 12px;
+  font-size: 11.5px;
   cursor: pointer;
   transition:
     opacity 180ms var(--ease-out),
@@ -2325,7 +2313,7 @@ body {
   display: flex;
   flex-wrap: wrap;
   gap: 14px;
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-secondary);
 }
 

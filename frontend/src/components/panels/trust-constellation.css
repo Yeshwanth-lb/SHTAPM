@@ -59,7 +59,7 @@
 }
 
 .trust__band {
-  font-size: 12px;
+  font-size: 9.5px;
   letter-spacing: 0.05em;
   text-transform: uppercase;
 }
@@ -78,7 +78,7 @@
 }
 
 .trust__caveat {
-  font-size: 12px;
+  font-size: 9.5px;
   color: var(--text-muted);
   font-style: italic;
 }

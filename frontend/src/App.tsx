@@ -24,8 +24,6 @@ import "./styles/aurora.css";
 import "./styles/hmi.css";
 // Premium finish over the HMI (D052): depth, type and state-driven motion.
 import "./styles/premium.css";
-// Mission control world (D061): type, palette, density, signature; loaded last.
-import "./styles/mission.css";
 
 /** Route table. Every entry here is a page backed by real API data; anything
  *  not listed renders an honest "not found" rather than an empty shell. */

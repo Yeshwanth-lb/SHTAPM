@@ -3605,19 +3605,3 @@ does not authorize any wiring or actuation.
   displayed decision took the oldest of the last 10 (ATTACK up to ~10 s late)
   and the sensor panel's trust chart ran backwards. Both reverse the order now,
   with a regression test in the real order.
-
-### D061 — APPROVED (user direction "mission control", 2026-10-29): committed visual world replaces the grey HMI finish
-- **Date:** 2026-10-29
-- **Decision:** the user rated the UI 2/10 ("not impressive", "too dull / grey")
-  and pinned a mission-control direction. Built with the Impeccable skill
-  (Operate mode, direction contract in .impeccable/surfaces/) and Emil
-  Kowalski's motion rules: space-navy ground, solid mission-blue rail, Barlow /
-  Barlow Semi Condensed (self-hosted, OFL; replaces Geist), 12px type floor,
-  AA contrast throughout, state colours only for abnormal states, ease-out
-  curves under 300 ms and no springs or page-load choreography. Signature: the
-  "Two witnesses" coupling trace -- current and vibration placed on one
-  motor-state scale using the edge's own bands, contradiction spans (held 3+
-  samples) shaded red -- full width under the master caution. Nested cards,
-  coloured side stripes, glows and sub-11px text removed across all pages.
-- **Evidence:** Impeccable detector: Control Room 51 findings -> 0; every other
-  page 0; source scan 4 anti-patterns -> 0. 260 frontend tests pass.

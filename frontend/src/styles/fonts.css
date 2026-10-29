@@ -1,51 +1,26 @@
-/* SHTAPM — self-hosted fonts (D061). No CDN, no external network.
+/* SHTAPM — self-hosted fonts (Aurora typography, Doc04 §04.3).
  *
- * Barlow: a grotesk drawn from California highway and industrial signage --
- * legible at distance, tabular figures, semi-condensed cut for big numerals.
- * Replaces Geist (Doc04's pick), which had become one of the most common
- * faces in generated interfaces. Monospace (hashes, timestamps) uses the
- * system stack. SIL OFL 1.1 -- see assets/fonts/barlow/SOURCE.md.
+ * Geist + Geist Mono, SIL OFL 1.1. NO CDN, NO external network: the fonts are
+ * served from vendored local woff2 under ../assets/fonts/ (see FONTS.md).
+ *
+ * P0 fixes the @font-face contract. The woff2 binaries + the exact vendoring
+ * mechanism (@fontsource package pin vs. manual woff2) are finalized in P5
+ * when frontend deps install and the package/version is verifiable — see
+ * FONTS.md and ../../../project-state/TODO.md (font item is foundation-only).
  */
 
 @font-face {
-  font-family: "Barlow";
-  src: url("../assets/fonts/barlow/Barlow-400.woff2") format("woff2");
-  font-weight: 400;
+  font-family: "Geist";
+  src: url("../assets/fonts/geist/Geist-Variable.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
   font-display: swap;
 }
+
 @font-face {
-  font-family: "Barlow";
-  src: url("../assets/fonts/barlow/Barlow-500.woff2") format("woff2");
-  font-weight: 500;
-  font-display: swap;
-}
-@font-face {
-  font-family: "Barlow";
-  src: url("../assets/fonts/barlow/Barlow-600.woff2") format("woff2");
-  font-weight: 600;
-  font-display: swap;
-}
-@font-face {
-  font-family: "Barlow";
-  src: url("../assets/fonts/barlow/Barlow-700.woff2") format("woff2");
-  font-weight: 700;
-  font-display: swap;
-}
-@font-face {
-  font-family: "Barlow Semi Condensed";
-  src: url("../assets/fonts/barlow/BarlowSemiCondensed-500.woff2") format("woff2");
-  font-weight: 500;
-  font-display: swap;
-}
-@font-face {
-  font-family: "Barlow Semi Condensed";
-  src: url("../assets/fonts/barlow/BarlowSemiCondensed-600.woff2") format("woff2");
-  font-weight: 600;
-  font-display: swap;
-}
-@font-face {
-  font-family: "Barlow Semi Condensed";
-  src: url("../assets/fonts/barlow/BarlowSemiCondensed-700.woff2") format("woff2");
-  font-weight: 700;
+  font-family: "Geist Mono";
+  src: url("../assets/fonts/geist-mono/GeistMono-Variable.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
   font-display: swap;
 }

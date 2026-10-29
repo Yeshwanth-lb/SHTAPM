@@ -61,8 +61,8 @@
   --provenance-unknown: rgba(233, 240, 247, 0.26);
 
   /* Type scale (§04.3) */
-  --font-display: "Barlow", system-ui, sans-serif;
-  --font-mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  --font-display: Geist, Satoshi, "Plus Jakarta Sans", system-ui, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, "JetBrains Mono", monospace;
 
   --motion-fast: 140ms;
   --motion-base: 220ms;
