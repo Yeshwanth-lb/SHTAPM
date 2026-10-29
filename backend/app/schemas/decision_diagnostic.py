@@ -48,6 +48,15 @@ class ChannelAttribution(_Strict):
     reason: str
 
 
+class ChannelMotorState(_Strict):
+    """What one channel said about the motor in this window (D054)."""
+
+    state: Literal["idle", "running", "unclear"]
+    median: float
+    idle_max: float
+    running_min: float
+
+
 class DecisionDiagnosticMessage(_Strict):
     device_id: str
     ts: str  # ISO-8601 with ms — the originating telemetry frame's own ts
@@ -76,6 +85,12 @@ class DecisionDiagnosticMessage(_Strict):
     # last good reading, held so one dead sensor does not stop the stream.
     # Defaults to empty so older publishers stay schema-valid.
     stale_channels: list[Channel] = []
+    # D054 (display only, optional so older publishers stay valid): the motor
+    # state each physically coupled channel reported in this window, and the
+    # digital twin's reconstructed value for each substituted channel, in
+    # engineering units. Neither is written into the telemetry frame.
+    motor_state: dict[Literal["current", "vibration"], ChannelMotorState] | None = None
+    twin_values: dict[Channel, float] = {}
     execution_mode: Literal["live"] = "live"
     data_source: Literal["edge_live_pipeline"] = "edge_live_pipeline"
     model_status: Literal["diagnostic_unvalidated"] = "diagnostic_unvalidated"

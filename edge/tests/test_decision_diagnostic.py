@@ -252,3 +252,27 @@ def test_start_failure_leaves_publisher_inert_not_raising(monkeypatch):
     publisher.publish(
         build_decision_diagnostic_message("pump-01", _window_outcome(), _tracked(), _raw_values())
     )  # still a no-op, still must not raise
+
+
+def test_carries_motor_state_and_twin_values_for_display():
+    """D054: optional display fields; absent ones stay schema-valid defaults."""
+    plain = build_decision_diagnostic_message(
+        "pump-01", _window_outcome(), _tracked(), _raw_values()
+    )
+    assert plain.motor_state is None and plain.twin_values == {}
+    states = {
+        "current": {"state": "idle", "median": 0.0, "idle_max": 0.05, "running_min": 0.3},
+        "vibration": {"state": "running", "median": 0.6, "idle_max": 0.14, "running_min": 0.31},
+    }
+    msg = build_decision_diagnostic_message(
+        "pump-01",
+        _window_outcome(),
+        _tracked(),
+        _raw_values(),
+        substituted_channels=["current"],
+        motor_state=states,
+        twin_values={"current": 0.71},
+    )
+    assert msg.motor_state["vibration"].state == "running"
+    assert msg.twin_values == {"current": 0.71}
+    assert DecisionDiagnosticMessage.model_validate_json(msg.model_dump_json()) == msg

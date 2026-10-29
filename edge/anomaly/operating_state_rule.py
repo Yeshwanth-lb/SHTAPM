@@ -211,6 +211,7 @@ class OperatingStateRule:
         self._since: dict[str, int] = {}
         self._tick = 0
         self._fitted = False
+        self._snapshot: dict[str, dict[str, float | str]] = {}
 
     @property
     def fitted(self) -> bool:
@@ -232,11 +233,26 @@ class OperatingStateRule:
         """Raw frames of the window about to be checked (see module docstring)."""
         self._raw = frames
         self._tick += 1
+        snapshot: dict[str, dict[str, float | str]] = {}
         for channel, bands in self._bands.items():
-            state = bands.classify(statistics.median(getattr(f.sensors, channel) for f in frames))
+            median = statistics.median(getattr(f.sensors, channel) for f in frames)
+            state = bands.classify(median)
+            snapshot[channel] = {
+                "state": state,
+                "median": median,
+                "idle_max": bands.idle_max,
+                "running_min": bands.running_min,
+            }
             if state != UNCLEAR and self._state.get(channel) != state:
                 self._state[channel] = state
                 self._since[channel] = self._tick
+        self._snapshot = snapshot
+
+    def motor_states(self) -> dict[str, dict[str, float | str]]:
+        """What current and vibration each said about the motor in the newest
+        window -- state, window median and the bands that judged it (D054).
+        Read for display; the verdict itself is ``check``."""
+        return dict(self._snapshot)
 
     def check(self, window: Window) -> PhysicsCheck:
         if not self._fitted:

@@ -25,6 +25,8 @@ import {
   FAULT_WINDOW,
   type LedgerEvent,
 } from "../features/controlroom/model";
+import { DemoPresets } from "../features/controlroom/DemoPresets";
+import { PhysicsPanel } from "../features/controlroom/PhysicsPanel";
 import { SensorDetail } from "../features/controlroom/SensorDetail";
 import {
   LIVE_DECISION_POLL_MS,
@@ -36,12 +38,15 @@ import { useDeviceTelemetry } from "../features/telemetry/useDeviceTelemetry";
 import {
   apiGet,
   getHealthz,
+  getLiveState,
   getRelay,
   getSensorHealth,
   type HealthzOut,
+  type LiveStateOut,
   type RelayOut,
   type SensorHealthOut,
 } from "../lib/api";
+import { canInject, roleFromToken } from "../lib/token";
 import { useApiResource } from "../lib/useApiResource";
 import { CHANNELS } from "../types/contracts";
 
@@ -75,6 +80,11 @@ export function ControlRoomPage() {
     () => getSensorHealth(DEVICE_ID, accessToken!),
     [accessToken],
     { enabled, pollMs: LIVE_DECISION_POLL_MS },
+  );
+  const live = useApiResource<LiveStateOut>(
+    () => getLiveState(DEVICE_ID, accessToken!),
+    [accessToken],
+    { enabled, pollMs: 1_000 },
   );
   const relay = useApiResource<RelayOut>(() => getRelay(DEVICE_ID, accessToken!), [accessToken], {
     enabled,
@@ -132,10 +142,19 @@ export function ControlRoomPage() {
               trust={scores[channel]}
               state={channelState(channel, decision, stale)}
               onOpen={() => setOpenChannel(channel)}
+              twinValue={
+                decision?.substituted_channels?.includes(channel)
+                  ? live.data?.twin_values[channel] ?? null
+                  : null
+              }
             />
           ))}
         </div>
         <div className="cr" style={{ alignContent: "start" }}>
+          <PhysicsPanel live={live.data ?? null} />
+          {accessToken && canInject(roleFromToken(accessToken)) && (
+            <DemoPresets deviceId={DEVICE_ID} accessToken={accessToken} live={live.data ?? null} />
+          )}
           <RelayPanel deviceId={DEVICE_ID} accessToken={accessToken} />
           <GlassTile title="Transport">
             <div className="transport" data-testid="transport">

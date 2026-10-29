@@ -405,3 +405,21 @@ class TestADXL335Driver:
             assert set(reading.as_dict().keys()) == {"value", "unit", "ts", "healthy"}
         finally:
             adxl335_module.spidev = original_spidev
+
+
+@pytest.mark.parametrize("rail", [0, 1023])
+def test_an_adc_rail_is_a_failed_read_not_zero_vibration(rail):
+    """D055 (bench 2026-10-29): a silent MCP3008 read 0/1023 on every channel
+    and the driver reported a healthy flat 0.0 g. A rail is now a failure, and
+    it never becomes the zero-g baseline."""
+    from unittest.mock import patch
+
+    from edge.drivers.adxl335 import ADXL335VibrationReader
+
+    with patch("edge.drivers.adxl335.spidev") as mock_spidev:
+        reader = ADXL335VibrationReader()
+        mock_spidev.SpiDev.return_value = _mock_spi_for_channels({0: rail, 1: rail, 2: rail})
+        with pytest.raises(OSError, match="ADC rail"):
+            reader.read_vibration_g()
+        mock_spidev.SpiDev.return_value = _mock_spi_for_channels({0: 500, 1: 500, 2: 410})
+        assert reader.read_vibration_g() == 0.0  # the first GOOD read is the baseline

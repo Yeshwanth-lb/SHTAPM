@@ -51,6 +51,7 @@ from app.api.devices import router as devices_router
 from app.api.inject import InjectionRegistry
 from app.api.inject import router as inject_router
 from app.api.ledger import router as ledger_router
+from app.api.live_state import router as live_state_router
 from app.api.relay import router as relay_router
 from app.api.sensor_health import router as sensor_health_router
 from app.api.system import router as system_router
@@ -68,6 +69,7 @@ from app.services.condition import ConditionRollup
 from app.services.decision_diagnostic_persistence import DecisionDiagnosticPersistence
 from app.services.decision_ledger import DecisionLedgerRecorder
 from app.services.latency_tracker import LatencyTracker
+from app.services.live_state import LiveStateRegistry
 from app.services.sensor_health import SensorHealthLedger, SensorHealthRegistry
 from app.services.status_persistence import StatusPersistence
 from app.services.telemetry_persistence import TelemetryPersistence
@@ -119,6 +121,9 @@ async def lifespan(app: FastAPI):
     decision_diagnostic_consumer.add_sink(condition_rollup.on_decision)
     app.state.condition_rollup = condition_rollup
     # Dead sensors (D045): latest stale set for the dashboard + ledger events.
+    live_state_registry = LiveStateRegistry()
+    decision_diagnostic_consumer.add_sink(live_state_registry.update)
+    app.state.live_state_registry = live_state_registry
     sensor_health_registry = SensorHealthRegistry()
     decision_diagnostic_consumer.add_sink(sensor_health_registry.update)
     decision_diagnostic_consumer.add_sink(SensorHealthLedger(session_factory).record)
@@ -227,6 +232,7 @@ app.include_router(devices_router)
 app.include_router(inject_router)
 app.include_router(relay_router)
 app.include_router(sensor_health_router)
+app.include_router(live_state_router)
 app.include_router(alerts_router)
 app.include_router(users_router)
 app.include_router(system_router)

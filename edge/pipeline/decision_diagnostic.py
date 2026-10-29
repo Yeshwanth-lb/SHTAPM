@@ -32,7 +32,7 @@ relay/GPIO path exists anywhere in it.
 from __future__ import annotations
 
 import logging
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 
 from app.schemas.contracts import CHANNELS, TrustScores
 from app.schemas.decision_diagnostic import ChannelAttribution, DecisionDiagnosticMessage
@@ -53,6 +53,8 @@ def build_decision_diagnostic_message(
     raw: RawChannelValues,
     substituted_channels: Sequence[str] = (),
     stale_channels: Sequence[str] = (),
+    motor_state: Mapping[str, Mapping[str, float | str]] | None = None,
+    twin_values: Mapping[str, float] | None = None,
 ) -> DecisionDiagnosticMessage:
     """Pure mapping, no I/O: the exact fields a ``WindowOutcome`` + the
     paired ``RawChannelValues`` + the current ``IsolationTrackerResult``
@@ -85,6 +87,8 @@ def build_decision_diagnostic_message(
         tracked_isolation_candidates=sorted(tracked.tracked_channels),
         substituted_channels=sorted(substituted_channels),
         stale_channels=sorted(stale_channels),
+        motor_state=dict(motor_state) if motor_state else None,
+        twin_values=dict(twin_values or {}),
     )
 
 

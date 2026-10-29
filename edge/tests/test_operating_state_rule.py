@@ -349,3 +349,15 @@ def test_band_coverage_reports_drift_outside_the_learned_bands():
     idle_ok, _, run_ok, _ = band_coverage([(cur, drifted)], bands, window=N)
     assert idle_ok == 0.0 and run_ok == 1.0
     assert band_coverage([([0.0001] * 40, [0.1] * 40)], bands, window=N)[2] is None
+
+
+def test_motor_states_report_what_each_channel_said(rule_factory=None):
+    """D054: the newest window's state, median and bands, for display."""
+    rule = OperatingStateRule(vibration_bands=StateBands(idle_max=0.35, running_min=0.5))
+    rule.fit([WINDOW])
+    assert rule.motor_states() == {}
+    _step(rule, _frames(0.0002, 0.7))  # current idle, vibration running
+    states = rule.motor_states()
+    assert states["current"]["state"] == IDLE and states["vibration"]["state"] == RUNNING
+    assert states["vibration"]["median"] == pytest.approx(0.7)
+    assert (states["vibration"]["idle_max"], states["vibration"]["running_min"]) == (0.35, 0.5)

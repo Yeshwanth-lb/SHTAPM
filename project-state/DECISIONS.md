@@ -3544,3 +3544,44 @@ does not authorize any wiring or actuation.
 - **Why:** the alerts API existed with acknowledgement but had no producer, so
   the page was always empty and still claimed detection "never flags" -- false
   since P2. A failed alert write never blocks the ledger write.
+
+### D054 — APPROVED (user request): the edge reports its motor-state reading and the twin's values for display
+- **Date:** 2026-10-29
+- **Decision:** the decision message gains two optional fields:
+  ``motor_state`` (for current and vibration: idle/running/unclear, the
+  window median and the bands that judged it -- ``OperatingStateRule.
+  motor_states()``) and ``twin_values`` (channel -> the twin's reconstruction
+  in engineering units, from the existing self-heal reports). The backend keeps
+  the newest per device in memory (``LiveStateRegistry``) and serves
+  ``GET /api/devices/{id}/live-state``. The Control Room shows a physics panel
+  (current says / vibration says / agree or impossible) and, on a substituted
+  instrument, the twin's value in purple with the untrusted sensor reading
+  struck through.
+- **Why:** the attribution's evidence was invisible: the audience saw ATTACK
+  but not the contradiction behind it, and a VIRTUAL tile still showed the
+  attacker's 0.000 A. The dashboard cannot re-derive the states itself (the
+  vibration bands are learned on the Pi at startup), so the edge reports them.
+- **Compatibility:** both fields default to empty, so an older edge stays valid;
+  the backend must be updated before the edge (strict schema).
+
+### D055 — APPROVED (bug fix): an ADXL335 read at an ADC rail is a failed read
+- **Date:** 2026-10-29
+- **Decision:** ``ADXL335VibrationReader`` raises on any axis at exactly 0 or
+  1023 counts (never taking it as the zero-g baseline); the sampler then holds
+  the last good value and reports the sensor dead (D045/D047).
+  ``hw_diagnostic.py`` marks such reads FAIL.
+- **Why (bench 2026-10-29):** a loose MCP3008 connection made every channel
+  read 0 or 1023; the driver turned that into a healthy flat 0.0 g and the
+  diagnostic said PASS. Idle-looking vibration under a running motor is exactly
+  the contradiction attributed to the current sensor as an attack.
+
+### D056 — APPROVED (user request): one-click rehearsed demo scenarios on the Control Room
+- **Date:** 2026-10-29
+- **Decision:** admins and operators allowed to inject see three buttons with
+  DEMO_CARD.md's values built in (spoof current -> 0 A, bias +0.8 A, stuck
+  current; 40 s each), gated by the edge's motor-state reading (D054): a
+  scenario that would not contradict physics in the current motor state is
+  disabled with "Switch the motor ON/OFF first". A running injection shows a
+  countdown and Stop. Uses the existing inject/cancel endpoints.
+- **Why:** on 2026-10-28 two rehearsal runs failed only because a value was
+  typed with the wrong sign or in the wrong motor state.

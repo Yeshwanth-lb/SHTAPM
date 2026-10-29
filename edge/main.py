@@ -467,15 +467,17 @@ def _build_p2_monitor(
         tracked = last_tracked.get("result")
         if tracked is None:
             return
-        substituted = _run_self_heal(outcome, tracked, self_heal, recent_frames)
+        twin_values = _run_self_heal(outcome, tracked, self_heal, recent_frames)
         try:
             message = build_decision_diagnostic_message(
                 device_id,
                 outcome,
                 tracked,
                 raw,
-                substituted_channels=substituted,
+                substituted_channels=list(twin_values),
                 stale_channels=channel_health.stale() if channel_health is not None else (),
+                motor_state=physics_rule.motor_states(),
+                twin_values=twin_values,
             )
             decision_publisher.publish(message)
         except Exception:
@@ -513,8 +515,9 @@ def _run_self_heal(
     tracked: IsolationTrackerResult,
     self_heal: SelfHealRuntime | None,
     recent_frames: deque | None,
-) -> list[str]:
+) -> dict[str, float]:
     """Reconstruct any isolated channel the trained twin can serve, and log it.
+    Returns channel -> reconstructed value in engineering units (D054).
 
     OBSERVE-ONLY, in three specific senses:
       * the reconstruction is logged, never written into the telemetry frame --
@@ -530,7 +533,7 @@ def _run_self_heal(
     misrepresent that.
     """
     if self_heal is None or recent_frames is None:
-        return []
+        return {}
     # Called with an empty set too: that is how a release resets the 60 s
     # substitution clock (D050).
     try:
@@ -540,7 +543,7 @@ def _run_self_heal(
     except Exception:
         # A self-healing fault must never stop telemetry or P2.
         log.debug("self-heal substitution failed (observe-only)", exc_info=False)
-        return []
+        return {}
     for report in reports:
         log.info(
             "SELF-HEAL substitution (observe-only, not written to telemetry): "
@@ -551,7 +554,7 @@ def _run_self_heal(
             f"{report.divergence:.3f}" if report.divergence is not None else "n/a",
             f"{report.uncertainty:.3f}" if report.uncertainty is not None else "n/a",
         )
-    return [report.channel for report in reports]
+    return {report.channel: report.substituted_value for report in reports}
 
 
 def _log_window_outcome(

@@ -119,6 +119,7 @@ export function Instrument({
   trust,
   state,
   onOpen,
+  twinValue = null,
 }: {
   channel: string;
   value: number | null;
@@ -128,10 +129,13 @@ export function Instrument({
   state: ChannelState;
   /** Opens the sensor detail panel; makes the tile a button (D052). */
   onOpen?: () => void;
+  /** The digital twin's value while this channel is substituted (D054). */
+  twinValue?: number | null;
 }) {
   const tone = TONE_CLASS[state.severity];
   const trustSeverity = trustTone(trust);
-  const shownValue = useAnimatedNumber(value, undefined, { countUp: true });
+  const healing = twinValue !== null && twinValue !== undefined;
+  const shownValue = useAnimatedNumber(healing ? twinValue : value, undefined, { countUp: true });
   const shownTrust = useAnimatedNumber(trust, undefined, { countUp: true });
   return (
     <article
@@ -163,12 +167,18 @@ export function Instrument({
           </span>
         )}
       </header>
-      <div className="instrument__value tabular">
+      <div className={`instrument__value tabular${healing ? " instrument__value--twin" : ""}`}>
         <span className="t-metric" data-testid={`instrument-value-${channel}`}>
-          {formatValue(value === null ? null : shownValue)}
+          {formatValue(value === null && !healing ? null : shownValue)}
         </span>
         <span className="instrument__unit">{unit}</span>
+        {healing && <span className="instrument__twin">twin</span>}
       </div>
+      {healing && (
+        <div className="instrument__sensor-reads" data-testid={`instrument-sensor-${channel}`}>
+          sensor reports {formatValue(value)} {unit} · not trusted
+        </div>
+      )}
       <Sparkline
         points={points.slice(-90)}
         color={SPARK_COLOR[state.severity]}

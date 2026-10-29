@@ -365,3 +365,26 @@ export async function getHealthz(): Promise<HealthzOut> {
   if (!response.ok) throw new ApiError(response.status, response.statusText);
   return (await response.json()) as HealthzOut;
 }
+
+// ---- Live physics view (D054) — mirrors backend app/api/live_state.py ----
+
+export interface ChannelMotorState {
+  state: "idle" | "running" | "unclear";
+  median: number;
+  idle_max: number;
+  running_min: number;
+}
+
+export interface LiveStateOut {
+  device_id: string;
+  ts: string | null;
+  motor_state: Partial<Record<"current" | "vibration", ChannelMotorState>> | null;
+  twin_values: Record<string, number>;
+}
+
+export function getLiveState(deviceId: string, accessToken: string): Promise<LiveStateOut> {
+  return apiGet<LiveStateOut>(
+    `/api/devices/${encodeURIComponent(deviceId)}/live-state`,
+    accessToken,
+  );
+}

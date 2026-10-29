@@ -192,6 +192,18 @@ class ADXL335VibrationReader:
         ADXL335MCP3008Reader.read_raw_xyz).
         """
         x, y, z = self._reader.read_raw_xyz()
+        # RAIL CHECK (D055). An axis at exactly 0 or 1023 counts is the ADC's
+        # limit, ~5 g from zero-g -- not a vibration this bench produces. It is
+        # what a silent MCP3008 (loose DOUT/VDD/CS) returns: on 2026-10-29 all
+        # channels read 0 or 1023 and the "vibration" was a flat 0.0 g that
+        # looked healthy. Idle-looking vibration under a running motor would be
+        # judged a current-sensor ATTACK, so a rail read is a failed read: the
+        # sampler holds the last good value and reports the sensor dead (D045).
+        if any(v in (0, _ADC_MAX_COUNT) for v in (x, y, z)):
+            raise OSError(
+                f"ADXL335 via MCP3008 read an ADC rail (X={x} Y={y} Z={z}): "
+                "chip not answering or an axis wire is loose"
+            )
         if self._baseline is None:
             self._baseline = (x, y, z)
             return 0.0

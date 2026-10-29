@@ -186,8 +186,11 @@ def main() -> int:
         try:
             x, y, z = adxl335_raw_reader.read_raw_xyz()
             vib_reading = adxl335_driver.read()
-            ok = vib_reading.healthy and vib_reading.value is not None
+            railed = any(v in (0, 1023) for v in (x, y, z))
+            ok = vib_reading.healthy and vib_reading.value is not None and not railed
             note = " (first read defines baseline, 0.0 expected)" if i == 1 else ""
+            if railed:
+                note = " (ADC RAIL: MCP3008 not answering or a wire is loose -- check DOUT/VDD/CS)"
             print(
                 f"ADXL335 raw: X={x} Y={y} Z={z} counts | "
                 f"vibration={vib_reading.value} {vib_reading.unit} "
