@@ -62,9 +62,11 @@ def check_system_health(health: dict) -> list[Check]:
         Check(
             "MQTT broker",
             PASS if health.get("mqtt_connected") else FAIL,
-            "backend connected to the broker"
-            if health.get("mqtt_connected")
-            else "backend is NOT connected to the MQTT broker (is mosquitto running?)",
+            (
+                "backend connected to the broker"
+                if health.get("mqtt_connected")
+                else "backend is NOT connected to the MQTT broker (is mosquitto running?)"
+            ),
         ),
         Check(
             "database",

@@ -437,9 +437,7 @@ def main() -> int:
         verdict = (
             "beats mean"
             if result.skill > 0.1
-            else "no better than mean"
-            if result.skill > -0.1
-            else "WORSE than mean"
+            else "no better than mean" if result.skill > -0.1 else "WORSE than mean"
         )
         print(
             f"{channel:<12}{result.model_rmse_raw:>10.5f} {result.unit:<3}"
