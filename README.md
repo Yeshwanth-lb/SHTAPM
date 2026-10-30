@@ -9,14 +9,30 @@ safety loop runs entirely on a Raspberry Pi and never waits on the network.
 
 Authoritative specs live in [`docs/`](docs/) and [`CLAUDE.md`](CLAUDE.md). Build
 state, decisions and the phase checklist live in
-[`project-state/`](project-state/) — **read `CURRENT_STATE.md` first** for handoff.
+[`project-state/`](project-state/). **Starting a new session (human or Claude
+Code)? Read [`HANDOVER.md`](HANDOVER.md) first** — it is the single entry point
+with the current state, how to run everything, and what is left.
 
 ---
 
-## Status — 2026-09-18
+## Status — 2026-10-30
 
-Running on real hardware: a Raspberry Pi 5 with five physical sensors, streaming
-at 1 Hz through MQTT to a FastAPI backend, a database, and a nine-page dashboard.
+Major Project Phase-2 is complete. Running on real hardware: a Raspberry Pi 5
+with five physical sensors, streaming at 1 Hz through MQTT to a FastAPI backend,
+a database, and a premium industrial-HMI dashboard (login, control room, sensor
+detail, device, decisions, history, alerts, ledger, system, users, settings).
+
+**Deliverables in this repository**
+
+| Folder | What it is |
+|---|---|
+| [`report/`](report/) | The 89-page final project report (LaTeX, college template) |
+| [`paper/`](paper/) | 6-page IEEE conference-format paper |
+| [`paper_journal/`](paper_journal/) | 28-page journal-format paper (single column, section-numbered) |
+| [`project-state/TEST_REPORT_2026-10-30.md`](project-state/TEST_REPORT_2026-10-30.md) | The single final test report |
+
+Build any of them with `pdflatex main.tex` (three passes) inside its folder. The
+report and the papers use their own `figures/` and `data/` folders.
 
 | Channel | Part | Interface | State |
 |---|---|---|---|
@@ -27,32 +43,46 @@ at 1 Hz through MQTT to a FastAPI backend, a database, and a nine-page dashboard
 | `current` | INA219 | I²C `0x40` | real |
 | `gas` | — none — | — | **SIMULATED** |
 
-> **`gas` is a synthetic value, not a measurement.** No MQ-135 driver exists. The
-> API and dashboard label it `PLACEHOLDER` so it can never be read as real. The
+> **`gas` is a synthetic value, not a measurement.** The MQ-135 driver and its
+> voltage-divider signal path are implemented and unit-tested (D044), but the
+> sensor is not wired, so the experiments use the configurable emulated source.
+> The API and dashboard label it `PLACEHOLDER` so it can never be read as real. The
 > frozen wire contract carries six plain floats and no provenance marker, so the
 > system had to be taught separately which channels are genuine.
+>
+> **The pump relay is software-verified only.** The safety supervisor (latched
+> Safe Pump-Stop after 60 s of substitution, 10 s watchdog, dry-run rule) is
+> implemented and tested against an in-memory relay; no physical relay is wired.
 
 **What works end to end:** acquisition → anomaly detection (Isolation Forest) →
 per-channel trust scoring → fault-vs-attack attribution → isolation → digital-twin
 substitution → MQTT → persistence → REST/WebSocket → dashboard, with substituted
 channels rendered as `VIRTUAL`.
 
-**Selected measurements** (all reproducible from `edge/eval/`, evidence in
-[`project-state/BENCH_LOAD_VALIDATION.md`](project-state/BENCH_LOAD_VALIDATION.md)):
+**Headline results** (final 51.4-minute real-hardware baseline, 2026-10-28;
+reproducible with `python scripts/final_eval.py final_baseline.jsonl`; full
+evidence in
+[`project-state/EVALUATION_RESULTS_2026-10-26.md`](project-state/EVALUATION_RESULTS_2026-10-26.md)):
 
-- 7.18 h continuous capture, 21,799 frames, no inter-frame gap > 5 s
-- current ↔ vibration coupling under load: **r = 0.76** (idle rig: R² = 0.019)
-- digital twin reconstructs `current` at **45.8 %** skill vs a predict-the-mean baseline
-- Isolation Forest on real clean bench data: **0.1 %** false-positive rate
+- **0 false attack attributions on 2,552 clean channel-windows**
+- state-crossing attacks attributed: **73 %** (32/44); faults kept as faults:
+  **85 %** (23/27); balanced accuracy **79 %** vs **60 %** for the old trend-sign rule
+- digital twin cuts the served-value error under attack by **79–87 %** out of
+  sample (0.60 A → 0.079 / 0.12 A); held-out skill **+47.3 %**
+- live system: spoof attributed as ATTACK in 23 s, bias in 19 s; latched
+  Safe Pump-Stop exactly 60 s after isolation; ledger verified intact (200 blocks)
+- SWaT.A1 detection and a 7.2 h idle recording are reported in the paper and report
 
-**Deliberately not claimed:** detection rate (needs labelled faults on real
-hardware), prognosis accuracy (no pump degradation dataset exists), and any
-physical actuation — no relay or GPIO output is wired anywhere in this build.
+**Stated limits (not hidden):** attacks that keep a reading inside its true
+physical state (0/23) and drift-vs-ramp are indistinguishable from clean data on
+this rig. Remaining-useful-life prognosis and the DQN response policy exist as
+tested modules but are **not deployed** (no pump run-to-failure data; reward
+weights are an open policy decision, `U06`).
 
 **Held open on purpose:** the divergence escalation threshold is disabled rather
-than guessed. It was measured at a 5.8 % false-escalation rate on clean data, so
-the escalate-to-safe-stop path is unreachable by construction until the
-reconstruction improves. See `U05` in
+than guessed. On clean held-out data a 3σ threshold would false-escalate in 4.5 %
+of windows, so escalation by divergence is off; the 60 s substitution budget
+still stops the pump. See `U05` in
 [`project-state/DECISIONS.md`](project-state/DECISIONS.md).
 
 ---
@@ -68,10 +98,14 @@ self-hosted fonts). The tech stack is frozen by TRD §02.2.
 ```
 edge/            Raspberry Pi node — drivers, P2 pipeline, self-healing, RL scaffolding
 backend/         FastAPI — MQTT consumers, WS gateway, REST, auth, ledger
-frontend/        React + Vite dashboard (9 pages)
+frontend/        React + Vite dashboard (11 pages, ISA-101 industrial HMI)
 infra/           mosquitto broker config
 docs/            authoritative PRD / TRD / AppFlow / UIUX / Schema / ImplPlan
-project-state/   implementation memory (state, decisions, log, todo, evidence)
+project-state/   implementation memory (state, decisions, log, todo, evidence, test report)
+report/          final project report (LaTeX)
+paper/           IEEE conference-format paper (LaTeX)
+paper_journal/   journal-format paper (LaTeX)
+HANDOVER.md      start here when resuming work
 ```
 
 ---
@@ -148,13 +182,19 @@ declaration (`SHTAPM_CHANNEL_SOURCES`) **and** the registry agree.
 ## Tests
 
 ```bash
-pytest                    # 2,056 passing (edge + backend + simulator)
-cd frontend && npm test   # 149 passing
+pytest                    # 2,358 passing, 0 failed (edge + backend + simulator)
+cd frontend && npm test   # 259 passing, 0 failed
 ```
 
 Broker- and Postgres-gated integration tests self-skip when those services are
-absent. Four tests are `xfail` with recorded reasons — documented limitations, not
-unexplained failures.
+absent. Eight DHT22 tests are Linux-only (Windows forbids `:` in file names) and
+four are `xfail` with recorded reasons — documented limitations, not unexplained
+failures. The full results, lint, hardware scenarios and document builds are in
+[`project-state/TEST_REPORT_2026-10-30.md`](project-state/TEST_REPORT_2026-10-30.md).
+
+Day-to-day commands (start everything, check every sensor, demo scenarios,
+baseline recording, replay fallback, troubleshooting) are in
+[`COMMANDS.md`](COMMANDS.md).
 
 ---
 

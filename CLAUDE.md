@@ -1,5 +1,12 @@
 # Project Instructions
 
+## Resuming work — read first
+
+Before anything else, read `HANDOVER.md` at the repository root. It holds the current
+project state, where everything lives (the real clone is `C:\Users\Yeshwanth L B\mpp2\SHTAPM`),
+how to run it, the honest limits that must stay stated, and what is left. The newest
+decision number and test results are in `project-state/`.
+
 ## Project Documentation
 
 The `docs/` directory contains the official project documentation.
