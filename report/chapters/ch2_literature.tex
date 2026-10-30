@@ -1,0 +1,179 @@
+\chapter{Literature Survey}
+\label{ch:literature}
+
+This chapter reviews the bodies of work that SHTAPM draws on: predictive maintenance of rotating machinery, anomaly detection in industrial time series, security threats to the Internet of Things and to industrial control systems (ICS), physics-based attack detection, trust and reputation models, reinforcement learning for adaptive defence, digital twins, tamper-evident logging, and human--machine interface design for process control. Each section closes with the limitation that the present work addresses, and Table~\ref{tab:litsummary} summarises the principal surveyed papers.
+
+\section{Existing Methods/Previous Work}
+
+\subsection{Predictive Maintenance of Rotating Machinery}
+
+Prognostics and health management (PHM) for rotating machinery is a mature field. Lee \emph{et al.}~\cite{lee2014phm} review the PHM design space for rotary machines, from feature extraction on vibration and current signals to health assessment, diagnosis and remaining-useful-life estimation, and stress that the value of PHM lies in turning sensor data into maintenance decisions before a failure occurs. Lee, Bagheri and Kao~\cite{lee2015cps} place this within Industry~4.0 through a five-level (5C) cyber-physical architecture that runs from smart connection and data-to-information conversion up to self-configuring machines. Susto \emph{et al.}~\cite{susto2015pdm} show that machine-learning classifiers trained on equipment histories can schedule maintenance more economically than fixed intervals, and Ran \emph{et al.}~\cite{ran2019pdmsurvey} survey predictive-maintenance system architectures, purposes and approaches, from classical machine learning to deep learning.
+
+Deep learning now dominates fault diagnosis from raw signals. Zhang \emph{et al.}~\cite{zhang2017wdcnn} propose a convolutional network with wide first-layer kernels that diagnoses bearing faults directly from raw vibration and remains accurate under noise and changing load, and Zhao \emph{et al.}~\cite{zhao2019dlhealth} review deep-learning approaches to machine health monitoring, including autoencoders, convolutional and recurrent networks.
+
+Progress in this area rests on public fault and run-to-failure datasets. The Case Western Reserve University bearing data have become the most widely used benchmark for vibration-based diagnosis, and Smith and Randall~\cite{smith2015cwru} analyse them systematically, showing which recordings are genuinely diagnosable and warning that several are dominated by effects other than the seeded fault. NASA's C-MAPSS simulations of turbofan degradation~\cite{saxena2008cmapss} are the standard benchmark for remaining-useful-life prediction, the PRONOSTIA platform~\cite{nectoux2012pronostia} provides accelerated bearing-degradation experiments with real run-to-failure measurements, and the MIMII dataset~\cite{purohit2019mimii} records the sound of normal and malfunctioning industrial pumps, valves, fans and slide rails.
+
+These datasets made rigorous comparison of maintenance models possible, but they all record honest sensors. None of them contains falsified readings, so they cannot show whether a maintenance model can be misled by an attacker; evaluating that requires injecting attacks into recorded data with known ground truth, which is the methodology adopted in this project.
+
+Motor-current and vibration signatures are the two most widely used indicators for pumps and motors: a healthy running motor draws a characteristic current and produces characteristic vibration, while bearing wear, cavitation, misalignment or a dry run change both. This coupling is central to the present project, which uses it not only for health assessment but also as evidence of sensor honesty.
+
+\textbf{Limitation.} Predictive-maintenance pipelines assume that their inputs are honest. A falsified sensor silently corrupts the health estimate, and none of the surveyed approaches asks whether a reading should be believed before using it.
+
+\subsection{Anomaly Detection in Industrial Time Series}
+
+Isolation Forest, introduced by Liu, Ting and Zhou~\cite{liu2008iforest}, detects anomalies by randomly partitioning the feature space: anomalous points are isolated in fewer splits than normal points, so the average path length in an ensemble of random trees serves as an anomaly score. The method is unsupervised, linear in the number of samples and needs no labelled attacks, which makes it attractive for edge devices that can only be trained on recordings of normal operation.
+
+Recurrent neural networks are the main alternative. Long short-term memory networks~\cite{hochreiter1997lstm} model temporal dependencies, and Malhotra \emph{et al.}~\cite{malhotra2015lstm} use stacked LSTM predictors whose prediction errors indicate anomalies in time series. Wang \emph{et al.}~\cite{wang2023container} deploy LSTM-based online anomaly detection for the Industrial IoT on a container-based stream-processing framework with flexible sliding windows, demonstrated on the heating temperatures of an industrial plant. Goh \emph{et al.}~\cite{goh2017rnn} apply recurrent networks to the SWaT water-treatment testbed and detect attacks from the deviation between predicted and observed sensor values, Kravchik and Shabtai~\cite{kravchik2018cnn} obtain competitive results on SWaT with one-dimensional convolutional networks, and Almiani \emph{et al.}~\cite{almiani2020rnn} use a multi-layer recurrent network as an intrusion detection system for fog computing close to IoT devices.
+
+\textbf{Limitation.} These detectors answer whether a window of data is anomalous, but not \emph{why}: a spike from a loose wire and a spike injected by an attacker receive the same score. They also tend to raise false positives when operating conditions shift, and none of them keeps the plant monitored once a sensor is known to be bad.
+
+\subsection{Security of the Internet of Things and Industrial Control Systems}
+
+The security of IoT deployments has been surveyed extensively. Sicari \emph{et al.}~\cite{sicari2015road} review security, privacy and trust in the IoT and conclude that a unified framework covering all three is still missing, and Roman, Zhou and Lopez~\cite{roman2013features} analyse the security and privacy challenges of distributed IoT architectures, in which intelligence moves to the edge. The scale of the threat is illustrated by Kolias \emph{et al.}~\cite{kolias2017mirai}, who dissect the Mirai botnet that compromised hundreds of thousands of insecure IoT devices. For cyber-physical systems specifically, Humayed \emph{et al.}~\cite{humayed2017cps} survey threats, vulnerabilities and attacks across the cyber, physical and control layers, Mitchell and Chen~\cite{mitchell2014ids} classify intrusion detection techniques for cyber-physical systems, and Ding \emph{et al.}~\cite{ding2018survey} survey security control and attack detection for industrial cyber-physical systems, including false-data-injection attacks.
+
+Sensor-level attacks on control systems are well documented. Langner's analysis of Stuxnet~\cite{langner2011stuxnet} describes how falsified process values were replayed to operators while centrifuges were physically damaged. Liu, Ning and Reiter~\cite{liu2009fdi} formalise false-data-injection attacks against state estimation in power grids and show that an attacker who knows the system model can bypass residual-based bad-data detection. Mo and Sinopoli~\cite{mo2009replay} analyse replay attacks on feedback control and show that a replayed sensor stream can be indistinguishable from normal operation unless the controller deliberately injects a watermark signal. C\'ardenas \emph{et al.}~\cite{cardenas2011attacks} study attack detection and response in process control, and Urbina \emph{et al.}~\cite{urbina2016stealthy} show that stealthy attacks crafted to stay within the noise of the detector limit the damage any purely statistical detector can prevent. The public SWaT~\cite{goh2016swat} and WADI~\cite{ahmed2017wadi} datasets record real physical attacks on scaled water-treatment and water-distribution plants and have become the standard benchmarks for ICS anomaly detection.
+
+\textbf{Limitation.} The IoT- and ICS-security literature concentrates on detection. Response is typically an alarm for a human operator, and the question of whether a detected anomaly is a fault or an attack is rarely addressed explicitly.
+
+\subsection{Physics-Based Attack Detection}
+
+Giraldo \emph{et al.}~\cite{giraldo2018physics} survey physics-based attack detection in cyber-physical systems: instead of learning only statistical patterns, a detector checks whether sensor readings obey the physical laws or invariants of the process. Ahmed, Zhou and Mathur~\cite{ahmed2018noise} show that the noise characteristics of real sensors and processes act as a fingerprint that a spoofed stream struggles to reproduce. Physics-based reasoning is attractive because an attacker who falsifies one sensor must also respect every physical relationship that sensor participates in, which is difficult without controlling the coupled sensors as well.
+
+\textbf{Limitation.} Physics-based detectors are typically used to raise an alarm. Using a physical contradiction between two independent sensors to \emph{attribute} an anomaly as an attack, as opposed to a fault, and to decide which sensor to distrust, is far less explored, particularly on low-cost edge hardware.
+
+\subsection{Model-Based Fault Diagnosis and Attack Identification}
+
+The problem of telling which sensor is wrong has a long history in fault-tolerant control. Chow and Willsky~\cite{chow1984redundancy} formalised \emph{analytical redundancy}: relationships among sensor outputs that hold in fault-free operation (parity relations) are evaluated continuously, and the pattern of violated relations identifies the faulty sensor without duplicate hardware. Isermann~\cite{isermann2005fdd} reviews the resulting field of model-based fault detection and diagnosis, in which residuals are generated from a process model through parity equations, observers or parameter estimation, and then evaluated to detect, isolate and identify faults; he notes that the approach is only as good as the process model and that model uncertainty is the main source of false alarms.
+
+The same ideas were later applied to attacks. Pasqualetti, D\"orfler and Bullo~\cite{pasqualetti2013identification} characterise the fundamental limits of attack detection and identification in cyber-physical systems modelled as descriptor systems: an attack is undetectable when its effect on the measurements can be explained by a legitimate change of the system state, and identifying which sensors are compromised requires sufficient redundancy among the measurements. Teixeira \emph{et al.}~\cite{teixeira2015secure} model the adversary by its knowledge of the system, its ability to read data and its ability to disrupt it, and show that the attacks a defender can or cannot see follow directly from these resources.
+
+\textbf{Limitation.} Model-based diagnosis and attack identification assume an accurate dynamic model of the process, typically linear, which is rarely available for a low-cost installation and must be identified anew for each machine. They also treat faults and attacks within one detection framework and do not use the qualitative physics of the machine, such as whether a motor is running, as a robust and model-free test of which sensor is lying. The present work exploits exactly this coarse but robust redundancy, and the limits that Pasqualetti \emph{et al.} prove for undetectable attacks appear in this project as the within-state attacks reported in Chapter~\ref{ch:results}.
+
+\subsection{Trust and Reputation in Sensor Networks and the IoT}
+
+Trust management assigns each information source a score that reflects how far its reports can be relied upon. The Beta reputation system of J{\o}sang and Ismail~\cite{josang2002beta} models trust as the expected value of a Beta distribution updated from counts of positive and negative observations, giving a principled, bounded score with a natural way to forget old evidence. Ganeriwal, Balzano and Srivastava~\cite{ganeriwal2008reputation} apply reputation to wireless sensor networks so that nodes reporting inconsistent data lose influence. Bao and Chen propose dynamic trust management for IoT applications~\cite{bao2012dynamic} that adapts to changing node behaviour, and extend it to service composition~\cite{bao2012trust}. Yan, Zhang and Vasilakos~\cite{yan2014trust} survey trust management for the IoT across its layers and identify adaptive, context-aware trust as an open problem. For the Industrial IoT, Motmi \emph{et al.}~\cite{motmi2022elithe} combine machine-learning-based trust management with the lightweight E-Lithe security protocol for constrained industrial devices.
+
+\textbf{Limitation.} Most trust frameworks are rule-based and evaluate trust from a single kind of evidence, usually agreement with neighbours. They do not combine statistical consistency, physical correlation and historical reliability, and trust is seldom coupled to an automatic response such as isolating the distrusted source and replacing its signal.
+
+\subsection{Reinforcement Learning for Adaptive Defence}
+
+Mnih \emph{et al.}~\cite{mnih2015dqn} showed with the deep Q-network (DQN) that a reinforcement-learning agent can learn effective control policies directly from high-dimensional observations. Nguyen and Reddi~\cite{nguyen2023drl} survey deep reinforcement learning for cyber security, including autonomous intrusion detection, defence of cyber-physical systems and adversarial games between attacker and defender, and observe that defining reward functions which reflect real operational costs remains a central difficulty.
+
+\textbf{Limitation.} Learned defence policies are mostly evaluated in simulation and are not coupled to sensor trust or to predictive maintenance. Their reward design, which encodes the trade-off between false alarms and downtime, is an operational decision that must be made before a policy can be trusted in a plant.
+
+\subsection{Digital Twins and Analytical Redundancy}
+
+A digital twin is a virtual model that mirrors a physical asset from its data. Tao \emph{et al.}~\cite{tao2019twin} review digital twins in industry and identify monitoring, prediction and fault diagnosis as the dominant applications. A related idea from fault-tolerant control is analytical redundancy~\cite{chow1984redundancy}: when a sensor fails, its value can be estimated from other sensors through a model of the process, so that control and monitoring continue on the estimate.
+
+\textbf{Limitation.} Digital twins in the surveyed work are used for monitoring and simulation. Using a learned twin specifically to stand in for a sensor that has been judged untrustworthy, with explicit limits on how long such substitution may continue, is not addressed.
+
+\subsection{Tamper-Evident Logging}
+
+Haber and Stornetta~\cite{haber1991timestamp} introduced the idea of linking documents through cryptographic hashes so that any modification of an earlier record invalidates every later one; the same construction underlies blockchain ledgers~\cite{nakamoto2008bitcoin}. Dorri, Kanhere and Jurdak~\cite{dorri2017optimized} show that a full blockchain is too costly for constrained IoT devices and propose a lightweight, optimised design for IoT security. In industrial IoT, blockchain-based logging has mostly been applied to network traffic or device data.
+
+\textbf{Limitation.} An auditor of an autonomous system needs to know what the system \emph{decided} and why: when a sensor's trust collapsed, when it was isolated, when the pump was stopped. Decision-level provenance, rather than raw traffic, is rarely recorded.
+
+\subsection{Human--Machine Interfaces for Process Control}
+
+The ANSI/ISA-101.01 standard~\cite{isa101} sets out principles for high-performance human--machine interfaces in process automation: neutral displays during normal operation, colour reserved for abnormal conditions, and alarm information that is never conveyed by colour alone. These principles guided the design of the SHTAPM dashboard.
+
+\section{Comparative Summary}
+
+Table~\ref{tab:litcompare} summarises how the main classes of existing solutions cover the capabilities required by the problem statement, and Table~\ref{tab:litsummary} lists the contribution and the limitation of each principal surveyed paper with respect to this project.
+
+\begin{table}[H]
+\centering
+\caption{Capability comparison of existing solution classes}
+\label{tab:litcompare}
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{3.9cm} *{6}{>{\centering\arraybackslash}p{1.47cm}}@{}}
+\toprule
+\textbf{Approach} & \textbf{PdM} & \textbf{Attack detection} & \textbf{Fault vs.\ attack} & \textbf{Dynamic trust} & \textbf{Self-healing} & \textbf{Decision audit} \\
+\midrule
+PHM / condition monitoring~\cite{lee2014phm,susto2015pdm,zhang2017wdcnn} & Yes & No & No & No & No & No \\
+ML anomaly detection~\cite{liu2008iforest,malhotra2015lstm,goh2017rnn,wang2023container} & Partial & Yes & No & No & No & No \\
+IoT and ICS attack detection~\cite{cardenas2011attacks,urbina2016stealthy,almiani2020rnn} & No & Yes & No & No & No & No \\
+Physics-based detection~\cite{giraldo2018physics,ahmed2018noise} & No & Yes & Partial & No & No & No \\
+Model-based diagnosis~\cite{chow1984redundancy,isermann2005fdd,pasqualetti2013identification} & Partial & Yes & Partial & No & Partial & No \\
+Trust frameworks~\cite{josang2002beta,ganeriwal2008reputation,bao2012dynamic,motmi2022elithe} & No & Partial & No & Yes & No & No \\
+Reinforcement-learning defence~\cite{nguyen2023drl} & No & Yes & No & No & Partial & No \\
+Digital twins~\cite{tao2019twin} & Yes & No & No & No & Partial & No \\
+Blockchain for IoT~\cite{dorri2017optimized} & No & No & No & No & No & Partial \\
+\textbf{SHTAPM (this work)} & \textbf{Yes} & \textbf{Yes} & \textbf{Yes} & \textbf{Yes} & \textbf{Yes} & \textbf{Yes} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\clearpage
+{\small
+\setlength{\LTpre}{0pt}
+\begin{longtable}{@{}P{0.9cm} P{4.4cm} P{4.0cm} P{4.0cm}@{}}
+\caption{Summary of the surveyed literature}
+\label{tab:litsummary}\\
+\toprule
+\textbf{Ref.} & \textbf{Work} & \textbf{Outcome} & \textbf{Gap with respect to this project} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Ref.} & \textbf{Work} & \textbf{Outcome} & \textbf{Gap with respect to this project} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+\cite{lee2014phm} & PHM design for rotary machinery & Methodology from features to remaining useful life & Assumes honest sensor data \\
+\cite{lee2015cps} & 5C cyber-physical architecture for Industry 4.0 & Framework for self-aware, self-maintaining machines & No cyber-security or sensor trust \\
+\cite{susto2015pdm} & Multiple-classifier predictive maintenance & Cost-optimal maintenance scheduling & Assumes honest inputs; no attack model \\
+\cite{ran2019pdmsurvey} & Survey of predictive maintenance & Taxonomy of architectures and methods & No treatment of falsified data \\
+\cite{zhang2017wdcnn} & Deep CNN on raw vibration & Robust bearing-fault diagnosis under noise & Fault diagnosis only; inputs trusted \\
+\cite{zhao2019dlhealth} & Deep learning for machine health monitoring & Review of deep architectures for PHM & No security or trust dimension \\
+\cite{smith2015cwru} & CWRU bearing benchmark study & Which bearing recordings are diagnosable & Honest data only; no attacks \\
+\cite{saxena2008cmapss} & C-MAPSS turbofan degradation & Standard RUL benchmark & Simulated; no falsified readings \\
+\cite{nectoux2012pronostia} & PRONOSTIA bearing platform & Real run-to-failure bearing data & No attacks; not pump data \\
+\cite{purohit2019mimii} & MIMII industrial machine sounds & Faulty pumps, valves, fans recorded & Acoustic only; no attacks \\
+\cite{liu2008iforest} & Isolation Forest & Unsupervised, linear-time anomaly scoring & Says \emph{that}, not \emph{why}, data is anomalous \\
+\cite{malhotra2015lstm} & Stacked LSTM anomaly detection & Prediction-error anomaly scores & No fault--attack distinction \\
+\cite{wang2023container} & Container-based stream processing for IIoT & Online LSTM anomaly detection at scale & Detection only; no response or trust \\
+\cite{goh2017rnn} & RNN attack detection on SWaT & Attacks detected from prediction residuals & Alarm only; no continuity of monitoring \\
+\cite{kravchik2018cnn} & 1-D CNN attack detection on SWaT & Competitive detection with small models & No attribution or recovery \\
+\cite{almiani2020rnn} & Deep RNN intrusion detection for fog/IoT & Automated network intrusion detection & Network level; no sensor-level physics \\
+\cite{sicari2015road} & Security, privacy and trust in IoT & Survey of open problems & No unified, implemented framework \\
+\cite{roman2013features} & Security in distributed IoT & Challenges of edge intelligence & No adaptive security mechanism \\
+\cite{kolias2017mirai} & Mirai and other IoT botnets & Analysis of large-scale IoT compromise & No defence mechanism proposed \\
+\cite{humayed2017cps} & Survey of CPS security & Threats across cyber, physical, control layers & No implementation \\
+\cite{mitchell2014ids} & Intrusion detection for CPS & Taxonomy of CPS detection techniques & No automated response \\
+\cite{ding2018survey} & Security control for industrial CPS & Survey including FDI detection & Detection-focused; no self-healing \\
+\cite{liu2009fdi} & False-data-injection attacks & Stealthy attacks bypass residual tests & Attack model; no defence for edge devices \\
+\cite{mo2009replay} & Replay attacks on control & Watermarking exposes replays & Requires control-signal access \\
+\cite{urbina2016stealthy} & Stealthy attacks on ICS & Limits of statistical detection & No physical attribution \\
+\cite{giraldo2018physics} & Physics-based attack detection & Invariants expose falsified readings & Alarm only; no attribution or healing \\
+\cite{ahmed2018noise} & Sensor noise fingerprinting & Spoofed streams lack real noise & Needs high-rate data; no response \\
+\cite{chow1984redundancy} & Analytical redundancy & Parity relations isolate faulty sensors & Needs an accurate process model \\
+\cite{isermann2005fdd} & Model-based fault diagnosis & Residual generation and evaluation & Faults only; model uncertainty \\
+\cite{pasqualetti2013identification} & Attack detection and identification & Limits of detectability and identifiability & Linear model; no healing \\
+\cite{teixeira2015secure} & Resource-limited adversary model & Attack space from adversary resources & Theoretical; no implementation \\
+\cite{josang2002beta} & Beta reputation system & Bounded, forgetting trust score & Generic; single evidence source \\
+\cite{ganeriwal2008reputation} & Reputation for sensor networks & Inconsistent nodes lose influence & Neighbour agreement only \\
+\cite{bao2012dynamic} & Dynamic trust for IoT & Trust adapts to node behaviour & No physical evidence or isolation \\
+\cite{yan2014trust} & Survey of IoT trust management & Trust objectives across IoT layers & Adaptive trust left open \\
+\cite{motmi2022elithe} & IIoT trust with E-Lithe protocol & ML trust for constrained devices & Limited scalability; no healing \\
+\cite{mnih2015dqn} & Deep Q-network & Policies learned from raw observations & Not applied to sensor trust \\
+\cite{nguyen2023drl} & Deep RL for cyber security & Survey of adaptive defences & Reward design open; not for PdM \\
+\cite{tao2019twin} & Digital twin in industry & Monitoring and prognosis applications & Not used to replace distrusted sensors \\
+\cite{dorri2017optimized} & Optimised blockchain for IoT & Lightweight ledger for devices & Records data, not decisions \\
+\end{longtable}
+}
+
+\section{Research Gap Identified}
+
+The survey shows that each required capability exists in isolation, but no surveyed system combines them. In particular:
+
+\begin{enumerate}
+  \item \textbf{No disambiguation.} Detectors flag anomalies without distinguishing a failing sensor from a falsified one, although the two require opposite responses.
+  \item \textbf{Single-source trust.} Trust models rely on one kind of evidence and are not coupled to an automatic response.
+  \item \textbf{Detection without continuity.} Once an attack is detected, monitoring of the affected quantity stops; the plant is either blind or relies on the compromised input.
+  \item \textbf{No decision provenance.} Autonomous responses are not recorded in a form an auditor can verify.
+  \item \textbf{Laboratory-only evaluation.} Many results exist only on datasets, without an end-to-end system running on real edge hardware.
+\end{enumerate}
+
+SHTAPM addresses this gap with a single pipeline running on a low-cost edge device: Isolation Forest detection calibrated on recorded normal operation, a Beta-reputation trust engine that fuses statistical, physical and historical evidence, physics-based attribution that uses the coupling between motor current and vibration to separate faults from attacks, automatic isolation with digital-twin substitution and a bounded substitution window, a supervised Safe Pump-Stop, and a hash-chained ledger of every safety-relevant decision, all surfaced in a real-time industrial dashboard.

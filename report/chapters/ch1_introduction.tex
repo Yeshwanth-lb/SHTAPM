@@ -1,0 +1,69 @@
+\chapter{Introduction}
+
+\section{Background/Domain Overview}
+
+Water and wastewater utilities operate thousands of pumping and lift stations that are, by design, unmanned. They are supervised remotely through telemetry: pressure transducers, flow meters, motor-current monitors, vibration sensors and environmental sensors report the state of each pump to a central supervisory control and data acquisition (SCADA) system or, increasingly, to cloud-connected Industrial Internet of Things (IIoT) platforms. The economic case is clear. A single technician can oversee dozens of stations, and condition-based or predictive maintenance replaces fixed service intervals with interventions scheduled from the measured health of the machine.
+
+The same connectivity, however, widens the attack surface. Sensors and edge controllers are cheap, physically exposed and frequently connected over protocols designed for reliability rather than security. Real incidents confirm that this is not a theoretical concern: the 2021 intrusion at the Oldsmar, Florida water-treatment plant altered a chemical-dosing setpoint through a remote-access tool, and the Stuxnet campaign demonstrated more than a decade ago that a controller can be fed falsified process values while the physical plant is being damaged. Research testbeds such as the Secure Water Treatment (SWaT) and Water Distribution (WADI) facilities at the Singapore University of Technology and Design were built precisely because sensor-level attacks on water infrastructure are a recognised threat with too little public data.
+
+Within this setting, predictive maintenance and cybersecurity have largely developed as separate disciplines. Predictive-maintenance models (vibration analysis, current signature analysis, recurrent neural networks over sensor histories) achieve high accuracy on clean data but implicitly assume that every reading is honest. Intrusion-detection systems, on the other hand, look for malicious behaviour but rarely reason about the physical health of the machine and seldom keep the plant monitored once an attack is detected. A pumping station that must look after itself needs both capabilities at once.
+
+\section{Problem Statement}
+
+An anomalous sensor reading has two very different causes. The sensor may be \textbf{failing}: an ageing element drifts, a loose connection produces spikes, an analogue front-end saturates, or the device stops responding. Alternatively, the sensor may be \textbf{falsified}: an attacker injects a constant value, adds a bias, replays an earlier recording, or ramps the value slowly to stay below alarm thresholds. Both produce data that deviates from normal behaviour, and a conventional anomaly detector raises the same alarm for both. The correct responses are, however, opposite. A fault calls for maintenance and recalibration; an attack calls for isolation of the compromised input, preservation of evidence and a security response. Treating an attack as a fault means recalibrating a sensor that is lying; treating a fault as an attack means discarding a healthy but noisy signal.
+
+The problem addressed by this project is therefore stated as follows:
+
+\begin{quote}
+\emph{Design and implement an edge-to-dashboard monitoring system for an industrial pump that (i) detects anomalous sensor behaviour in real time, (ii) maintains a dynamic, evidence-based trust score for every sensor, (iii) distinguishes physical faults from deliberate falsification using the physics of the machine, (iv) keeps the pump monitored when a sensor is compromised by isolating it and reconstructing its signal, (v) stops the pump safely when trust cannot be restored, and (vi) records every safety-relevant decision in a tamper-evident audit trail.}
+\end{quote}
+
+\section{Objectives}
+
+The project was planned around the following objectives, each paired with a measurable success criterion that is evaluated in Chapter~\ref{ch:results}.
+
+\begin{table}[htbp]
+\centering
+\caption{Project objectives and success criteria}
+\label{tab:objectives}
+\begin{tabularx}{\textwidth}{@{}l X X@{}}
+\toprule
+\textbf{ID} & \textbf{Objective} & \textbf{Success criterion} \\
+\midrule
+O1 & Acquire six sensor channels from the pump rig in real time & All channels stream at 1~Hz to the dashboard \\
+O2 & Detect anomalous behaviour on the edge device & Injected faults and attacks flagged within a few sampling windows \\
+O3 & Attribute an anomaly as \emph{fault} or \emph{attack} & Attribution evaluated on labelled bench scenarios; no false attacks on clean data \\
+O4 & Maintain a dynamic trust score per sensor & A spoofed sensor's trust falls below 0.4 and recovers once the input is clean \\
+O5 & Provide condition monitoring for maintenance & Device condition (healthy / warning / critical) derived continuously \\
+O6 & Self-heal autonomously & An untrusted sensor is isolated and replaced by a digital-twin reconstruction without operator action \\
+O7 & Stop the pump safely & Latched Safe Pump-Stop when substitution cannot end within 60~s, on watchdog loss, or on a dry-run signature \\
+O8 & Keep an immutable audit trail & Every safety-relevant decision is hash-chained and tampering is detectable \\
+O9 & Deliver a professional real-time dashboard & Sensor-to-screen latency below 2~s; secure, role-based access \\
+O10 & Evaluate quantitatively & Results reported on recorded bench data and on the public SWaT dataset \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\section{Scope of the Project}
+
+The system is built and demonstrated on a bench-scale rig that stands in for a pumping station. A DC motor driven from a regulated supply represents the pump, and the edge node is a Raspberry Pi~5. The sensing layer comprises a DHT22 (ambient temperature and humidity), an ADXL335 three-axis accelerometer read through an MCP3008 analogue-to-digital converter (vibration), a BMP280 (barometric pressure), an INA219 (motor supply current) and an MQ-135 gas-sensor channel, giving the six logical channels of the system contract.
+
+The scope covers the complete software stack from acquisition to presentation: the on-device intelligence pipeline (preprocessing, anomaly detection, trust evaluation, attribution, self-healing and safety supervision), an MQTT message bus, a backend service with persistence, authentication, alerting and the audit ledger, and a web dashboard. It also covers a reproducible evaluation methodology that injects realistic faults and attacks into recorded clean data, so that ground truth is known exactly.
+
+The following are outside the scope of this project: deployment on a production SCADA network, certification against industrial safety standards, cryptographic attestation of the sensors themselves, and remaining-useful-life (RUL) prognosis, which requires run-to-failure data that a bench rig cannot ethically or practically produce. These are discussed as future work in Chapter~\ref{ch:conclusion}.
+
+\section{Organization of the Report}
+
+The remainder of this report is organised as follows.
+
+\begin{itemize}
+  \item \textbf{Chapter~2} surveys existing work on predictive maintenance, anomaly detection, IoT and industrial control system security, physics-based and model-based detection, trust management, reinforcement learning, digital twins and tamper-evident logging, and identifies the research gap that motivates this project.
+  \item \textbf{Chapter~3} presents the system design: the layered architecture, data flow, the UML use case, class, sequence, activity, state and deployment diagrams, the module responsibilities, and the database, communication and user interface designs.
+  \item \textbf{Chapter~4} specifies the functional, non-functional, software and hardware requirements and the configuration of the prototype.
+  \item \textbf{Chapter~5} describes the implementation, including sensor signal conversion, baseline calibration and the algorithms for detection, trust, attribution, self-healing, safety supervision and the audit ledger.
+  \item \textbf{Chapter~6} explains the testing strategy and environments and lists representative unit, integration and hardware-in-the-loop test cases.
+  \item \textbf{Chapter~7} reports the experimental results on bench data, on the running system and on the SWaT dataset, and compares the approach with baselines.
+  \item \textbf{Chapter~8} concludes the report and outlines future enhancements.
+\end{itemize}
+
+The references follow in IEEE style. Appendix~A gives the details of the publication arising from this work, Appendix~B contains the similarity and AI-content reports, and Appendix~C describes the Sustainable Development Goal addressed by the project.

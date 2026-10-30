@@ -1,0 +1,206 @@
+\chapter{System Testing}
+\label{ch:testing}
+
+This chapter describes how SHTAPM was tested, from individual functions to the complete system running on the bench rig, and lists representative test cases with their outcomes.
+
+\section{Overview}
+
+\subsection{Testing Strategy}
+
+Testing was carried out at five levels, each answering a different question.
+
+\begin{enumerate}
+  \item \textbf{Unit testing.} Does each module behave as specified in isolation? Hardware buses, clocks and the network are replaced by fakes, so driver logic, timing rules and failure handling can be exercised deterministically on any computer.
+  \item \textbf{Integration testing.} Do the modules work together? The edge composition is tested as it is wired in the service entry point, and the backend is tested through its real REST and WebSocket routers with an in-memory database. MQTT round-trip tests run against a real Mosquitto broker when one is reachable.
+  \item \textbf{Contract testing.} Do the edge, backend and dashboard agree on every message? The shared telemetry, decision, ledger, injection and actuation schemas are validated on both sides by the same tests.
+  \item \textbf{Hardware-in-the-loop testing.} Does the system work on the physical rig? A sensor diagnostic script checks every physical sensor, a recording check validates baseline captures, a pre-flight script checks the running system end to end, and fault and attack scenarios are injected live through the dashboard.
+  \item \textbf{Evaluation.} How well does it work? Faults and attacks with known ground truth are injected into recorded clean data and replayed through the exact live pipeline. The results are reported in Chapter~\ref{ch:results}.
+\end{enumerate}
+
+\subsection{Tools}
+
+Table~\ref{tab:testtools} lists the tools used for automated testing, static checks and hardware validation.
+
+\begin{table}[htbp]
+\centering
+\caption{Testing and quality tools}
+\label{tab:testtools}
+\small
+\begin{tabularx}{\textwidth}{@{}l X@{}}
+\toprule
+\textbf{Tool} & \textbf{Use} \\
+\midrule
+pytest & Unit, integration and contract tests of the edge, backend and simulator \\
+Vitest, Testing Library & Component and logic tests of the dashboard in a simulated browser (jsdom) \\
+ruff, black & Python linting and formatting \\
+ESLint, Prettier, TypeScript compiler & Dashboard linting, formatting and static type checking \\
+Sensor diagnostic script & Reads every physical sensor on the Pi and checks range and health \\
+Recording check & Validates a baseline capture: frame gaps, motor runs, sensor stability \\
+Pre-flight script & End-to-end check of backend, login, broker, database, telemetry rate, latency and ledger \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Test Environment}
+
+Table~\ref{tab:testenv} lists the environments in which the tests were run. Automated tests run on the workstation without any hardware; hardware-in-the-loop tests run the complete system with the edge on the Raspberry Pi and the motor under the physical sensors.
+
+\begin{table}[htbp]
+\centering
+\caption{Test environments}
+\label{tab:testenv}
+\small
+\begin{tabularx}{\textwidth}{@{}P{3.4cm} X@{}}
+\toprule
+\textbf{Environment} & \textbf{Configuration} \\
+\midrule
+Automated tests & Windows~11 laptop, Python~3.14 with pytest, Node.js~20 with Vitest; sensor buses, clocks and the network replaced by fakes; in-memory SQLite database \\
+Hardware-in-the-loop & Raspberry Pi~5 running the edge service and the Mosquitto broker; backend and dashboard on the laptop; laptop and Pi on the same wireless network \\
+Evaluation & Recorded bench captures and the SWaT.A1 dataset replayed through the live edge composition on the laptop \\
+Test data & Final baseline recording (51.4~min, 2,609 frames, 21 motor runs) and earlier idle, cycling and running recordings of the same rig \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Test Suite Summary}
+
+Table~\ref{tab:testcounts} shows the automated tests by subsystem. For the Python code the table counts test functions; parametrised functions expand into several cases when the suite runs.
+
+\begin{table}[htbp]
+\centering
+\caption{Automated tests by subsystem}
+\label{tab:testcounts}
+\small
+\begin{tabularx}{\textwidth}{@{}X r r@{}}
+\toprule
+\textbf{Subsystem} & \textbf{Test files} & \textbf{Tests} \\
+\midrule
+Sensor drivers, acquisition and edge runtime & 33 & 357 \\
+Preprocessing, detection and injection & 13 & 184 \\
+Trust and attribution & 10 & 150 \\
+Isolation, self-healing and digital twin & 17 & 169 \\
+Safety supervisor and relay & 4 & 47 \\
+Prognosis and response-policy modules & 32 & 940 \\
+Backend services, API, security and ledger & 41 & 381 \\
+Simulator & 4 & 17 \\
+Dashboard (frontend) & 36 & 259 \\
+\midrule
+\textbf{Total} & \textbf{190} & \textbf{2,504} \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Table~\ref{tab:testrun} summarises the final run of both suites. No test failed. The eight skipped tests exercise the discovery of a kernel humidity device by directory name, which contains a colon that the Windows file system does not allow; they run on the Raspberry Pi, and every other test, including the MQTT round-trip tests against a live Mosquitto broker, ran on the workstation. The four expected failures are acceptance tests on a synthetic data fixture; each documents a known limitation of that fixture or of an early design choice and is recorded with its root cause in the project's decision log.
+
+\begin{table}[htbp]
+\centering
+\caption{Final test run}
+\label{tab:testrun}
+\small
+\begin{tabularx}{\textwidth}{@{}X r r r r@{}}
+\toprule
+\textbf{Suite} & \textbf{Passed} & \textbf{Skipped} & \textbf{Expected failures} & \textbf{Failed} \\
+\midrule
+Python: edge, backend, simulator (pytest) & 2,358 & 8 & 4 & 0 \\
+Dashboard (Vitest) & 259 & 0 & 0 & 0 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\section{Test Cases}
+
+\subsection{Unit and Integration Test Cases}
+
+Table~\ref{tab:unittests} lists representative automated test cases. Each corresponds to a named test in the repository.
+
+{\small
+\setlength{\LTpre}{0pt}
+\begin{longtable}{@{}P{1.3cm} P{4.6cm} P{6.0cm} P{1.4cm}@{}}
+\caption{Representative unit and integration test cases}
+\label{tab:unittests}\\
+\toprule
+\textbf{ID} & \textbf{Test case} & \textbf{Expected result} & \textbf{Result} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{ID} & \textbf{Test case} & \textbf{Expected result} & \textbf{Result} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+\multicolumn{4}{@{}l}{\textit{Acquisition and drivers}} \\
+UT-01 & A sensor fails briefly, then recovers & Last good value held; not reported dead & Pass \\
+UT-02 & A sensor fails continuously for 5~s & Reported dead after 5~s & Pass \\
+UT-03 & ADXL335 converter reads 0 or 1023 counts & Treated as a failed read, not as acceleration & Pass \\
+UT-04 & DHT22 fails transiently & Error raised, next read recovers & Pass \\
+UT-05 & Broker disconnects while publishing & Frames buffered and replayed in order on reconnect & Pass \\
+\multicolumn{4}{@{}l}{\textit{Detection and injection}} \\
+UT-06 & Constant spoof injected live on one channel & Only the target channel pinned, for exactly its duration & Pass \\
+UT-07 & Replay injection & Copies the channel's own clean values, never earlier injected ones & Pass \\
+UT-08 & Adaptive stealth injection & Offset never exceeds its cap & Pass \\
+\multicolumn{4}{@{}l}{\textit{Trust and attribution}} \\
+UT-09 & Initial Beta prior & Trust exactly 0.5 & Pass \\
+UT-10 & Strong spoof evidence & Trust below 0.4 within 3 windows & Pass \\
+UT-11 & Healthy evidence & Trust reaches and stays Trusted & Pass \\
+UT-12 & Motor really starts (both channels change) & No physics violation & Pass \\
+UT-13 & Current alone changes state & Current named as suspect; attack attributed to it only & Pass \\
+UT-14 & Tap or one-sample glitch on vibration & Median state unchanged; no violation & Pass \\
+UT-15 & Window median inside the hysteresis gap & No verdict & Pass \\
+\multicolumn{4}{@{}l}{\textit{Isolation and self-healing}} \\
+UT-16 & Trust falls below 0.4 & Channel isolated and substituted & Pass \\
+UT-17 & Trust oscillates inside the Suspicious band & Channel stays isolated; no flicker & Pass \\
+UT-18 & Trust returns to 0.7 & Channel released, reported once & Pass \\
+UT-19 & Substitution reaches 60~s & Escalation and Safe Pump-Stop & Pass \\
+UT-20 & A released channel is isolated again & Substitution clock restarts from zero & Pass \\
+\multicolumn{4}{@{}l}{\textit{Safety}} \\
+UT-21 & Dry-run current after spin-up grace for 3 frames & Latched Safe Pump-Stop & Pass \\
+UT-22 & Motor-off current while commanded off & Not a dry run & Pass \\
+UT-23 & Watchdog expires & Relay forced off, exactly once & Pass \\
+UT-24 & Relay pin that a sensor uses & Configuration refused & Pass \\
+\multicolumn{4}{@{}l}{\textit{Backend, security and ledger}} \\
+UT-25 & Payload of a stored block modified & Verifier reports the tampered block & Pass \\
+UT-26 & Link between two blocks broken & Verifier reports the broken link & Pass \\
+UT-27 & Same payload with keys in a different order & Identical payload hash & Pass \\
+UT-28 & Login with wrong password or unknown email & Identical generic 401 response & Pass \\
+UT-29 & Refresh token reused after rotation & Rejected with 401 & Pass \\
+UT-30 & Operator attempts a scenario injection & 403; denial written to the audit log & Pass \\
+UT-31 & Non-administrator switches the pump & Rejected & Pass \\
+UT-32 & WebSocket without or with an invalid token & Connection refused & Pass \\
+UT-33 & Injection command & Published on the advisory topic, never the relay topic & Pass \\
+\end{longtable}
+}
+
+\subsection{Hardware-in-the-Loop Test Cases}
+
+Table~\ref{tab:hiltests} lists the tests carried out on the physical rig with the complete system running: edge on the Raspberry Pi, backend and dashboard on the workstation. Scenarios were started from the dashboard by an administrator.
+
+{\small
+\setlength{\LTpre}{0pt}
+\begin{longtable}{@{}P{1.3cm} P{4.6cm} P{4.4cm} P{3.0cm}@{}}
+\caption{Hardware-in-the-loop test cases on the bench rig}
+\label{tab:hiltests}\\
+\toprule
+\textbf{ID} & \textbf{Scenario} & \textbf{Expected result} & \textbf{Observed} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{ID} & \textbf{Scenario} & \textbf{Expected result} & \textbf{Observed} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+HT-01 & Sensor diagnostic on the Pi & All physical sensors respond within range & Pass \\
+HT-02 & Live dashboard with the motor cycled by hand & Six channels at 1~Hz; no attack verdict & Pass \\
+HT-03 & DHT22 dropout when the motor starts & Last value held; not reported dead & Pass \\
+HT-04 & Constant spoof, current set to 0~A, motor running, 40~s & \textsc{attack} on current; isolation; \textsc{virtual} value & \textsc{attack} after 23~s; isolated \\
+HT-05 & Bias +0.8~A on current, motor off, 40~s & \textsc{attack} on current & \textsc{attack} after 19~s; no false trip \\
+HT-06 & Stuck current sensor, motor running, 40~s & \textsc{fault}, not attack & \textsc{fault} \\
+HT-07 & Attack held beyond 60~s of substitution & Latched Safe Pump-Stop & Pump trip; latched \\
+HT-08 & Second isolation after a release & No premature pump trip & Pass \\
+HT-09 & Ledger verification after the session & Chain intact & All 200 blocks intact \\
+HT-10 & Loose converter connection (all channels at the rail) & Readings rejected as failed reads & Pass \\
+HT-11 & Small in-state bias on running current & Not attributable as attack (physical limit) & As expected; see Section~\ref{sec:limits} \\
+\end{longtable}
+}
+
+Test HT-11 is recorded deliberately. A falsification that keeps a reading inside its true physical state is consistent with every other sensor on this rig, so no physics-based rule can expose it; Chapter~\ref{ch:results} quantifies this limit.

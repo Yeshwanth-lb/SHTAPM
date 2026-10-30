@@ -1,0 +1,399 @@
+\chapter{Results and Analysis}
+\label{ch:results}
+
+This chapter reports how well SHTAPM performs. It defines the evaluation metrics, describes the data and the injection protocol, presents the results of every stage of the pipeline on real bench data and on the public SWaT dataset, shows the running system, and compares the approach with baselines.
+
+\section{Evaluation Metrics}
+
+\paragraph{Detection.} With $TP$, $FP$, $TN$ and $FN$ counted over windows,
+\begin{gather}
+\mathrm{Precision} = \frac{TP}{TP + FP}, \qquad
+\mathrm{Recall} = \frac{TP}{TP + FN}, \\
+F_1 = \frac{2\,\mathrm{Precision}\cdot\mathrm{Recall}}{\mathrm{Precision} + \mathrm{Recall}}, \qquad
+\mathrm{FPR} = \frac{FP}{FP + TN}.
+\end{gather}
+Because window-level scores favour long attacks, \emph{event coverage} (the number of distinct attack events flagged at least once) and \emph{detection delay} (samples from onset to the first flag) are reported as well.
+
+\paragraph{Attribution.} For each injected episode, the attribution of the injected channel is scored in two ways: \emph{settled} (the majority label over the episode's flagged windows) and \emph{episode} (attack if any flagged window was attributed attack). Faults are scored the same way, so a false accusation counts against the method. The \emph{false-attack rate} is the fraction of channel-windows of clean data attributed attack. Since a rule that labels everything ``attack'' would score perfectly on attacks, the summary metric is the balanced accuracy
+\begin{equation}
+\mathrm{BA} = \tfrac{1}{2}\left(\mathrm{Recall}_{\mathrm{attack}} + \mathrm{Recall}_{\mathrm{fault}}\right).
+\end{equation}
+
+\paragraph{Self-healing.} \emph{Time to isolate} (samples from onset to isolation), \emph{virtual coverage} (fraction of the attack during which the twin's value was served), \emph{substitution error} (median absolute error of the served value against the true reading) and \emph{time to release}. The twin's accuracy is also reported as skill against a predictor that always outputs the training mean:
+\begin{equation}
+\mathrm{skill} = 1 - \frac{\mathrm{RMSE}_{\mathrm{twin}}}{\mathrm{RMSE}_{\mathrm{mean}}}.
+\end{equation}
+
+\section{Experimental Setup}
+
+\paragraph{Data.} The main dataset is the final clean baseline recorded on the rig with all physical sensors in place: 51.4~minutes, 2,609 frames, no frame gap longer than 2~s, and 21 motor runs switched by hand at random intervals (motor on 47\% of the time). Earlier recordings of the same rig are used where stated: a 7.2-hour idle recording, a 19-minute on/off cycling recording, a 25-minute motor-running recording and a 70-minute cycling recording. For comparison with published work, detection is also evaluated on the SWaT.A1 dataset~\cite{goh2016swat}, fitting only on its normal-operation file and testing on its attack file (14,997 windows, 35 attack events).
+
+\paragraph{Protocol.} Ground truth on real hardware is obtained by injecting faults and attacks (Table~\ref{tab:injections}) into the recorded clean data at random onsets and replaying the result through the exact live composition of the edge pipeline. Each scenario is injected ten times. Attacks are further divided by measurement into those whose injected reading crosses into the opposite motor state (physically impossible) and those that stay within the true state. Injection magnitudes are fixed evaluation settings, and no threshold was tuned on the evaluation data.
+
+\section{Output/Results}
+
+\subsection{The Clean Baseline Recording}
+
+Figure~\ref{fig:baseline} shows the motor current and vibration measured on the rig during the final baseline recording. The 21 motor runs are clearly visible in both channels: the current rises from zero to about 0.7~A and the vibration from below 0.1~$g$ to about 0.6~$g$ whenever the motor runs. Individual samples show switch-on current surges and occasional vibration spikes from handling the rig; the figure is clipped above 1.2~A and 1.5~$g$ for readability.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}
+\begin{groupplot}[
+  group style={group size=1 by 2, vertical sep=0.45cm, xlabels at=edge bottom, xticklabels at=edge bottom},
+  width=\textwidth, height=4.6cm, xmin=0, xmax=51.5,
+  xlabel={Time (min)}, tick label style={font=\footnotesize}, label style={font=\small},
+  grid=major, grid style={gray!20}, restrict y to domain=-1:2, clip=true]
+\nextgroupplot[ylabel={Current (A)}, ymin=-0.05, ymax=1.2]
+\addplot[black, thin] table[x=t, y=current] {data/baseline_series.dat};
+\nextgroupplot[ylabel={Vibration ($g$)}, ymin=-0.05, ymax=1.5]
+\addplot[black, thin] table[x=t, y=vibration] {data/baseline_series.dat};
+\end{groupplot}
+\end{tikzpicture}
+\caption{Motor current and vibration measured on the rig over the 51.4-minute baseline recording (every third sample shown)}
+\label{fig:baseline}
+\end{figure}
+
+Figure~\ref{fig:medians} plots the median current against the median vibration of each 30-sample window of the same recording, together with the motor-state bands of the attribution rule. The windows form two well-separated clusters: idle windows near the origin and running windows with both high current and high vibration. Only 3 of 258 windows fall in the transition region of the current band, where the rule gives no verdict. The two off-diagonal regions, high current with no vibration and high vibration with no current, contain no windows at all. These are the physically impossible states that the attribution rule treats as evidence of falsification.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+  width=0.82\textwidth, height=7.2cm,
+  xlabel={Window median current (A)}, ylabel={Window median vibration ($g$)},
+  xmin=-0.05, xmax=1.0, ymin=-0.05, ymax=1.1,
+  tick label style={font=\footnotesize}, label style={font=\small},
+  legend style={at={(0.02,0.98)}, anchor=north west, font=\footnotesize, draw=none, fill=white, fill opacity=0.9, text opacity=1},
+  scatter/classes={idle={mark=o, black}, running={mark=triangle, black}, transition={mark=square*, gray}}]
+\fill[gray!12] (axis cs:0.3,-0.05) rectangle (axis cs:1.0,0.142);
+\fill[gray!12] (axis cs:-0.05,0.314) rectangle (axis cs:0.05,1.1);
+\node[font=\scriptsize, align=center] at (axis cs:0.65,0.06) {impossible: current running,\\vibration idle};
+\node[font=\scriptsize, align=center, rotate=90] at (axis cs:0.0,0.66) {impossible};
+\addplot[scatter, only marks, mark size=1.6pt, scatter src=explicit symbolic] table[x=current, y=vibration, meta=state] {data/window_medians.dat};
+\draw[densely dashed] (axis cs:0.05,-0.05) -- (axis cs:0.05,1.1);
+\draw[densely dashed] (axis cs:0.3,-0.05) -- (axis cs:0.3,1.1);
+\draw[densely dotted] (axis cs:-0.05,0.142) -- (axis cs:1.0,0.142);
+\draw[densely dotted] (axis cs:-0.05,0.314) -- (axis cs:1.0,0.314);
+\legend{idle windows, running windows, transition windows}
+\end{axis}
+\end{tikzpicture}
+\caption{Window medians of current and vibration from the baseline recording with the motor-state bands (dashed: current bands 0.05~A and 0.3~A; dotted: learned vibration bands 0.142~$g$ and 0.314~$g$; shaded: physically impossible states)}
+\label{fig:medians}
+\end{figure}
+
+\subsection{False Alarms on Clean Data}
+
+The baseline was fitted on the first 80\% of the recording and scored on the remaining 493 windows, all of them clean, so that every alarm is a false alarm (Table~\ref{tab:holdout}).
+
+\begin{table}[htbp]
+\centering
+\caption{Hold-out check of the deployed baseline on clean data}
+\label{tab:holdout}
+\small
+\begin{tabularx}{\textwidth}{@{}X l@{}}
+\toprule
+\textbf{Measure} & \textbf{Result} \\
+\midrule
+Windows flagged by the Isolation Forest (threshold 0.90) & 98 of 493 (19.9\%) \\
+Channel-windows with trust in the Malicious band & 0 on every channel \\
+Channels isolated at the end of the hold-out & None \\
+Median clean trust per channel & 0.75--0.83 (all $\geq$ 0.7) \\
+Learned vibration bands & idle $\leq$ 0.142~$g$, running $\geq$ 0.314~$g$ \\
+Steady idle windows classified idle & 152 of 152 (100\%) \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+The detector flags about one window in five on clean data. This is by design: the detector is a sensitive first stage, and none of these flags reached the Malicious band or caused an isolation, because the trust engine and the physics rule filter them. Every channel's median clean trust lies above 0.7, which guarantees that an isolated channel can always be released once its input is clean again.
+
+\subsection{Detection on Bench Data}
+
+On the final baseline recording, the deployed detector flagged every injected fault (60 of 60) and every injected attack (120 of 120) at a nominal 5\% clean-flag threshold, with a median delay of 6 samples. Window flags alone are not alarms; they become alarms only through trust and attribution.
+
+\subsection{Fault and Attack Attribution}
+
+Table~\ref{tab:attrib} reports attribution on the final baseline for the deployed operating-state rule.
+
+\begin{table}[htbp]
+\centering
+\caption{Attribution on the final baseline recording (deployed rule, 10 injections per scenario)}
+\label{tab:attrib}
+\small
+\begin{tabularx}{\textwidth}{@{}X l c c@{}}
+\toprule
+\textbf{Scenario} & \textbf{Truth} & \textbf{Detected} & \textbf{Correctly attributed (settled)} \\
+\midrule
+Sudden spike (2 samples) & Fault & 8 & 8 \\
+Stuck sensor & Fault & 10 & 10 \\
+Gradual drift & Fault & 9 & 5 \\
+Constant spoof, crossing state & Attack & 10 & 6 \\
+Bias injection, crossing state & Attack & 10 & 10 \\
+Replay of the other motor state & Attack & 10 & 9 \\
+Ramp injection & Attack & 9 & 4 \\
+Constant spoof, within state & Attack & 10 & 0 \\
+Bias injection, within state & Attack & 9 & 0 \\
+Adaptive stealth injection & Attack & 9 & 0 \\
+\midrule
+Clean data (2,552 channel-windows) & None & -- & \textbf{0 false attacks (0.0\%)} \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Grouped by physical measurement, the deployed rule attributed \textbf{73\%} of state-crossing attacks correctly at episode level (32 of 44; 66\% settled) and kept \textbf{85\%} of faults as faults (23 of 27), with \textbf{zero} false attacks on clean data. Attacks that stay within the true motor state were never attributed as attacks (0 of 23): such readings are physically consistent, which is the limit analysed in Section~\ref{sec:limits}. Most remaining fault errors are drifts, which share their waveform with ramp attacks.
+
+Table~\ref{tab:attribstreams} confirms the behaviour on three earlier recordings of the same rig, evaluated with the deployed rule on 26 October 2026.
+
+\begin{table}[htbp]
+\centering
+\caption{Attribution of the deployed rule on earlier bench recordings}
+\label{tab:attribstreams}
+\small
+\begin{tabularx}{\textwidth}{@{}X c c c@{}}
+\toprule
+\textbf{Recording} & \textbf{State-crossing attacks} & \textbf{Faults kept as faults} & \textbf{False attacks, clean} \\
+\midrule
+Idle, 7.2 h & 120/120 (100\%) & 39/79 (49\%)$^{*}$ & 0/4,742 (0.0\%) \\
+Cycling, 19 min & 12/12 (100\%) & 5/5 (100\%) & 1/928 (0.1\%) \\
+Running, 25 min & 63/70 (90\%) & 36/42 (86\%) & 2/1,594 (0.1\%) \\
+\bottomrule
+\multicolumn{4}{@{}l}{\footnotesize $^{*}$All idle fault errors are drifts; spikes and stuck sensors were 39/39 correct.}
+\end{tabularx}
+\end{table}
+
+\subsection{Real Physical Events}
+
+To check that real disturbances are not mistaken for attacks, a guided session on 26 October 2026 produced genuine physical events on the rig (Table~\ref{tab:realevents}). No real event was attributed as an attack, apart from two windows at a motor switch-on, and the only isolation was of a sensor that had genuinely lost power.
+
+\begin{table}[htbp]
+\centering
+\caption{Attribution of real physical events on the rig}
+\label{tab:realevents}
+\small
+\begin{tabularx}{\textwidth}{@{}P{5.6cm} X P{3.2cm}@{}}
+\toprule
+\textbf{Real event} & \textbf{Attribution} & \textbf{Isolation} \\
+\midrule
+Quiet idle & None or fault & None \\
+Motor run, untouched & Two attack windows at switch-on, then fault or none & None \\
+Tap on the accelerometer, motor off & Fault only & None \\
+Tap on the accelerometer, motor running & Fault only & None \\
+Accelerometer power removed, motor off & Fault only & None \\
+Accelerometer power removed, motor running & Fault only & Vibration (broken sensor) \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Self-Healing}
+
+Table~\ref{tab:selfheal} reports self-healing for state-crossing attacks on the current channel. The twin used here was not trained on this recording, so the result is out of sample.
+
+\begin{table}[htbp]
+\centering
+\caption{Self-healing on the final baseline recording (12 attacks per scenario)}
+\label{tab:selfheal}
+\small
+\begin{tabularx}{\textwidth}{@{}X c c@{}}
+\toprule
+\textbf{Measure} & \textbf{Bias injection} & \textbf{Constant spoof} \\
+\midrule
+Attacks isolated & 10/12 & 10/12 \\
+Time to isolate, median & 17.5 samples ($\approx$ 21~s) & 15 samples ($\approx$ 18~s) \\
+Share of attack served by the twin, median & 52\% & 74\% \\
+Error without self-healing, median & 0.60~A & 0.57~A \\
+Error of the twin's value, median & \textbf{0.079~A} & \textbf{0.12~A} \\
+Time to release, median & 38.5 samples & 38.5 samples \\
+False isolations on clean data & 0 & 0 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+  ybar, area legend, bar width=0.9cm, width=0.75\textwidth, height=6cm,
+  ylabel={Median error (A)}, ymin=0, ymax=0.75,
+  symbolic x coords={Bias injection, Constant spoof}, xtick=data,
+  enlarge x limits=0.45,
+  nodes near coords, nodes near coords style={font=\footnotesize, /pgf/number format/fixed, /pgf/number format/precision=3},
+  legend style={at={(0.5,1.02)}, anchor=south, legend columns=2, draw=none, font=\footnotesize},
+  tick label style={font=\footnotesize}, label style={font=\small}]
+\addplot[fill=gray!55, draw=black] coordinates {(Bias injection,0.60) (Constant spoof,0.57)};
+\addplot[fill=white, draw=black, postaction={pattern=north east lines}] coordinates {(Bias injection,0.079) (Constant spoof,0.12)};
+\legend{Without self-healing, With digital twin}
+\end{axis}
+\end{tikzpicture}
+\caption{Substitution error with and without the digital twin}
+\label{fig:healerr}
+\end{figure}
+
+The twin removes 79--87\% of the error that the falsified reading would otherwise have introduced. On its own held-out data the deployed twin has a skill of +47.3\% (RMSE 0.188~A against 0.357~A for the mean predictor). Table~\ref{tab:twinloco} shows the leave-one-recording-out evaluation that determined its inputs: a twin that also read the ambient channels failed badly on other days, because ambient conditions carry no information about motor current and shift from day to day.
+
+\begin{table}[htbp]
+\centering
+\caption{Twin skill, leave-one-recording-out (trained on two recordings, tested on the third)}
+\label{tab:twinloco}
+\small
+\begin{tabularx}{\textwidth}{@{}X c c@{}}
+\toprule
+\textbf{Test recording} & \textbf{Current and vibration inputs} & \textbf{All five measured inputs} \\
+\midrule
+Cycling, 70 min & +38.5\% & $-$122.7\% \\
+Running, 25 min & +51.3\% & +47.7\% \\
+Motor load, five sensors & +64.6\% & $-$61.2\% \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Live Results on the Running System}
+
+The scenarios of Table~\ref{tab:hiltests} were run on the complete system with the motor under the physical sensors. A constant spoof of the current reading to 0~A while the motor ran was attributed as an attack after 23~s and the channel was isolated and served by the twin; a bias of +0.8~A with the motor off was attributed as an attack after 19~s; a stuck current sensor was reported as a fault; an attack held beyond the 60~s substitution budget produced a latched Safe Pump-Stop; and the ledger verified intact over all 200 blocks of the session. Figures~\ref{fig:ui-login} to \ref{fig:ui-system} show the dashboard.
+
+A later run of the same constant-spoof scenario, captured in the screenshots below, is traced step by step by its audit ledger (Figure~\ref{fig:ui-ledger}). The constant spoof of the current channel was injected at 12:22:56. At 12:23:17, 21~s later, the current channel's trust fell below 0.4 and the channel was isolated, with the digital twin substituting its value (Figure~\ref{fig:ui-attack}: the sensor reported 0.000~A while the twin served 0.791~A, consistent with the running motor). The injection lasted 40~s, but trust recovers only after the window is clean again, so the channel was still isolated when its 60~s substitution budget expired: at 12:24:17, exactly 60~s after isolation, the safety supervisor performed a latched Safe Pump-Stop, and the current channel was released at 12:24:21. Every one of these events was chained, and the verifier confirmed all 200 blocks of the chain intact.
+
+\screenshot{login.png}{0.85}{Login page}{fig:ui-login}
+\screenshot{controlroom-normal.png}{1.0}{Control room during normal operation, with the motor idle and both physical witnesses agreeing}{fig:ui-normal}
+\screenshot{controlroom-attack.png}{1.0}{Control room during a constant-spoof attack on the current sensor: the physics check reports an impossible state, the channel is attributed as attack and isolated, and the digital twin's value is shown in place of the sensor's 0~A}{fig:ui-attack}
+\screenshot{sensor-detail.png}{0.62}{Sensor detail panel for the vibration channel: live trend, statistics and trust history}{fig:ui-detail}
+\screenshot{device-injection.png}{0.7}{Device page with the pump relay panel and scenario injection}{fig:ui-inject}
+\screenshot{decisions.png}{1.0}{Decisions page: trust of every channel over the last 120 decisions, with the current channel falling to Malicious during the attack, and the decision strip below}{fig:ui-decisions}
+\screenshot{decision-detail.png}{1.0}{Decision detail during the attack: attribution, the physical reason and the isolated channel}{fig:ui-decision-detail}
+\screenshot{alerts.png}{1.0}{Alerts page with the attack alert and the Safe Pump-Stop that followed}{fig:ui-alerts}
+\screenshot{ledger.png}{1.0}{Audit ledger after chain verification, showing the injection, trust drop, isolation, Safe Pump-Stop and release of the attack}{fig:ui-ledger}
+\screenshot{system.png}{1.0}{System page: live architecture view and service health}{fig:ui-system}
+
+\subsection{Detection on the SWaT Dataset}
+
+Table~\ref{tab:swat} reports detection on SWaT.A1, with every detector's threshold set to its own nominal 5\% clean-flag rate on the normal-operation data; no attack labels were used to choose thresholds.
+
+\begin{table}[htbp]
+\centering
+\caption{Detection on SWaT.A1 at a nominal 5\% clean-flag threshold}
+\label{tab:swat}
+\small
+\begin{tabularx}{\textwidth}{@{}X c c c c c@{}}
+\toprule
+\textbf{Detector} & \textbf{Precision} & \textbf{Recall} & $\mathbf{F_1}$ & \textbf{FPR} & \textbf{Events (of 35)} \\
+\midrule
+Isolation Forest, deployed preprocessing & 0.418 & 0.332 & 0.370 & 0.065 & 32 \\
+Isolation Forest with low-pass filter & 0.548 & 0.562 & 0.555 & 0.065 & 33 \\
+Per-channel z-score & 0.799 & 0.687 & 0.739 & 0.024 & 13 \\
+Isolation Forest on standardised windows & 0.766 & 0.651 & 0.704 & 0.028 & 23 \\
+Maximum of z-score and low-pass Isolation Forest & 0.543 & 0.746 & 0.629 & 0.089 & 33 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+  ybar, area legend, bar width=0.38cm, width=\textwidth, height=6.2cm,
+  ymin=0, ymax=1.1, ylabel={Value},
+  symbolic x coords={IF deployed, IF low-pass, z-score, IF standardised, Combined},
+  xtick=data, x tick label style={font=\footnotesize, align=center},
+  enlarge x limits=0.12,
+  legend style={at={(0.5,1.02)}, anchor=south, legend columns=2, draw=none, font=\footnotesize},
+  tick label style={font=\footnotesize}, label style={font=\small}]
+\addplot[fill=gray!55, draw=black] coordinates {(IF deployed,0.370) (IF low-pass,0.555) (z-score,0.739) (IF standardised,0.704) (Combined,0.629)};
+\addplot[fill=white, draw=black, postaction={pattern=north east lines}] coordinates {(IF deployed,0.914) (IF low-pass,0.943) (z-score,0.371) (IF standardised,0.657) (Combined,0.943)};
+\legend{Window-level $F_1$, Event coverage (fraction of 35)}
+\end{axis}
+\end{tikzpicture}
+\caption{Window-level $F_1$ and event coverage of the detectors on SWaT.A1 (Combined: maximum of z-score and low-pass Isolation Forest)}
+\label{fig:swat}
+\end{figure}
+
+The two metrics pull apart. The z-score detector has the best window-level $F_1$ but misses 22 of the 35 attacks, while the Isolation Forest flags almost every attack event; it trades precision for coverage. In SHTAPM this trade is deliberate, because the trust engine and the physics rule remove the detector's false alarms downstream (Table~\ref{tab:holdout}). The results also identify a clear improvement: low-pass filtering raises the Isolation Forest's $F_1$ from 0.370 to 0.555 with the same event coverage, and the combined detector raises it by 70\% while flagging 33 of 35 events.
+
+\subsection{System Performance}
+
+The edge sustained its 1~Hz cycle of acquisition, detection, trust, attribution, self-healing and publication for the whole 51.4-minute baseline session with no frame gap longer than 2~s, so one complete decision cycle fits within the one-second sampling period. Measured on the workstation, the path from broker to backend to WebSocket client added a 95th-percentile latency of 3--5~ms, so the sensor-to-screen latency is dominated by the 1~s sampling interval and remains within the 2~s requirement (NFR-P1). The trust update of Section~\ref{sec:trust} isolates a lying sensor within three windows of fully adverse evidence (Figure~\ref{fig:trustdyn}).
+
+\section{Comparative Analysis}
+
+\subsection{Attribution: Operating-State Rule versus Trend-Sign Baseline}
+
+The first attribution rule implemented in the project compared the up/down trend of current and vibration within each window. Table~\ref{tab:attribcompare} compares it with the deployed operating-state rule on the same injected episodes of the final baseline.
+
+\begin{table}[htbp]
+\centering
+\caption{Attribution methods compared on the final baseline recording}
+\label{tab:attribcompare}
+\small
+\begin{tabularx}{\textwidth}{@{}X c c@{}}
+\toprule
+\textbf{Measure} & \textbf{Trend-sign rule} & \textbf{Operating-state rule (deployed)} \\
+\midrule
+State-crossing attacks, episode & 35/42 (83\%) & 32/44 (73\%) \\
+State-crossing attacks, settled & 4/42 (10\%) & 29/44 (66\%) \\
+Within-state attacks, episode & 12/23 (52\%) & 0/23 (0\%) \\
+Faults kept as faults, episode & 10/27 (37\%) & 23/27 (85\%) \\
+False attacks on clean data & 23/2,552 (0.9\%) & \textbf{0/2,552 (0.0\%)} \\
+Balanced accuracy, episode & 60\% & \textbf{79\%} \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+  ybar, area legend, bar width=0.6cm, width=\textwidth, height=6.2cm,
+  ymin=0, ymax=110, ylabel={Percent},
+  symbolic x coords={Attacks crossing state, Faults kept as faults, Balanced accuracy},
+  xtick=data, enlarge x limits=0.25,
+  nodes near coords, nodes near coords style={font=\footnotesize, /pgf/number format/fixed, /pgf/number format/precision=3},
+  legend style={at={(0.5,1.02)}, anchor=south, legend columns=2, draw=none, font=\footnotesize},
+  tick label style={font=\footnotesize}, label style={font=\small}]
+\addplot[fill=gray!55, draw=black] coordinates {(Attacks crossing state,83) (Faults kept as faults,37) (Balanced accuracy,60)};
+\addplot[fill=white, draw=black, postaction={pattern=north east lines}] coordinates {(Attacks crossing state,73) (Faults kept as faults,85) (Balanced accuracy,79)};
+\legend{Trend-sign rule, Operating-state rule (deployed)}
+\end{axis}
+\end{tikzpicture}
+\caption{Episode-level attribution of the two rules}
+\label{fig:attribcompare}
+\end{figure}
+
+The trend-sign rule's high attack recall is not real discrimination: it also labelled half of the physically consistent attacks and almost two thirds of genuine faults as attacks, and it raised false attacks on clean data. The operating-state rule gives up some recall on attacks to remove false accusations entirely and to keep faults as faults, raising balanced accuracy from 60\% to 79\%. For an operator, an accusation that is never false on clean data is the property that matters.
+
+\subsection{Comparison with Existing Approaches}
+
+Table~\ref{tab:litcompare} in Chapter~\ref{ch:literature} showed that no surveyed class of solution combines predictive maintenance, attack detection, fault--attack disambiguation, dynamic trust, self-healing and decision auditing. SHTAPM implements all six in one pipeline on a low-cost edge device. On detection, its Isolation Forest is used for event coverage rather than window precision, as Table~\ref{tab:swat} shows. On attribution and self-healing, the surveyed works report no directly comparable measurement, so the trend-sign rule and the system without self-healing serve as the baselines above.
+
+\subsection{Achievement of Objectives}
+
+\begin{table}[htbp]
+\centering
+\caption{Status of the project objectives}
+\label{tab:objstatus}
+\small
+\begin{tabularx}{\textwidth}{@{}l X X@{}}
+\toprule
+\textbf{ID} & \textbf{Objective} & \textbf{Outcome} \\
+\midrule
+O1 & Six channels in real time & Achieved: six channels at 1~Hz to the dashboard \\
+O2 & Detect anomalies on the edge & Achieved: all injected faults and attacks detected on bench data \\
+O3 & Attribute fault or attack & Achieved for physically distinguishable cases: 73\% of state-crossing attacks, 85\% of faults, no false attacks; within-state attacks are a stated physical limit \\
+O4 & Dynamic trust per sensor & Achieved: spoofed sensors fall below 0.4; clean trust 0.75--0.83 allows release \\
+O5 & Condition monitoring & Achieved: healthy, warning or critical derived continuously \\
+O6 & Autonomous self-healing & Achieved: isolation and twin substitution without operator action; error reduced by 79--87\% \\
+O7 & Safe stop & Achieved in software: latched Safe Pump-Stop after 60~s, watchdog and dry-run rules verified \\
+O8 & Immutable audit trail & Achieved: every safety-relevant decision chained; tampering detected \\
+O9 & Professional real-time dashboard & Achieved: role-based access; latency within 2~s \\
+O10 & Quantitative evaluation & Achieved: bench recordings and SWaT.A1 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Limitations}
+\label{sec:limits}
+
+\begin{itemize}
+  \item \textbf{Within-state attacks.} A falsification that keeps a reading inside its true physical state is consistent with all other sensors and cannot be attributed by the physics rule. Analytic redundancy through the twin exposes in-state deviations only from about 0.6~A (roughly 80\% of the running current) upward: on clean running data, the twin's residual stayed below 0.48~A in 99.9\% of windows, and a +0.6~A bias exceeded that level in 72\% of windows, against fewer than 2\% for biases up to 0.4~A.
+  \item \textbf{Drift and ramp.} A gradual drift fault and a ramp attack are the same waveform and cannot be separated without additional evidence.
+  \item \textbf{Coverage of physical coupling.} Only current and vibration have a physical partner on the bench; the other channels can be attributed only as faults.
+  \item \textbf{Prototype configuration.} The experiments used the emulated gas source and the in-memory relay (Table~\ref{tab:protoconfig}), and a small DC motor stands in for the pump, so dry-run protection was verified on injected data rather than on a real dry run.
+  \item \textbf{Bench security.} The bench broker runs without authentication; production use requires broker authentication and TLS.
+\end{itemize}

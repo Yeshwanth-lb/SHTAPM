@@ -1,0 +1,502 @@
+\chapter{System Design}
+\label{ch:design}
+
+This chapter describes the design of SHTAPM: the considerations that shaped it, its layered architecture, the flow of data from sensor to screen, the UML models of its structure and behaviour, and the responsibility of every module.
+
+\tikzset{
+  box/.style={draw, rounded corners=2pt, align=center, font=\small, minimum height=0.9cm, inner sep=4pt, fill=white},
+  layer/.style={draw, dashed, rounded corners=4pt, inner sep=8pt},
+  layerlabel/.style={font=\small\bfseries, anchor=south west, inner sep=2pt},
+  flow/.style={-{Stealth[length=2.2mm]}, thick},
+  side/.style={font=\scriptsize, midway, right, inner sep=3pt}
+}
+
+\section{Design Considerations}
+
+\begin{enumerate}
+  \item \textbf{Intelligence at the edge.} Detection, trust, attribution, self-healing and safety decisions run on the Raspberry Pi next to the pump, so that the plant remains protected if the network or the backend becomes unavailable. The backend and dashboard observe and record; they are never inside the safety loop.
+  \item \textbf{One frozen data contract.} Every telemetry frame carries the same six named channels together with a device identifier, a timestamp and a sequence number. All layers validate against this contract, which keeps the edge, backend and dashboard independently testable.
+  \item \textbf{Explainable decisions.} Every verdict carries a human-readable reason (for example, ``current says the motor is idle while vibration says it is running''), so that an operator and an auditor can understand why the system acted.
+  \item \textbf{Fail-safe behaviour.} The relay that powers the pump is normally open, so loss of power or of the edge process leaves the pump stopped. Autonomous stops latch until an authorised user confirms a restart.
+  \item \textbf{Graceful degradation.} A sensor that stops answering holds its last good value and is reported as dead, so that a single failure never interrupts the telemetry stream of the other channels.
+  \item \textbf{Security by design.} Users authenticate with short-lived JSON Web Tokens. Privileged actions, such as injecting a test scenario or switching the pump, are restricted by role and recorded in the audit ledger.
+  \item \textbf{Calibration from data.} Detector thresholds, physical state bands and the digital twin are fitted on recorded clean operation of the actual rig and persisted, so that the system starts calibrated after every restart.
+\end{enumerate}
+
+\section{Architecture Diagram}
+
+SHTAPM is organised in five layers (Figure~\ref{fig:architecture}): the \emph{sensing layer} on the pump rig, the \emph{edge intelligence layer} on the Raspberry Pi, the \emph{messaging layer} (an MQTT broker), the \emph{application layer} (a FastAPI backend with its database, alerting and ledger services) and the \emph{presentation layer} (a React dashboard).
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[node distance=0.5cm]
+  % Sensing layer
+  \node[box, minimum width=2.1cm] (t) {DHT22\\temp./humidity};
+  \node[box, minimum width=2.1cm, right=of t] (v) {ADXL335\\+ MCP3008};
+  \node[box, minimum width=2.1cm, right=of v] (p) {BMP280\\pressure};
+  \node[box, minimum width=2.1cm, right=of p] (c) {INA219\\current};
+  \node[box, minimum width=2.1cm, right=of c] (g) {MQ-135\\gas};
+  \node[layer, fit=(t)(g)] (sens) {};
+  \node[layerlabel] at (sens.north west) {Sensing layer};
+
+  % Edge layer
+  \node[box, below=1.7cm of v, minimum width=2.6cm] (acq) {Acquisition\\sampler, health};
+  \node[box, right=of acq, minimum width=2.6cm] (p2) {Detection, trust,\\attribution};
+  \node[box, right=of p2, minimum width=2.6cm] (heal) {Self-healing,\\digital twin};
+  \node[box, below=0.5cm of p2, minimum width=2.6cm] (safe) {Safety supervisor,\\relay, watchdog};
+  \node[layer, fit=(acq)(heal)(safe)] (edge) {};
+  \node[layerlabel] at (edge.north west) {Edge layer (Raspberry Pi 5)};
+
+  % Messaging layer
+  \node[box, below=1.3cm of safe, minimum width=8.8cm] (mqtt) {MQTT broker: telemetry, decisions, commands, actuation};
+
+  % Application layer
+  \node[box, below=1.7cm of mqtt, minimum width=2.6cm] (svc) {Persistence, alerts,\\condition rollup};
+  \node[box, left=of svc, minimum width=2.6cm] (api) {FastAPI\\REST, WebSocket};
+  \node[box, right=of svc, minimum width=2.6cm] (led) {SHA-256\\audit ledger};
+  \node[layer, fit=(api)(led)] (app) {};
+  \node[layerlabel] at (app.north west) {Application layer};
+
+  % Presentation layer
+  \node[box, below=1.3cm of svc, minimum width=8.8cm] (ui) {React control-room dashboard (operator, analyst, administrator)};
+
+  \draw[flow] (sens.south -| edge.north) -- node[side]{GPIO, SPI, I\textsuperscript{2}C} (edge.north);
+  \draw[flow] (acq) -- (p2);
+  \draw[flow] (p2) -- (heal);
+  \draw[flow] (p2) -- (safe);
+  \draw[flow] (edge.south) -- node[side]{publish} (mqtt.north);
+  \draw[flow] (mqtt.south) -- node[side]{subscribe} (app.north);
+  \draw[flow] (app.south) -- node[side]{HTTPS, WebSocket} (ui.north);
+\end{tikzpicture}
+\caption{Layered architecture of SHTAPM}
+\label{fig:architecture}
+\end{figure}
+
+The edge publishes three streams: \emph{telemetry} (one frame per second), \emph{decision diagnostics} (anomaly flag, per-channel trust, attribution, isolation and substitution for every window) and \emph{actuation status} (relay state and the cause of the last change). It subscribes to \emph{commands}, which are authorised scenario injections and relay commands relayed by the backend.
+
+\section{Data Flow Diagram/UML Diagram}
+
+\subsection{Data Flow Diagram}
+
+Figure~\ref{fig:dfd} shows the level-1 data flow. Raw readings are sampled, assembled into a contract-valid frame and appended to a rolling window. Each completed window is preprocessed, scored by the anomaly detector and evaluated by the trust engine and the physics-based attribution engine. The resulting decision drives isolation, digital-twin substitution and, when required, the safety supervisor. Telemetry, decisions and actuation status are published to the broker; the backend persists them, derives alerts and the device condition, chains safety-relevant events into the ledger and streams live data to the dashboard.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[dfd/.style={box, minimum width=2.4cm, minimum height=1.0cm}]
+  \node[dfd] (s)  at (0, 0)       {Sensors};
+  \node[dfd] (f)  at (3.75, 0)    {1.0 Sample and\\validate frame};
+  \node[dfd] (w)  at (7.5, 0)     {2.0 Window and\\preprocess};
+  \node[dfd] (d)  at (11.25, 0)   {3.0 Detect, trust,\\attribute};
+  \node[dfd] (h)  at (11.25, -2.0) {4.0 Isolate and\\substitute};
+  \node[dfd] (sv) at (7.5, -2.0)  {5.0 Safety\\supervision};
+  \node[box, minimum width=10.1cm] (b) at (7.5, -3.8) {MQTT broker};
+  \node[dfd] (pe) at (3.75, -5.6) {6.0 Persist, alert,\\chain ledger};
+  \node[dfd] (ui) at (0, -5.6)    {Dashboard};
+  \node[dfd] (db) at (7.5, -5.6)  {Database and\\ledger store};
+
+  \draw[flow] (s) -- node[font=\scriptsize, above]{readings} (f);
+  \draw[flow] (f) -- node[font=\scriptsize, above]{frame} (w);
+  \draw[flow] (w) -- node[font=\scriptsize, above]{window} (d);
+  \draw[flow] (d) -- node[side]{verdict} (h);
+  \draw[flow] (h) -- node[font=\scriptsize, above]{status} (sv);
+  \draw[flow] (f.south) -- node[side]{telemetry} (f.south |- b.north);
+  \draw[flow] (sv.south) -- node[side]{actuation} (sv.south |- b.north);
+  \draw[flow] (h.south) -- node[side]{decisions} (h.south |- b.north);
+  \draw[flow] (pe.north |- b.south) -- node[side]{subscribe} (pe.north);
+  \draw[flow] (pe) -- node[font=\scriptsize, above]{live} (ui);
+  \draw[flow] (pe) -- node[font=\scriptsize, above]{store} (db);
+\end{tikzpicture}
+\caption{Level-1 data flow diagram}
+\label{fig:dfd}
+\end{figure}
+
+\subsection{Use Case Diagram}
+
+Three human roles use the system (Figure~\ref{fig:usecase}), each inheriting the capabilities of the role below it. An \textbf{operator} monitors the pump, inspects individual sensors, reviews decisions and history and acknowledges alerts. An \textbf{analyst} can additionally verify the audit ledger and inject test scenarios. An \textbf{administrator} can also start or stop the pump and manage users, devices and thresholds. The edge device is a system actor that publishes telemetry and decisions.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+  uc/.style={draw, ellipse, align=center, font=\small, minimum width=4.2cm, minimum height=0.8cm, inner sep=1pt},
+  actor/.style={align=center, font=\small\bfseries}]
+  \node[uc] (u1) at (0, 4.8) {View live control room};
+  \node[uc] (u2) at (0, 3.6) {Inspect sensor detail};
+  \node[uc] (u3) at (0, 2.4) {Acknowledge alerts};
+  \node[uc] (u4) at (0, 1.2) {Review decisions and history};
+  \node[uc] (u5) at (0, 0.0) {Verify audit ledger};
+  \node[uc] (u6) at (0,-1.2) {Inject test scenario};
+  \node[uc] (u7) at (0,-2.4) {Start or stop pump};
+  \node[uc] (u8) at (0,-3.6) {Manage users and devices};
+  \node[uc] (u9) at (0,-4.8) {Publish telemetry\\and decisions};
+  \node[draw, rounded corners=3pt, fit=(u1)(u2)(u3)(u4)(u5)(u6)(u7)(u8)(u9), inner sep=8pt] (sys) {};
+  \node[font=\small\bfseries, anchor=south] at (sys.north) {SHTAPM};
+  \node[actor] (op) at (-5.0, 3.0) {Operator};
+  \node[actor] (an) at (-5.0,-0.6) {Analyst};
+  \node[actor] (ad) at (-5.0,-3.0) {Administrator};
+  \node[actor] (ed) at ( 5.2,-4.8) {Edge\\device};
+  \foreach \uc in {u1,u2,u3,u4} \draw (op.east) -- (\uc.west);
+  \foreach \uc in {u5,u6} \draw (an.east) -- (\uc.west);
+  \foreach \uc in {u7,u8} \draw (ad.east) -- (\uc.west);
+  \draw[-{Triangle[open, length=2.5mm, width=2.5mm]}] (an.north) -- (op.south);
+  \draw[-{Triangle[open, length=2.5mm, width=2.5mm]}] (ad.north) -- (an.south);
+  \draw (ed.west) -- (u9.east);
+\end{tikzpicture}
+\caption{Use case diagram (open triangle: role inheritance)}
+\label{fig:usecase}
+\end{figure}
+
+\subsection{Class Diagram}
+
+\begin{sloppypar}
+Figure~\ref{fig:class} shows the principal classes of the edge decision pipeline. \emph{LiveP2Monitor} owns the rolling window and runs one decision cycle per window through \emph{P2Pipeline}, which composes the \emph{Preprocessor}, the \emph{IsolationForestDetector}, the \emph{TrustEngine} and the \emph{AttributionEngine}. Isolation is tracked across cycles by the \emph{IsolationFallbackTracker}; substitution is performed by the \emph{SelfHealRuntime} using a trained \emph{LSTMTwinReconstructor}; and the \emph{SafetySupervisor} is the only component permitted to switch the relay.
+\end{sloppypar}
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+  cls/.style={draw, rectangle split, rectangle split parts=2, align=left, font=\scriptsize, inner sep=3pt, text width=3.7cm, fill=white},
+  node distance=0.8cm and 0.6cm]
+  \node[cls] (mon) {\textbf{LiveP2Monitor}\nodepart{two}window: rolling deque\\on\_frame(frame)\\fit(baseline)};
+  \node[cls, right=of mon] (pipe) {\textbf{P2Pipeline}\nodepart{two}process(frames)\\$\rightarrow$ WindowOutcome};
+  \node[cls, right=of pipe] (pre) {\textbf{Preprocessor}\nodepart{two}window size 30\\process(frames)};
+  \node[cls, below=of mon] (attr) {\textbf{AttributionEngine}\nodepart{two}rule: OperatingStateRule\\attribute(flags)};
+  \node[cls, below=of pipe] (trust) {\textbf{TrustEngine}\nodepart{two}BetaState per channel\\update(c, k, h)};
+  \node[cls, below=of pre] (det) {\textbf{IsolationForestDetector}\nodepart{two}flag threshold\\fit(), score(), flag()};
+  \node[cls, below=of attr] (iso) {\textbf{IsolationFallbackTracker}\nodepart{two}tracked channels\\update(outcome)};
+  \node[cls, below=of trust] (heal) {\textbf{SelfHealRuntime}\nodepart{two}SelfHealOrchestrator\\substitute(), end\_episode()};
+  \node[cls, below=of det] (twin) {\textbf{LSTMTwinReconstructor}\nodepart{two}reconstruct(window, channel)};
+  \node[cls, below=of heal] (safe) {\textbf{SafetySupervisor}\nodepart{two}command(), safe\_stop()\\Watchdog, DryRunDetector};
+
+  \draw[-{Diamond[open, length=2.5mm]}] (pipe) -- (mon);
+  \draw[-{Diamond[open, length=2.5mm]}] (pre) -- (pipe);
+  \draw[-{Diamond[open, length=2.5mm]}] (det.north west) -- (pipe.south east);
+  \draw[-{Diamond[open, length=2.5mm]}] (trust) -- (pipe);
+  \draw[-{Diamond[open, length=2.5mm]}] (attr.north east) -- (pipe.south west);
+  \draw[flow] (attr) -- (iso);
+  \draw[flow] (iso) -- (heal);
+  \draw[-{Diamond[open, length=2.5mm]}] (twin) -- (heal);
+  \draw[flow] (heal) -- node[side]{escalate} (safe);
+\end{tikzpicture}
+\caption{Class diagram of the edge decision pipeline (open diamond: composition by reference; arrow: data dependency)}
+\label{fig:class}
+\end{figure}
+
+\subsection{Sequence Diagram}
+
+Figure~\ref{fig:sequence} traces the handling of a spoofing attack in which the motor-current reading is forced to zero while the motor is running.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[font=\scriptsize]
+  \foreach \x/\n/\ttl in {0/a/Attacker, 2.4/s/Sampler, 4.8/p/Edge pipeline, 7.2/h/Self-healing, 9.6/b/Backend, 12.0/d/Dashboard}{
+    \node[draw, fill=white, minimum width=2.0cm, minimum height=0.6cm, font=\small] (\n) at (\x,0) {\ttl};
+    \draw[dashed, gray] (\x,-0.3) -- (\x,-11.4);
+  }
+  \newcommand{\msg}[4]{\draw[flow] (#1,#3) -- node[above, align=center, fill=white, inner sep=1.5pt]{#4} (#2,#3);}
+  \msg{0}{2.4}{-1.0}{current set to 0 A}
+  \msg{2.4}{4.8}{-1.8}{frame (1 Hz)}
+  \draw[flow] (4.8,-2.5) -- ++(0.5,0) |- (4.8,-3.0);
+  \node[align=left, anchor=west, fill=white, inner sep=1pt] at (5.4,-2.75) {physics check: current IDLE,\\vibration RUNNING};
+  \msg{4.8}{9.6}{-3.8}{decision: attack, trust falls}
+  \msg{9.6}{12.0}{-4.6}{ATTACK}
+  \msg{4.8}{7.2}{-5.6}{trust $<$ 0.4: isolate}
+  \msg{7.2}{9.6}{-6.4}{twin value}
+  \draw[flow] (9.6,-7.1) -- ++(0.5,0) |- (9.6,-7.6);
+  \node[align=left, anchor=west, fill=white, inner sep=1pt] at (10.2,-7.35) {ledger block,\\alert raised};
+  \msg{9.6}{12.0}{-8.4}{VIRTUAL value}
+  \msg{0}{2.4}{-9.4}{attack ends}
+  \msg{4.8}{9.6}{-10.2}{trust $\geq$ 0.7: release}
+  \msg{9.6}{12.0}{-11.0}{NORMAL}
+\end{tikzpicture}
+\caption{Sequence diagram: detecting and healing a spoofed current sensor}
+\label{fig:sequence}
+\end{figure}
+
+\subsection{Activity Diagram}
+
+Figure~\ref{fig:activity} shows the decision cycle that the edge executes for every completed window.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+  act/.style={draw, rounded corners=6pt, align=center, font=\small, minimum width=5.6cm, minimum height=0.75cm, fill=white},
+  dec/.style={draw, diamond, aspect=2.4, align=center, font=\scriptsize, inner sep=1pt, fill=white},
+  node distance=0.4cm]
+  \node[circle, fill=black, minimum size=0.3cm, inner sep=0pt] (start) {};
+  \node[act, below=of start] (a1) {Receive frame and append to window};
+  \node[act, below=of a1] (a2) {Normalise window; score with Isolation Forest};
+  \node[act, below=of a2] (a3) {Compute $c$, $k$, $h$; update Beta trust per channel};
+  \node[act, below=of a3] (a4) {Physics check: current state vs.\ vibration state};
+  \node[dec, below=of a4] (d1) {anomaly\\flagged?};
+  \node[act, below=of d1] (a5) {Attribute \textbf{attack} if physics is violated,\\otherwise \textbf{fault}};
+  \node[dec, below=of a5] (d2) {trust\\$<$ 0.4?};
+  \node[act, below=of d2] (a6) {Isolate channel; substitute twin value};
+  \node[dec, below=of a6] (d3) {isolated\\$>$ 60 s?};
+  \node[act, below=of d3] (a7) {Latched Safe Pump-Stop};
+  \node[act, minimum width=2.8cm, right=1.6cm of a6] (pub) {Publish decision\\and telemetry};
+  \node[circle, draw, minimum size=0.36cm, inner sep=0pt, right=0.5cm of pub] (end) {};
+  \node[circle, fill=black, minimum size=0.2cm, inner sep=0pt] at (end) {};
+
+  \draw[flow] (start) -- (a1);
+  \draw[flow] (a1) -- (a2);
+  \draw[flow] (a2) -- (a3);
+  \draw[flow] (a3) -- (a4);
+  \draw[flow] (a4) -- (d1);
+  \draw[flow] (d1) -- node[side]{yes} (a5);
+  \draw[flow] (a5) -- (d2);
+  \draw[flow] (d2) -- node[side]{yes} (a6);
+  \draw[flow] (a6) -- (d3);
+  \draw[flow] (d3) -- node[side]{yes} (a7);
+  \draw[flow] (d1.west) -- node[font=\scriptsize, above]{no} ($(d1.west -| a5.west)+(-0.5,0)$) |- (d2.west);
+  \draw[flow] (d2.east) -| node[font=\scriptsize, pos=0.15, above]{no} (pub.north);
+  \draw[flow] (d3.east) -| node[font=\scriptsize, pos=0.15, above]{no} ([xshift=-0.6cm]pub.south);
+  \draw[flow] (a7.east) -| ([xshift=0.6cm]pub.south);
+  \draw[flow] (pub) -- (end);
+\end{tikzpicture}
+\caption{Activity diagram of the per-window decision cycle}
+\label{fig:activity}
+\end{figure}
+
+\subsection{State Diagram}
+
+Every sensor channel moves through the states of Figure~\ref{fig:statechart}, driven by its trust score $T$. A channel starts \textsc{suspicious}, because the neutral Beta prior gives $T = 0.5$, and becomes \textsc{trusted} within two windows of clean evidence. It enters \textsc{isolated} when $T$ falls below 0.4, from either band, and only returns to \textsc{trusted} when $T$ reaches 0.7 again; inside the band between 0.4 and 0.7 an isolated channel stays isolated, which prevents a channel from flickering in and out of isolation. While isolated, its value is served by the digital twin, and if isolation lasts 60~s the safety supervisor stops the pump.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+  st/.style={draw, rounded corners=8pt, minimum width=2.9cm, minimum height=1.05cm, align=center, font=\small, fill=white},
+  tr/.style={-{Stealth[length=2.2mm]}, thick},
+  tl/.style={font=\scriptsize, align=center, fill=white, inner sep=1.5pt}]
+  \node[st] (sus) at (0,0) {\textsc{suspicious}\\[-1pt]{\scriptsize $0.4 \leq T < 0.7$}};
+  \node[st] (tru) at (6.4,0) {\textsc{trusted}\\[-1pt]{\scriptsize $T \geq 0.7$}};
+  \node[st] (iso) at (3.2,-3.6) {\textsc{isolated}\\[-1pt]{\scriptsize twin substitutes}};
+  \node[st, double, double distance=1.2pt] (stop) at (9.6,-3.6) {\textsc{safe stop}\\[-1pt]{\scriptsize pump latched off}};
+  \draw[tr] (-2.4,0) -- node[tl, above]{start} node[tl, below]{$T = 0.5$} (sus);
+  \draw[tr] (sus) to[bend left=14] node[tl, above]{$T \geq 0.7$} (tru);
+  \draw[tr] (tru) to[bend left=14] node[tl, below]{$T < 0.7$} (sus);
+  % isolate: from either band down into ISOLATED
+  \draw[tr] (sus.south) -- node[tl, left, xshift=-4pt]{$T < 0.4$:\\isolate} ($(iso.north west)+(0.35,0)$);
+  \draw[tr] ($(tru.south)+(-0.6,0)$) -- node[tl, pos=0.45, left, xshift=-2pt]{$T < 0.4$} ($(iso.north east)+(-0.5,0)$);
+  % release: ISOLATED back to TRUSTED
+  \draw[tr] ($(iso.east)+(0,0.2)$) -- node[tl, pos=0.55, right, xshift=3pt]{$T \geq 0.7$:\\release} ($(tru.south)+(0.6,0)$);
+  % stays isolated in the Suspicious band
+  \draw[tr] (iso.south west) .. controls +(-1.2,-1.2) and +(1.2,-1.2) .. node[tl, below]{$0.4 \leq T < 0.7$: stays isolated} (iso.south east);
+  % budget exhausted
+  \draw[tr] ($(iso.south east)+(0,0.2)$) to[bend right=12] node[tl, below, pos=0.6]{isolated for 60~s} (stop.south west);
+\end{tikzpicture}
+\caption{State diagram of a sensor channel}
+\label{fig:statechart}
+\end{figure}
+
+\subsection{Deployment Diagram}
+
+Figure~\ref{fig:deployment} shows how the software is distributed over the hardware. The Raspberry Pi hosts everything that must keep working without a network: the edge service with the full decision pipeline, the persisted baseline and twin bundle, and the MQTT broker. The workstation hosts the backend with its database and the development server that delivers the dashboard, and the operator's browser runs the dashboard itself.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+  node distance=0.35cm,
+  comp/.style={draw, align=center, font=\scriptsize, minimum width=3.4cm, minimum height=0.7cm, fill=white},
+  dev/.style={draw, thick, inner sep=7pt},
+  devlabel/.style={font=\scriptsize\bfseries, anchor=north west, inner sep=3pt},
+  link/.style={{Stealth[length=2mm]}-{Stealth[length=2mm]}, thick},
+  ll/.style={font=\scriptsize, align=center, fill=white, inner sep=1.5pt}]
+  % Raspberry Pi
+  \node[comp] (svc) at (0,0) {\texttt{shtapm.service}\\edge pipeline};
+  \node[comp, below=of svc] (mod) {baseline and twin bundle\\(\texttt{models/})};
+  \node[comp, below=of mod] (mos) {Mosquitto broker\\port 1883};
+  \node[dev, fit=(svc)(mos), yshift=0.25cm, inner ysep=12pt] (pi) {};
+  \node[devlabel] at (pi.north west) {$\ll$device$\gg$ Raspberry Pi 5};
+  % Sensors
+  \node[comp, left=1.2cm of mod, minimum width=2.4cm] (sens) {sensor modules\\and relay};
+  \draw[link] (sens) -- node[ll, above]{GPIO, SPI,\\I\textsuperscript{2}C} (pi.west |- sens);
+  % Workstation
+  \node[comp] (api) at (6.4,0) {Uvicorn + FastAPI\\port 8002};
+  \node[comp, below=of api] (db) {SQLite or PostgreSQL\\with TimescaleDB};
+  \node[comp, below=of db] (vite) {Vite server\\port 5173};
+  \node[dev, fit=(api)(vite), yshift=0.25cm, inner ysep=12pt] (ws) {};
+  \node[devlabel] at (ws.north west) {$\ll$device$\gg$ Workstation};
+  % Browser
+  \node[comp, below=1.5cm of vite] (react) {React dashboard};
+  \node[dev, fit=(react), yshift=0.25cm, inner ysep=12pt] (br) {};
+  \node[devlabel] at (br.north west) {$\ll$device$\gg$ Browser};
+  \draw[link] (mos.east) -- node[ll, above]{MQTT / TCP} (mos.east -| ws.west);
+  \draw[link] ($(br.north)+(-0.8,0)$) -- node[ll, left]{REST, WebSocket} ($(ws.south)+(-0.8,0)$);
+  \draw[link] ($(br.north)+(0.8,0)$) -- node[ll, right]{HTTP} ($(ws.south)+(0.8,0)$);
+\end{tikzpicture}
+\caption{Deployment diagram}
+\label{fig:deployment}
+\end{figure}
+
+\section{Module Description}
+
+Table~\ref{tab:modules} lists the modules of the system and the responsibility of each. Their implementation is described in Chapter~\ref{ch:implementation}.
+
+\begin{table}[htbp]
+\centering
+\caption{System modules and their responsibilities}
+\label{tab:modules}
+\small
+\begin{tabularx}{\textwidth}{@{}P{3.4cm} X@{}}
+\toprule
+\textbf{Module} & \textbf{Responsibility} \\
+\midrule
+Sensor drivers & One driver per physical device (DHT22, ADXL335 with MCP3008, BMP280, INA219, MQ-135) behind a common interface that returns a value, a unit and a health flag. \\
+Acquisition & 1~Hz sampler that assembles contract-valid frames, holds the last good value of a failing channel and declares a sensor dead after 5~s of continuous failure. \\
+Preprocessing & Rolling window of 30 samples per channel with per-window normalisation. \\
+Anomaly detection & Isolation Forest fitted on recorded clean windows; the severity of a window is the empirical rank of its score within the clean distribution. \\
+Trust engine & Per-channel Beta-reputation state, updated every window from consistency ($c$), physical-correlation ($k$) and historical-reliability ($h$) evidence. \\
+Attribution & Operating-state rule that classifies current and vibration as idle or running using bands learned from the baseline; a contradiction is an attack on the channel that changed state alone. \\
+Isolation and self-healing & Tracks channels whose trust falls below 0.4, substitutes an LSTM digital-twin reconstruction and releases the channel when trust returns to 0.7. \\
+Safety supervisor & Sole owner of the relay: operator commands, Safe Pump-Stop after 60~s of substitution, a 10~s watchdog and dry-run detection, all latching. \\
+Messaging & MQTT topics for telemetry, decision diagnostics, commands and actuation status. \\
+Backend services & Persistence, alert generation, device-condition rollup, sensor-health tracking, live physics state and the SHA-256 audit ledger, exposed through authenticated REST and WebSocket endpoints. \\
+Dashboard & Control room, sensor detail, devices, device, decisions, history, alerts, ledger, users, system and settings pages. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\section{Database Design}
+
+The backend stores its data in ten relational tables (Figure~\ref{fig:er}). The data model is written once with SQLAlchemy and runs unchanged on SQLite for development and tests and on PostgreSQL in deployment, where the two high-volume time-series tables, \texttt{sensor\_readings} and \texttt{decisions}, become TimescaleDB hypertables partitioned by time.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+  ent/.style={draw, rectangle split, rectangle split parts=2, rectangle split part fill={gray!15,white}, align=left, font=\footnotesize, inner sep=3pt, text width=3.75cm},
+  rel/.style={thick},
+  card/.style={font=\footnotesize, inner sep=1pt, fill=white},
+  node distance=0.75cm and 0.85cm]
+  \node[ent] (users) {\textbf{users}\nodepart{two}\underline{id}\\email, password\_hash\\full\_name, role\\is\_active, last\_login\_at};
+  \node[ent, below=of users] (rt) {\textbf{refresh\_tokens}\nodepart{two}\underline{id}, user\_id (FK)\\token\_hash, expires\_at\\revoked};
+  \node[ent, below=of rt] (audit) {\textbf{audit\_log}\nodepart{two}\underline{id}, user\_id (FK)\\action, target, detail, ts};
+  \node[ent, right=of users] (dev) {\textbf{devices}\nodepart{two}\underline{id}, device\_id, name\\location, owner\_user\_id (FK)\\status, health\_state\\last\_seen\_at, sample\_rate\_hz};
+  \node[ent, below=of dev] (sen) {\textbf{sensors}\nodepart{two}\underline{id}, device\_id (FK)\\channel, part, unit\\is\_proxy};
+  \node[ent, below=of sen] (thr) {\textbf{thresholds}\nodepart{two}\underline{device\_id} (FK)\\trust limits and weights\\window\_size\\substitution\_max\_seconds\\divergence\_threshold};
+  \node[ent, right=of dev, yshift=0.9cm] (read) {\textbf{sensor\_readings}\nodepart{two}\underline{device\_id, ts, sample\_seq}\\six channel values\\healthy\_mask};
+  \node[ent, below=of read] (dec) {\textbf{decisions}\nodepart{two}\underline{device\_id, ts}\\anomaly\_flag, severity\\attribution, reason\\trust per channel\\isolated, substituted};
+  \node[ent, below=of dec] (al) {\textbf{alerts}\nodepart{two}\underline{id}, device\_id (FK)\\ts, severity, type\\channel, message, reason\\acknowledged\_by (FK)};
+  \node[ent, below=of al] (led) {\textbf{ledger\_blocks}\nodepart{two}\underline{id}, device\_id (FK)\\block\_index, ts\\event\_type, payload\\payload\_hash\\prev\_hash, this\_hash};
+
+  \draw[rel] (users) -- node[card, above, pos=0.15]{1} node[card, above, pos=0.85]{N} (dev);
+  \draw[rel] (users) -- node[card, right, pos=0.2]{1} node[card, right, pos=0.8]{N} (rt);
+  \draw[rel] (users.west) -- ++(-0.3,0) |- node[card, above, pos=0.9]{N} (audit.west);
+  \draw[rel] (dev) -- node[card, right, pos=0.2]{1} node[card, right, pos=0.8]{N} (sen);
+  \draw[rel] (dev.west) ++(0,-0.5) -- ++(-0.35,0) |- node[card, above, pos=0.9]{1} (thr.west);
+  \coordinate (bus) at ($(dev.east)!0.5!(dev.east -| read.west)$);
+  \draw[rel] (dev.east) -- node[card, above, pos=0.5]{1} (bus);
+  \draw[rel] (bus |- read.west) -- (bus |- led.west);
+  \foreach \tb in {read, dec, al, led}
+    \draw[rel] (bus |- \tb.west) -- node[card, above, pos=0.7]{N} (\tb.west);
+\end{tikzpicture}
+\caption{Entity--relationship diagram of the backend database (underlined: primary key; FK: foreign key)}
+\label{fig:er}
+\end{figure}
+
+\begin{table}[htbp]
+\centering
+\caption{Database tables}
+\label{tab:tables}
+\small
+\begin{tabularx}{\textwidth}{@{}P{3.6cm} X@{}}
+\toprule
+\textbf{Table} & \textbf{Purpose} \\
+\midrule
+\texttt{users} & Accounts with a bcrypt password hash and one of three roles \\
+\texttt{refresh\_tokens} & Hashed refresh tokens, rotated on use and revoked on logout \\
+\texttt{audit\_log} & Every privileged action and every denied request, with the acting user \\
+\texttt{devices} & Monitored pumps with their owner, status, condition and sampling rate \\
+\texttt{sensors} & The channels of each device, with part, unit and whether the channel is a stand-in \\
+\texttt{thresholds} & Per-device trust limits, evidence weights, window size and substitution budget \\
+\texttt{sensor\_readings} & One row per telemetry frame with all six values and a per-channel health mask \\
+\texttt{decisions} & One row per decision window: anomaly, attribution, reason, trust, isolation and substitution \\
+\texttt{alerts} & Operator alerts with severity, type and acknowledgement \\
+\texttt{ledger\_blocks} & The hash chain of safety-relevant events \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\section{Communication Design}
+
+All edge--backend communication uses MQTT topics under a per-device prefix (Table~\ref{tab:topics}). Quality of service is chosen per stream: telemetry and decisions use QoS~0, because a newer frame supersedes a lost one within a second, while status, actuation and commands use QoS~1, because a lost relay command or status change must be redelivered. Device status and actuation status are \emph{retained}, so a backend that restarts immediately learns whether the edge is online and what state the relay is in. The edge registers a last-will message, so the broker itself announces \texttt{offline} if the edge disappears without warning.
+
+\begin{table}[htbp]
+\centering
+\caption{MQTT topic design (prefix \texttt{shtapm/\{device\_id\}/})}
+\label{tab:topics}
+\small
+\begin{tabularx}{\textwidth}{@{}P{3.9cm} P{2.7cm} c c X@{}}
+\toprule
+\textbf{Topic} & \textbf{Direction} & \textbf{QoS} & \textbf{Retained} & \textbf{Content} \\
+\midrule
+\texttt{telemetry} & Edge $\rightarrow$ backend & 0 & No & One frame per second \\
+\texttt{decision\_\allowbreak diagnostic} & Edge $\rightarrow$ backend & 0 & No & One decision per window \\
+\texttt{status} & Edge $\rightarrow$ backend & 1 & Yes & \texttt{online} or \texttt{offline} (last will) \\
+\texttt{actuation} & Edge $\rightarrow$ backend & 1 & Yes & Relay state, cause, latched flag \\
+\texttt{command} & Backend $\rightarrow$ edge & 1 & No & Start or cancel a test scenario \\
+\texttt{relay\_command} & Backend $\rightarrow$ edge & 1 & No & Switch the pump on or off \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Between the backend and the dashboard, the authenticated WebSocket carries the live telemetry stream so that trends update with every sample, and REST endpoints serve everything else: history, decisions, alerts, ledger, live physics state and relay state, which the dashboard polls at intervals between one and five seconds. Relay commands deliberately travel on their own topic, separate from scenario commands, so a test injection can never reach the pump.
+
+\section{User Interface Design}
+
+The dashboard was designed for the operator of an unmanned station who glances at it occasionally and must understand the situation within seconds. Following ANSI/ISA-101~\cite{isa101}, its design rests on four principles.
+
+\begin{enumerate}
+  \item \textbf{Calm when normal.} During normal operation the display is neutral and grey, so that anything coloured is, by definition, something that needs attention.
+  \item \textbf{Colour carries meaning, never decoration.} Each colour has exactly one meaning throughout the application (Table~\ref{tab:colours}).
+  \item \textbf{Never by colour alone.} Every state is also written in words (\textsc{attack}, \textsc{fault}, \textsc{virtual}), so it remains readable for colour-blind users and on monochrome printouts.
+  \item \textbf{Explain, then act.} Every verdict shows its reason, and every isolation shows the twin's value next to the sensor's rejected reading, so that the operator can check the system's reasoning.
+\end{enumerate}
+
+\begin{table}[htbp]
+\centering
+\caption{Colour semantics of the dashboard}
+\label{tab:colours}
+\small
+\begin{tabularx}{\textwidth}{@{}P{2.4cm} P{3.4cm} X@{}}
+\toprule
+\textbf{Colour} & \textbf{Meaning} & \textbf{Used for} \\
+\midrule
+Neutral grey & Normal & Values, trends and panels in normal operation \\
+Green & Healthy, trusted & Trust above 0.7, healthy device, physics agreeing \\
+Amber & Fault, warning & Physically consistent anomalies, warning condition \\
+Red & Attack, critical & Physics violations, malicious trust, Safe Pump-Stop \\
+Violet & Virtual & Values served by the digital twin, isolated channels \\
+Blue & Information & Navigation, selection and the live sensor marker \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Figure~\ref{fig:navigation} shows the navigation structure. After signing in, every page is one click away in a persistent sidebar, grouped by the operator's purpose: monitoring, analysis, assets, assurance and administration. The control room is the home page, any sensor opens a detail panel over it without leaving the page, and alert pop-ups appear on every page. Administrative pages are shown only to users whose role permits them.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+  pg/.style={draw, rounded corners=2pt, font=\small, align=center, minimum width=2.55cm, minimum height=0.8cm, fill=white},
+  grp/.style={pg, font=\small\bfseries, fill=gray!12},
+  ln/.style={thick}]
+  \node[pg] (login) at (5.6,0) {Login};
+  \node[pg, minimum width=4.6cm] (shell) at (5.6,-1.4) {Application shell\\(sidebar, alert pop-ups)};
+  \draw[ln, -{Stealth[length=2mm]}] (login) -- (shell);
+  \foreach \x/\g/\name in {0/m/Monitoring, 2.8/a/Analysis, 5.6/s/Assets, 8.4/q/Assurance, 11.2/d/Administration} {
+    \node[grp] (\g) at (\x,-3.1) {\name};
+    \draw[ln] (shell.south) -- ++(0,-0.4) -| (\g.north);
+  }
+  \foreach \g/\list in {m/{Control room,Sensor detail}, a/{Decisions,History,Alerts}, s/{Devices,Device page}, q/{Ledger,System}, d/{Users,Settings}} {
+    \foreach \p [count=\i] in \list {
+      \node[pg, font=\footnotesize, minimum height=0.65cm, minimum width=2.05cm] (\g\i) at ($(\g)+(0.22,-0.95*\i-0.3)$) {\p};
+    }
+  }
+  \foreach \g/\n in {m/2, a/3, s/2, q/2, d/2} {
+    \draw[ln] (\g.south west) ++(0.18,0) coordinate (rail\g) -- (rail\g |- \g\n.west);
+    \foreach \i in {1,...,\n}
+      \draw[ln] (rail\g |- \g\i.west) -- (\g\i.west);
+  }
+\end{tikzpicture}
+\caption{Navigation structure of the dashboard: every page is one click away in the sidebar, grouped by purpose}
+\label{fig:navigation}
+\end{figure}

@@ -1,0 +1,207 @@
+\chapter{System Requirement Specification}
+\label{ch:srs}
+
+This chapter specifies what SHTAPM must do and what it runs on. The functional and non-functional requirements were fixed in the product requirements document at the start of the project and are referred to by their identifiers throughout the rest of this report.
+
+\section{Functional Requirements}
+
+Table~\ref{tab:fr} lists the functional requirements grouped by subsystem.
+
+{\small
+\setlength{\LTpre}{0pt}
+\begin{longtable}{@{}P{1.6cm} P{12.2cm}@{}}
+\caption{Functional requirements}
+\label{tab:fr}\\
+\toprule
+\textbf{ID} & \textbf{Requirement} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{ID} & \textbf{Requirement} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+\multicolumn{2}{@{}l}{\textit{Acquisition}} \\
+FR-Q1 & Sample all six sensor channels at a configurable rate (default 1~Hz). \\
+FR-Q2 & Tag each frame with the device identifier, an ISO-8601 timestamp and a sequence number. \\
+FR-Q3 & Publish frames to an MQTT broker on a per-device topic. \\
+FR-Q4 & Buffer locally and resume publishing after a broker disconnection. \\
+\multicolumn{2}{@{}l}{\textit{Preprocessing}} \\
+FR-P1 & Apply noise filtering, min--max normalisation and missing-value handling. \\
+FR-P2 & Assemble sliding windows of 30 samples per channel. \\
+\multicolumn{2}{@{}l}{\textit{Anomaly detection and attribution}} \\
+FR-A1 & Flag statistical anomalies per window with an Isolation Forest trained on clean baseline data. \\
+FR-A2 & Use cross-sensor physics checks to classify an anomaly as a physical fault or a cyber-attack. \\
+FR-A3 & Output an anomaly flag, a severity, an attribution label and a reason. \\
+FR-A4 & Accept fault and attack scenarios injected by an authorised user through an authenticated control channel. \\
+\multicolumn{2}{@{}l}{\textit{Trust}} \\
+FR-T1 & Maintain a per-sensor trust score $T \in [0, 1]$ with a Beta-reputation model updated every window. \\
+FR-T2 & Weight consistency, cross-sensor correlation and historical reliability in the trust update. \\
+FR-T3 & Classify each sensor as Trusted ($T \geq 0.7$), Suspicious ($0.4 \leq T < 0.7$) or Malicious ($T < 0.4$). \\
+FR-T4 & Let trust recover when a sensor returns to consistent behaviour. \\
+\multicolumn{2}{@{}l}{\textit{Self-healing}} \\
+FR-H1 & Remove an isolated sensor from fusion. \\
+FR-H2 & Reconstruct an isolated sensor's value through an LSTM digital twin, with an uncertainty estimate. \\
+FR-H3 & Bound substitution in time and escalate to a Safe Pump-Stop when the bound is exceeded. \\
+FR-H4 & Heal without human action within one processing cycle of the decision. \\
+\multicolumn{2}{@{}l}{\textit{Safety}} \\
+FR-R1 & Drive the pump relay to stop the pump on command. \\
+FR-R2 & Stop the pump autonomously on a dry-run signature. \\
+FR-R3 & Default the pump to a safe state through a watchdog if the edge node fails. \\
+\multicolumn{2}{@{}l}{\textit{Audit ledger}} \\
+FR-L1 & Write every trust drop, anomaly, response action and heal as a hash-chained block. \\
+FR-L2 & Detect any tampering with a previous block through a verifier. \\
+FR-L3 & Make ledger entries queryable from the dashboard. \\
+\multicolumn{2}{@{}l}{\textit{Dashboard}} \\
+FR-D1 & Render live per-sensor time series that update in real time. \\
+FR-D2 & Show a per-sensor trust panel and a machine-health indicator. \\
+FR-D3 & Show the decision log and the ledger event stream. \\
+FR-D4 & Surface active alerts with severity and reason. \\
+FR-D5 & Show system health: broker connectivity, sample rate and end-to-end latency. \\
+FR-D6 & Allow administrators to configure thresholds and register devices. \\
+FR-D7 & Provide an authenticated scenario-injection control. \\
+FR-D8 & Visibly mark any channel currently served by digital-twin substitution. \\
+\end{longtable}
+}
+
+The original requirement set also included a learned remaining-useful-life prognosis model and a reinforcement-learning response policy. Their implementation status is described in Section~\ref{sec:impl-prognosis-rl} and their completion is part of the future work in Chapter~\ref{ch:conclusion}.
+
+\section{Non-Functional Requirements}
+
+Table~\ref{tab:nfr} lists the quality attributes the system must meet, each with a measurable target.
+
+\begin{table}[htbp]
+\centering
+\caption{Non-functional requirements}
+\label{tab:nfr}
+\small
+\begin{tabularx}{\textwidth}{@{}l l X l@{}}
+\toprule
+\textbf{ID} & \textbf{Category} & \textbf{Requirement} & \textbf{Target} \\
+\midrule
+NFR-P1 & Performance & End-to-end latency, sensor event to dashboard & $<$ 2~s \\
+NFR-P2 & Performance & Sense--decide--act cycle at the edge & $<$ 2~s \\
+NFR-R1 & Reliability & Continuous operation through the loss of one sensor & No crash \\
+NFR-R2 & Reliability & Broker reconnection with buffered resume & 60~s retained \\
+NFR-S1 & Security & Authentication and role-based access on control endpoints & Enforced \\
+NFR-S2 & Security & Ledger integrity & 100\% detectable \\
+NFR-SC1 & Scalability & Logical device model & $N$ devices \\
+NFR-U1 & Usability & Operator assesses station status at a glance & $\leq$ 5~s \\
+NFR-U2 & Usability & Responsive layout, desktop first, tablet supported & $\geq$ 768~px \\
+NFR-M1 & Maintainability & Modular subsystems with defined input/output contracts & Per module \\
+NFR-O1 & Observability & Structured logs and health metrics & Edge, backend \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\section{Software Requirement}
+
+Table~\ref{tab:software} lists the software stack. Versions are those pinned in the project's dependency manifests.
+
+\begin{table}[htbp]
+\centering
+\caption{Software requirements}
+\label{tab:software}
+\small
+\begin{tabularx}{\textwidth}{@{}P{2.5cm} P{4.4cm} P{2.0cm} X@{}}
+\toprule
+\textbf{Layer} & \textbf{Component} & \textbf{Version} & \textbf{Purpose} \\
+\midrule
+Edge OS & Raspberry Pi OS (64-bit) & Bookworm & Operating system of the edge node \\
+Language & Python & $\geq$ 3.11 & Edge pipeline and backend \\
+Edge I/O & smbus2, spidev & 0.4, 3.8 & I\textsuperscript{2}C and SPI access \\
+Sensor library & adafruit-circuitpython-dht & -- & DHT22 access \\
+Machine learning & scikit-learn & 1.5 & Isolation Forest \\
+Deep learning & PyTorch & 2.2 & LSTM digital twin \\
+Messaging & Eclipse Mosquitto & 2.0 & MQTT broker \\
+MQTT client & paho-mqtt & 1.6 & Edge publisher, backend subscriber \\
+Contract & Pydantic & 2 & Shared telemetry and decision schemas \\
+Backend & FastAPI, Uvicorn & 0.110, 0.29 & REST and WebSocket server \\
+Persistence & SQLAlchemy, Alembic & 2.0, 1.13 & ORM and schema migrations \\
+Database & PostgreSQL with TimescaleDB; SQLite & 16; 3 & Deployment target; bench and tests \\
+Security & python-jose, passlib (bcrypt) & 3.3, 1.7 & JSON Web Tokens, password hashing \\
+Frontend & React, TypeScript & 18.2, 5.4 & Dashboard \\
+Build & Vite & 5.2 & Development server and bundler \\
+Testing & pytest, Vitest, Testing Library & 8, 1.6, 16 & Automated tests \\
+Quality & ruff, black, ESLint, Prettier & 0.6, 24, 8.57, 3.3 & Linting, formatting \\
+Tools & Git, Visual Studio Code & -- & Version control and editing \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+The edge needs only the acquisition and detection dependencies at run time; PyTorch is additionally installed on the edge to run the digital twin, which is trained offline on a workstation. The backend and dashboard run on any workstation with Python and Node.js; the dashboard is served to a standard web browser.
+
+\section{Hardware Requirement}
+
+Table~\ref{tab:hardware} lists the hardware of the prototype rig and Table~\ref{tab:pinmap} the bus and pin assignment on the Raspberry Pi.
+
+\begin{table}[htbp]
+\centering
+\caption{Hardware requirements}
+\label{tab:hardware}
+\small
+\begin{tabularx}{\textwidth}{@{}l X l@{}}
+\toprule
+\textbf{Component} & \textbf{Specification} & \textbf{Role} \\
+\midrule
+Raspberry Pi 5 & Quad-core Arm Cortex-A76, 2.4~GHz; GPIO, SPI, I\textsuperscript{2}C & Edge node \\
+microSD card & Operating system, baseline captures and models & Edge storage \\
+DHT22 (AM2302) & $-40$ to $80\,^{\circ}$C, $\pm 0.5\,^{\circ}$C; 0--100\% RH, $\pm 2$--5\% & Temperature, humidity \\
+ADXL335 & Three-axis analogue accelerometer, $\pm 3$~g & Vibration \\
+MCP3008 & 8-channel, 10-bit SPI analogue-to-digital converter & ADC for ADXL335, MQ-135 \\
+BMP280 & 300--1100~hPa, $\pm 1$~hPa, I\textsuperscript{2}C & Barometric pressure \\
+INA219 & High-side current monitor, 0.1~$\Omega$ shunt, I\textsuperscript{2}C & Motor current \\
+MQ-135 & Air-quality (gas) sensor, analogue output, 5~V heater & Gas \\
+Relay module & Single channel, 5~V coil, normally-open contact & Pump switching \\
+DC motor & 130-size brushed DC motor, 5~V supply & Pump stand-in \\
+Workstation & Laptop with Python and Node.js; same network as the edge & Backend, dashboard \\
+Miscellaneous & Breadboard, jumper wires, 10~k$\Omega$ and 13~k$\Omega$ divider resistors & Wiring \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\begin{table}[htbp]
+\centering
+\caption{Bus and pin assignment on the Raspberry Pi}
+\label{tab:pinmap}
+\small
+\begin{tabularx}{\textwidth}{@{}l l X@{}}
+\toprule
+\textbf{Device} & \textbf{Interface} & \textbf{Connection} \\
+\midrule
+DHT22 & Single-wire GPIO & GPIO17 \\
+MCP3008 & SPI0, CE0 & 1.35~MHz clock; channels 0--2 carry ADXL335 X, Y, Z \\
+MQ-135 & MCP3008 channel 3 & Analogue output through a 10~k$\Omega$/13~k$\Omega$ divider so the input never exceeds 3.3~V \\
+BMP280 & I\textsuperscript{2}C bus 1 & Address 0x76 \\
+INA219 & I\textsuperscript{2}C bus 1 & Address 0x40; shunt in series with the motor supply \\
+Relay & GPIO & GPIO27 (physical pin 13); motor supply through the normally-open contact \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Prototype Configuration}
+
+Figure~\ref{fig:rig} shows the assembled bench rig. Every channel is implemented end to end in software, from driver to dashboard. Each channel's driver is selected by configuration, so the same edge build runs on the physical sensor or on an emulated source with an identical data path. Table~\ref{tab:protoconfig} records the configuration of the prototype used for the experiments in Chapter~\ref{ch:results}.
+
+\begin{table}[htbp]
+\centering
+\caption{Configuration of the prototype used for the experiments}
+\label{tab:protoconfig}
+\small
+\begin{tabularx}{\textwidth}{@{}l l X@{}}
+\toprule
+\textbf{Channel} & \textbf{Device} & \textbf{Prototype configuration} \\
+\midrule
+Temperature & DHT22 & Physical sensor \\
+Humidity & DHT22 & Physical sensor \\
+Vibration & ADXL335 + MCP3008 & Physical sensor, mounted on the motor body \\
+Pressure & BMP280 & Physical sensor \\
+Current & INA219 & Physical sensor, in series with the motor supply \\
+Gas & MQ-135 & Driver and signal conditioning implemented; experiments used the emulated source \\
+Pump relay & Relay module & Driver and safety logic implemented; experiments used the in-memory relay \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\screenshot{bench-rig.jpg}{0.55}{The bench prototype rig: Raspberry Pi~5 edge node, sensor modules on the breadboard and the DC motor}{fig:rig}

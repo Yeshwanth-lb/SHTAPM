@@ -1,0 +1,32 @@
+\chapter{Conclusion \& Future Work}
+\label{ch:conclusion}
+
+\section{Conclusion}
+
+This project set out to build a monitoring system for an industrial pump that does not take its sensors at their word. The Self-Healing Trust-Aware Predictive Maintenance System (SHTAPM) achieves this with a complete edge-to-dashboard implementation on low-cost hardware: a Raspberry Pi~5 samples six channels at 1~Hz and runs the whole decision pipeline next to the pump, a FastAPI backend persists, alerts and audits, and a React control-room dashboard presents the result on industrial HMI principles.
+
+The work makes four contributions.
+
+\begin{enumerate}
+  \item \textbf{Physics-based fault and attack attribution.} Motor current and vibration are two independent witnesses of whether the motor is running. When they contradict each other, the system attributes an attack to the channel that changed state on its own; otherwise an anomaly is a fault. On real bench recordings with injected falsifications, this rule produced \textbf{no false attack attribution on 2,552 clean channel-windows}, identified the large majority of falsifications that cross a physical state, and kept genuine faults classified as faults. It replaced a trend-based rule that raised false attacks on clean data and called most faults attacks.
+  \item \textbf{Evidence-based trust with automatic response.} A Beta-reputation trust score per sensor fuses statistical consistency, physical correlation and historical reliability. Its update rule settles exactly at the level of the evidence, drops a lying sensor to Malicious within three windows and makes it earn its trust back slowly. Trust is coupled directly to isolation and release.
+  \item \textbf{Bounded self-healing.} An isolated current sensor is replaced by an LSTM digital-twin reconstruction from vibration. Out of sample, the twin reduced the substitution error from about 0.6~A to about 0.1~A, and the substitution is bounded: after 60~s the supervisor performs a latched Safe Pump-Stop, so the plant is never run on a reconstruction indefinitely.
+  \item \textbf{Auditable autonomy.} Every trust drop, isolation, release, pump stop, relay command and test injection is chained into a SHA-256 ledger whose verifier detects any modification of a previous block.
+\end{enumerate}
+
+The evaluation also established, and this report states plainly, where the approach stops. A falsification that keeps a reading inside its true physical state is consistent with every other sensor on the rig and cannot be exposed by physics alone; a slow ramp attack is the same waveform as a drift fault; and only the current--vibration pair has a physical partner on the bench. These are limits of the available physical evidence, not of the implementation, and they define the most valuable directions for further work.
+
+Against its objectives (Table~\ref{tab:objstatus}), the project delivers acquisition, detection, attribution, dynamic trust, condition monitoring, self-healing, safe stopping, an immutable audit trail, a secure real-time dashboard and a quantitative evaluation on bench data and the public SWaT dataset. The central idea is validated: physical redundancy between sensors turns ``something is anomalous'' into ``this sensor is lying'', while the plant stays monitored and every autonomous decision remains accountable.
+
+\section{Future Enhancements}
+
+\begin{enumerate}
+  \item \textbf{Remaining-useful-life prognosis.} The LSTM prognosis network and its PRONOSTIA data pipeline are implemented. Training and validating it for a pump requires run-to-failure data from pumps of the target type, for example from a utility's maintenance records or an accelerated-wear test rig.
+  \item \textbf{Learned response policy.} The reinforcement-learning state, action set, reward structure, simulation environment and deep Q-network harness exist. Once the operators' acceptable trade-off between false isolation and downtime is fixed as reward weights, the policy can be trained in simulation and deployed behind the existing fail-safe gate.
+  \item \textbf{Evidence beyond physics for in-state attacks.} Cryptographic attestation or signing of readings at the sensor, physical watermarking of the control signal~\cite{mo2009replay}, and a redundant sensor on the same quantity would expose falsifications that stay within a physical state.
+  \item \textbf{Richer physical coupling.} On a real pump, discharge pressure, flow and motor current are physically related. Extending the operating-state rule to these relationships would allow attacks on pressure and other channels to be attributed as well.
+  \item \textbf{Detector refinement.} The evaluation shows that low-pass filtering and a combined z-score and Isolation Forest detector improve detection on SWaT; these candidates should be validated on bench data before replacing the deployed detector.
+  \item \textbf{Divergence-based escalation.} The twin-divergence escalation path is implemented but disabled. A threshold with an acceptable false-escalation rate should be established on longer clean recordings.
+  \item \textbf{Field deployment.} Deploying the relay and the MQ-135 gas sensor on a real pump, measuring the pump's dry-run current, securing the broker with authentication and TLS, and moving the backend to PostgreSQL with TimescaleDB would take the system from the bench to a pilot station.
+  \item \textbf{Fleet scale.} The data model already supports many devices. A fleet view, cloud deployment and a distributed ledger would extend the system from one station to a utility's network.
+\end{enumerate}
